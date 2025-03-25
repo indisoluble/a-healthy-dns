@@ -1,0 +1,12 @@
+from setuptools import setup, find_packages
+
+setup(
+    name="a_healthy_dns",
+    version="0.1.0",
+    description="A healthy DNS project",
+    packages=find_packages(),
+    install_requires=[],
+    entry_points={
+        "console_scripts": ["a-healthy-dns = indisoluble.a_healthy_dns.main:main"]
+    },
+)
