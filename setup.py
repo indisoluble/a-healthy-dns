@@ -5,7 +5,7 @@ setup(
     version="0.1.0",
     description="A healthy DNS project",
     packages=find_packages(),
-    install_requires=[],
+    install_requires=["dnspython>=2.7.0,<3.0.0"],
     entry_points={
         "console_scripts": ["a-healthy-dns = indisoluble.a_healthy_dns.main:main"]
     },
