@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 
+import argparse
+import json
 import logging
 import socketserver
 
@@ -33,15 +35,16 @@ class DNSUDPHandler(socketserver.BaseRequestHandler):
 def main():
     logging.basicConfig(level=logging.INFO)
 
+    parser = argparse.ArgumentParser(description="DNS server")
+    parser.add_argument(
+        "--config", type=str, required=True, help="JSON string for config."
+    )
+    args = parser.parse_args()
+    config = json.loads(args.config)
+
     server_address = ("", 5053)
-    config = {
-        "example.com.": "1.2.3.4",
-        "test.com.": "5.6.7.8",
-    }
     with socketserver.UDPServer(server_address, DNSUDPHandler) as server:
         server.config = config
 
-        logging.info(
-            "DNS server listening on port %d", server_address[1]
-        )
+        logging.info("DNS server listening on port %d", server_address[1])
         server.serve_forever()
