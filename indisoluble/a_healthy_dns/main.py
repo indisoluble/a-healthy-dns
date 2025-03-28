@@ -47,4 +47,7 @@ def main():
         server.config = config
 
         logging.info("DNS server listening on port %d", server_address[1])
-        server.serve_forever()
+        try:
+            server.serve_forever()
+        except KeyboardInterrupt:
+            logging.info("Shutting down DNS server")
