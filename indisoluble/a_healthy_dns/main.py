@@ -46,7 +46,7 @@ class DNSUDPHandler(socketserver.BaseRequestHandler):
         ip = self.server.config[qname]
         logging.debug("Responded to query for %s with %s", qname, ip)
 
-        rrset = dns.rrset.from_text(qname, 300, "IN", "A", ip)
+        rrset = dns.rrset.from_text(qname, self.server.ttl, "IN", "A", ip)
         response.answer.append(rrset)
         sock.sendto(response.to_wire(), self.client_address)
 
@@ -56,6 +56,9 @@ def main():
     parser = argparse.ArgumentParser(description="DNS server")
     parser.add_argument(
         "--config", type=str, required=True, help="JSON string for config."
+    )
+    parser.add_argument(
+        "--ttl", type=int, default=60, help="TTL in seconds (default: 60)"
     )
     parser.add_argument(
         "--log-level", type=str, default="info", help="Logging level (default: info)"
@@ -76,6 +79,7 @@ def main():
     server_address = ("", 5053)
     with socketserver.UDPServer(server_address, DNSUDPHandler) as server:
         server.config = config
+        server.ttl = args.ttl
 
         logging.info("DNS server listening on port %d", server_address[1])
         try:
