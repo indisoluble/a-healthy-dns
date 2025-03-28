@@ -26,6 +26,7 @@ class DNSUDPHandler(socketserver.BaseRequestHandler):
                 rrset = dns.rrset.from_text(qname, 300, "IN", "A", ip)
 
                 response.answer.append(rrset)
+                logging.debug("Responded to query for %s with %s", qname, ip)
 
             sock.sendto(response.to_wire(), self.client_address)
         except Exception as e:
@@ -33,15 +34,27 @@ class DNSUDPHandler(socketserver.BaseRequestHandler):
 
 
 def main():
-    logging.basicConfig(level=logging.INFO)
-
+    # Set up argument parsing
     parser = argparse.ArgumentParser(description="DNS server")
     parser.add_argument(
         "--config", type=str, required=True, help="JSON string for config."
     )
+    parser.add_argument(
+        "--log-level", type=str, default="info", help="Logging level (default: info)"
+    )
     args = parser.parse_args()
+
+    # Set up logging
+    numeric_level = getattr(logging, args.log_level.upper(), logging.INFO)
+    logging.basicConfig(
+        level=numeric_level,
+        format="%(asctime)s - %(levelname)s - %(module)s.%(funcName)s - %(message)s",
+    )
+
+    # Load the configuration
     config = json.loads(args.config)
 
+    # Launch the DNS server
     server_address = ("", 5053)
     with socketserver.UDPServer(server_address, DNSUDPHandler) as server:
         server.config = config
