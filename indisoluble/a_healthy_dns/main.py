@@ -12,25 +12,43 @@ import dns.rrset
 
 class DNSUDPHandler(socketserver.BaseRequestHandler):
     def handle(self):
+        data, sock = self.request
+
         try:
-            data, sock = self.request
-
             query = dns.message.from_wire(data)
-            response = dns.message.make_response(query)
+        except dns.exception.DNSException as ex:
+            logging.exception("Failed to parse DNS query: %s", ex)
+            return
 
-            question = query.question[0]
-            qtype = question.rdtype
-            qname = question.name.to_text()
-            if qtype == dns.rdatatype.A and qname in self.server.config:
-                ip = self.server.config[qname]
-                rrset = dns.rrset.from_text(qname, 300, "IN", "A", ip)
+        response = dns.message.make_response(query)
+        response.flags |= dns.flags.AA  # Authoritative Answer
 
-                response.answer.append(rrset)
-                logging.debug("Responded to query for %s with %s", qname, ip)
-
+        if not query.question:
+            logging.warning("Received query without question section")
+            response.set_rcode(dns.rcode.FORMERR)
             sock.sendto(response.to_wire(), self.client_address)
-        except Exception as e:
-            logging.error("Error processing DNS query: %s", e)
+            return
+
+        question = query.question[0]
+        if question.rdtype != dns.rdatatype.A:
+            logging.warning("Received unsupported query type: %s", question.rdtype)
+            response.set_rcode(dns.rcode.NOTIMP)
+            sock.sendto(response.to_wire(), self.client_address)
+            return
+
+        qname = question.name.to_text()
+        if qname not in self.server.config:
+            logging.warning("Received query for unknown domain: %s", qname)
+            response.set_rcode(dns.rcode.NXDOMAIN)
+            sock.sendto(response.to_wire(), self.client_address)
+            return
+
+        ip = self.server.config[qname]
+        logging.debug("Responded to query for %s with %s", qname, ip)
+
+        rrset = dns.rrset.from_text(qname, 300, "IN", "A", ip)
+        response.answer.append(rrset)
+        sock.sendto(response.to_wire(), self.client_address)
 
 
 def main():
@@ -54,7 +72,7 @@ def main():
     # Load the configuration
     config = json.loads(args.config)
 
-    # Launch the DNS server
+    # Launch DNS server
     server_address = ("", 5053)
     with socketserver.UDPServer(server_address, DNSUDPHandler) as server:
         server.config = config
