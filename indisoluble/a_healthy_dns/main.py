@@ -11,6 +11,18 @@ import dns.rrset
 
 
 class DNSUDPHandler(socketserver.BaseRequestHandler):
+    def _response_for_a_record(self, response, qname):
+        if qname not in self.server.resolutions:
+            logging.warning("Received query for unknown domain: %s", qname)
+            response.set_rcode(dns.rcode.NXDOMAIN)
+            return
+
+        ips = self.server.resolutions[qname]
+        logging.debug("Responded to query for %s with %s", qname, ips)
+
+        rrset = dns.rrset.from_text(qname, self.server.ttl, "IN", "A", *ips)
+        response.answer.append(rrset)
+
     def handle(self):
         data, sock = self.request
 
@@ -26,28 +38,15 @@ class DNSUDPHandler(socketserver.BaseRequestHandler):
         if not query.question:
             logging.warning("Received query without question section")
             response.set_rcode(dns.rcode.FORMERR)
-            sock.sendto(response.to_wire(), self.client_address)
-            return
+        else:
+            question = query.question[0]
 
-        question = query.question[0]
-        if question.rdtype != dns.rdatatype.A:
-            logging.warning("Received unsupported query type: %s", question.rdtype)
-            response.set_rcode(dns.rcode.NOTIMP)
-            sock.sendto(response.to_wire(), self.client_address)
-            return
+            if question.rdtype == dns.rdatatype.A:
+                self._response_for_a_record(response, question.name.to_text())
+            else:
+                logging.warning("Received unsupported query type: %s", question.rdtype)
+                response.set_rcode(dns.rcode.NOTIMP)
 
-        qname = question.name.to_text()
-        if qname not in self.server.resolutions:
-            logging.warning("Received query for unknown domain: %s", qname)
-            response.set_rcode(dns.rcode.NXDOMAIN)
-            sock.sendto(response.to_wire(), self.client_address)
-            return
-
-        ips = self.server.resolutions[qname]
-        logging.debug("Responded to query for %s with %s", qname, ips)
-
-        rrset = dns.rrset.from_text(qname, self.server.ttl, "IN", "A", *ips)
-        response.answer.append(rrset)
         sock.sendto(response.to_wire(), self.client_address)
 
 
