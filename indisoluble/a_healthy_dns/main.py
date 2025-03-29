@@ -18,10 +18,30 @@ class DNSUDPHandler(socketserver.BaseRequestHandler):
             return
 
         ips = self.server.resolutions[qname]
-        logging.debug("Responded to query for %s with %s", qname, ips)
 
-        rrset = dns.rrset.from_text(qname, self.server.ttl, "IN", "A", *ips)
+        rrset = dns.rrset.from_text(
+            qname, self.server.ttl, dns.rdataclass.IN, dns.rdatatype.A, *ips
+        )
         response.answer.append(rrset)
+        logging.debug("Responded to A query for %s with %s", qname, ips)
+
+    def _response_for_ns_record(self, response, qname):
+        if qname != self.server.hosted_zone:
+            logging.warning("Received NS query for unknown zone: %s", qname)
+            response.set_rcode(dns.rcode.NXDOMAIN)
+            return
+
+        rrset = dns.rrset.from_text(
+            qname,
+            self.server.ttl,
+            dns.rdataclass.IN,
+            dns.rdatatype.NS,
+            *self.server.name_servers,
+        )
+        response.answer.append(rrset)
+        logging.debug(
+            "Responded to NS query for %s with %s", qname, self.server.name_servers
+        )
 
     def handle(self):
         data, sock = self.request
@@ -43,6 +63,8 @@ class DNSUDPHandler(socketserver.BaseRequestHandler):
 
             if question.rdtype == dns.rdatatype.A:
                 self._response_for_a_record(response, question.name.to_text())
+            elif question.rdtype == dns.rdatatype.NS:
+                self._response_for_ns_record(response, question.name.to_text())
             else:
                 logging.warning("Received unsupported query type: %s", question.rdtype)
                 response.set_rcode(dns.rcode.NOTIMP)
@@ -55,6 +77,12 @@ def main():
     parser = argparse.ArgumentParser(description="DNS server")
     parser.add_argument(
         "--hosted-zone", type=str, required=True, help="Hosted zone name"
+    )
+    parser.add_argument(
+        "--name-servers",
+        type=str,
+        required=True,
+        help="List of name servers as JSON string (ex. [fqdn1, fqdn2, ...])",
     )
     parser.add_argument(
         "--zone-resolutions",
@@ -80,6 +108,15 @@ def main():
         format="%(asctime)s - %(levelname)s - %(module)s.%(funcName)s - %(message)s",
     )
 
+    # Parse name servers
+    try:
+        raw_name_servers = json.loads(args.name_servers)
+    except json.JSONDecodeError as ex:
+        logging.exception("Failed to parse name servers: %s", ex)
+        return
+
+    name_servers = [f"{ns}." for ns in raw_name_servers]
+
     # Parse resolutions
     try:
         raw_resolutions = json.loads(args.zone_resolutions)
@@ -95,6 +132,8 @@ def main():
     # Launch DNS server
     server_address = ("", args.port)
     with socketserver.UDPServer(server_address, DNSUDPHandler) as server:
+        server.hosted_zone = f"{args.hosted_zone}."
+        server.name_servers = name_servers
         server.resolutions = resolutions
         server.ttl = args.ttl
 
