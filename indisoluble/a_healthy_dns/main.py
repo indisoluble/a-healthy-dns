@@ -58,6 +58,9 @@ def main():
         "--config", type=str, required=True, help="JSON string for config."
     )
     parser.add_argument(
+        "--port", type=int, default=5053, help="DNS server port (default: 5053)"
+    )
+    parser.add_argument(
         "--ttl", type=int, default=60, help="TTL in seconds (default: 60)"
     )
     parser.add_argument(
@@ -76,7 +79,7 @@ def main():
     config = json.loads(args.config)
 
     # Launch DNS server
-    server_address = ("", 5053)
+    server_address = ("", args.port)
     with socketserver.UDPServer(server_address, DNSUDPHandler) as server:
         server.config = config
         server.ttl = args.ttl
