@@ -4,6 +4,7 @@ import argparse
 import json
 import logging
 import socketserver
+import time
 
 import dns.message
 import dns.rdatatype
@@ -20,7 +21,7 @@ class DNSUDPHandler(socketserver.BaseRequestHandler):
         ips = self.server.resolutions[qname]
 
         rrset = dns.rrset.from_text(
-            qname, self.server.ttl, dns.rdataclass.IN, dns.rdatatype.A, *ips
+            qname, self.server.ttl_a, dns.rdataclass.IN, dns.rdatatype.A, *ips
         )
         response.answer.append(rrset)
         logging.debug("Responded to A query for %s with %s", qname, ips)
@@ -33,7 +34,7 @@ class DNSUDPHandler(socketserver.BaseRequestHandler):
 
         rrset = dns.rrset.from_text(
             qname,
-            self.server.ttl,
+            self.server.ttl_ns,
             dns.rdataclass.IN,
             dns.rdatatype.NS,
             *self.server.name_servers,
@@ -42,6 +43,32 @@ class DNSUDPHandler(socketserver.BaseRequestHandler):
         logging.debug(
             "Responded to NS query for %s with %s", qname, self.server.name_servers
         )
+
+    def _response_for_soa_record(self, response, qname):
+        if qname != self.server.hosted_zone:
+            logging.warning("Received SOA query for unknown zone: %s", qname)
+            response.set_rcode(dns.rcode.NXDOMAIN)
+            return
+
+        rrset = dns.rrset.from_text(
+            qname,
+            self.server.ttl_a,
+            dns.rdataclass.IN,
+            dns.rdatatype.SOA,
+            " ".join(
+                [
+                    self.server.primary_name_server,
+                    f"hostmaster.{self.server.hosted_zone}",
+                    str(self.server.soa_serial),
+                    str(self.server.soa_refresh),
+                    str(self.server.soa_retry),
+                    str(self.server.soa_expire),
+                    str(self.server.ttl_a),
+                ]
+            ),
+        )
+        response.answer.append(rrset)
+        logging.debug("Responded to SOA query for %s", qname)
 
     def handle(self):
         data, sock = self.request
@@ -65,6 +92,8 @@ class DNSUDPHandler(socketserver.BaseRequestHandler):
                 self._response_for_a_record(response, question.name.to_text())
             elif question.rdtype == dns.rdatatype.NS:
                 self._response_for_ns_record(response, question.name.to_text())
+            elif question.rdtype == dns.rdatatype.SOA:
+                self._response_for_soa_record(response, question.name.to_text())
             else:
                 logging.warning("Received unsupported query type: %s", question.rdtype)
                 response.set_rcode(dns.rcode.NOTIMP)
@@ -94,7 +123,34 @@ def main():
         "--port", type=int, default=5053, help="DNS server port (default: 5053)"
     )
     parser.add_argument(
-        "--ttl", type=int, default=60, help="TTL in seconds (default: 60)"
+        "--ttl-a",
+        type=int,
+        default=60,
+        help="TTL in seconds for A records (default: 60)",
+    )
+    parser.add_argument(
+        "--ttl-ns",
+        type=int,
+        default=86400,
+        help="TTL in seconds for NS records (default: 86400)",
+    )
+    parser.add_argument(
+        "--soa-refresh",
+        type=int,
+        default=3600,
+        help="SOA refresh time in seconds (default: 3600)",
+    )
+    parser.add_argument(
+        "--soa-retry",
+        type=int,
+        default=600,
+        help="SOA retry time in seconds (default: 600)",
+    )
+    parser.add_argument(
+        "--soa-expire",
+        type=int,
+        default=86400,
+        help="SOA expire time in seconds (default: 86400)",
     )
     parser.add_argument(
         "--log-level", type=str, default="info", help="Logging level (default: info)"
@@ -133,9 +189,15 @@ def main():
     server_address = ("", args.port)
     with socketserver.UDPServer(server_address, DNSUDPHandler) as server:
         server.hosted_zone = f"{args.hosted_zone}."
+        server.primary_name_server = name_servers[0]
         server.name_servers = name_servers
         server.resolutions = resolutions
-        server.ttl = args.ttl
+        server.ttl_a = args.ttl_a
+        server.ttl_ns = args.ttl_ns
+        server.soa_serial = int(time.time())
+        server.soa_refresh = args.soa_refresh
+        server.soa_retry = args.soa_retry
+        server.soa_expire = args.soa_expire
 
         logging.info("DNS server listening on port %d", server_address[1])
         try:
