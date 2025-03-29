@@ -43,10 +43,10 @@ class DNSUDPHandler(socketserver.BaseRequestHandler):
             sock.sendto(response.to_wire(), self.client_address)
             return
 
-        ip = self.server.config[qname]
-        logging.debug("Responded to query for %s with %s", qname, ip)
+        ips = self.server.config[qname]
+        logging.debug("Responded to query for %s with %s", qname, ips)
 
-        rrset = dns.rrset.from_text(qname, self.server.ttl, "IN", "A", ip)
+        rrset = dns.rrset.from_text(qname, self.server.ttl, "IN", "A", *ips)
         response.answer.append(rrset)
         sock.sendto(response.to_wire(), self.client_address)
 
