@@ -37,13 +37,13 @@ class DNSUDPHandler(socketserver.BaseRequestHandler):
             return
 
         qname = question.name.to_text()
-        if qname not in self.server.config:
+        if qname not in self.server.resolutions:
             logging.warning("Received query for unknown domain: %s", qname)
             response.set_rcode(dns.rcode.NXDOMAIN)
             sock.sendto(response.to_wire(), self.client_address)
             return
 
-        ips = self.server.config[qname]
+        ips = self.server.resolutions[qname]
         logging.debug("Responded to query for %s with %s", qname, ips)
 
         rrset = dns.rrset.from_text(qname, self.server.ttl, "IN", "A", *ips)
@@ -55,7 +55,13 @@ def main():
     # Set up argument parsing
     parser = argparse.ArgumentParser(description="DNS server")
     parser.add_argument(
-        "--config", type=str, required=True, help="JSON string for config."
+        "--hosted-zone", type=str, required=True, help="Hosted zone name"
+    )
+    parser.add_argument(
+        "--zone-resolutions",
+        type=str,
+        required=True,
+        help="List of subdomains with their respectives IPs as JSON string (ex. {sd1: [ip1, ip2, ...], ...})",
     )
     parser.add_argument(
         "--port", type=int, default=5053, help="DNS server port (default: 5053)"
@@ -75,13 +81,22 @@ def main():
         format="%(asctime)s - %(levelname)s - %(module)s.%(funcName)s - %(message)s",
     )
 
-    # Load the configuration
-    config = json.loads(args.config)
+    # Parse resolutions
+    try:
+        raw_resolutions = json.loads(args.zone_resolutions)
+    except json.JSONDecodeError as ex:
+        logging.exception("Failed to parse zone resolutions: %s", ex)
+        return
+
+    resolutions = {
+        f"{subdomain}.{args.hosted_zone}.": ips
+        for subdomain, ips in raw_resolutions.items()
+    }
 
     # Launch DNS server
     server_address = ("", args.port)
     with socketserver.UDPServer(server_address, DNSUDPHandler) as server:
-        server.config = config
+        server.resolutions = resolutions
         server.ttl = args.ttl
 
         logging.info("DNS server listening on port %d", server_address[1])
