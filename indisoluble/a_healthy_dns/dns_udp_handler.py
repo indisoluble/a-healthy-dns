@@ -7,60 +7,68 @@ import dns.message
 import dns.rdatatype
 import dns.rrset
 
+from .dns_server_config import DNSServerConfig
+
 
 class DNSUDPHandler(socketserver.BaseRequestHandler):
     def _response_for_a_record(self, response, qname):
-        if qname not in self.server.resolutions:
+        config: DNSServerConfig = self.server.config
+
+        if qname not in config.resolutions:
             logging.warning("Received query for unknown domain: %s", qname)
             response.set_rcode(dns.rcode.NXDOMAIN)
             return
 
-        ips = self.server.resolutions[qname]
+        ips = config.resolutions[qname]
 
         rrset = dns.rrset.from_text(
-            qname, self.server.ttl_a, dns.rdataclass.IN, dns.rdatatype.A, *ips
+            qname, config.ttl_a, dns.rdataclass.IN, dns.rdatatype.A, *ips
         )
         response.answer.append(rrset)
         logging.debug("Responded to A query for %s with %s", qname, ips)
 
     def _response_for_ns_record(self, response, qname):
-        if qname != self.server.hosted_zone:
+        config: DNSServerConfig = self.server.config
+
+        if qname != config.hosted_zone:
             logging.warning("Received NS query for unknown zone: %s", qname)
             response.set_rcode(dns.rcode.NXDOMAIN)
             return
 
         rrset = dns.rrset.from_text(
             qname,
-            self.server.ttl_ns,
+            config.ttl_ns,
             dns.rdataclass.IN,
             dns.rdatatype.NS,
-            *self.server.name_servers,
+            *config.name_servers,
         )
         response.answer.append(rrset)
         logging.debug(
-            "Responded to NS query for %s with %s", qname, self.server.name_servers
+            "Responded to NS query for %s with %s", qname, config.name_servers
         )
 
     def _response_for_soa_record(self, response, qname):
-        if qname != self.server.hosted_zone:
+        config: DNSServerConfig = self.server.config
+
+        if qname != config.hosted_zone:
             logging.warning("Received SOA query for unknown zone: %s", qname)
             response.set_rcode(dns.rcode.NXDOMAIN)
             return
 
         rrset = dns.rrset.from_text(
             qname,
-            self.server.ttl_a,
+            config.ttl_a,
             dns.rdataclass.IN,
             dns.rdatatype.SOA,
             " ".join(
                 [
-                    self.server.primary_name_server,
-                    f"hostmaster.{self.server.hosted_zone}",
-                    str(self.server.soa_serial),
-                    str(self.server.soa_refresh),
-                    str(self.server.soa_retry),
-                    str(self.server.soa_expire),
-                    str(self.server.ttl_a),
+                    config.primary_name_server,
+                    f"hostmaster.{config.hosted_zone}",
+                    str(config.soa_serial),
+                    str(config.soa_refresh),
+                    str(config.soa_retry),
+                    str(config.soa_expire),
+                    str(config.ttl_a),
                 ]
             ),
         )
