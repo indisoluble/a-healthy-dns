@@ -13,12 +13,12 @@ from .dns_server_config import DNSServerConfig
 def _handle_a_record(
     response: dns.message.Message, qname: str, config: DNSServerConfig
 ):
-    if qname not in config.resolutions:
+    if qname not in config.abs_resolutions:
         logging.warning("Received query for unknown domain: %s", qname)
         response.set_rcode(dns.rcode.NXDOMAIN)
         return
 
-    ips = config.resolutions[qname]
+    ips = config.abs_resolutions[qname]
 
     rrset = dns.rrset.from_text(
         qname, config.ttl_a, dns.rdataclass.IN, dns.rdatatype.A, *ips
@@ -30,7 +30,7 @@ def _handle_a_record(
 def _handle_ns_record(
     response: dns.message.Message, qname: str, config: DNSServerConfig
 ):
-    if qname != config.hosted_zone:
+    if qname != config.abs_hosted_zone:
         logging.warning("Received NS query for unknown zone: %s", qname)
         response.set_rcode(dns.rcode.NXDOMAIN)
         return
@@ -40,16 +40,18 @@ def _handle_ns_record(
         config.ttl_ns,
         dns.rdataclass.IN,
         dns.rdatatype.NS,
-        *config.name_servers,
+        *config.abs_name_servers,
     )
     response.answer.append(rrset)
-    logging.debug("Responded to NS query for %s with %s", qname, config.name_servers)
+    logging.debug(
+        "Responded to NS query for %s with %s", qname, config.abs_name_servers
+    )
 
 
 def _handle_soa_record(
     response: dns.message.Message, qname: str, config: DNSServerConfig
 ):
-    if qname != config.hosted_zone:
+    if qname != config.abs_hosted_zone:
         logging.warning("Received SOA query for unknown zone: %s", qname)
         response.set_rcode(dns.rcode.NXDOMAIN)
         return
@@ -61,8 +63,8 @@ def _handle_soa_record(
         dns.rdatatype.SOA,
         " ".join(
             [
-                config.primary_name_server,
-                f"hostmaster.{config.hosted_zone}",
+                config.primary_abs_name_server,
+                f"hostmaster.{config.abs_hosted_zone}",
                 str(config.soa_serial),
                 str(config.soa_refresh),
                 str(config.soa_retry),
