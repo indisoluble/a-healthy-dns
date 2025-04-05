@@ -76,6 +76,11 @@ class DNSServerConfig:
                 f"Hosted zone '{hosted_zone}' is not a valid FQDN: {error}"
             )
 
+        if not isinstance(name_servers, list):
+            raise ValueError(
+                f"Name servers must be a list, got {type(name_servers).__name__}"
+            )
+
         if not name_servers:
             raise ValueError("Name server list cannot be empty")
 
@@ -84,14 +89,24 @@ class DNSServerConfig:
             if not success:
                 raise ValueError(f"Name server '{ns}' is not a valid FQDN: {error}")
 
+        if not isinstance(resolutions, dict):
+            raise ValueError(
+                f"Zone resolutions must be a dictionary, got {type(name_servers).__name__}"
+            )
+
         if not resolutions:
-            raise ValueError("Zone resolution cannot be empty")
+            raise ValueError("Zone resolutions cannot be empty")
 
         for subdomain, ip_list in resolutions.items():
             success, error = DNSServerConfig._is_valid_subdomain(subdomain)
             if not success:
                 raise ValueError(
                     f"Zone resolution subdomain '{subdomain}' is not valid: {error}"
+                )
+
+            if not isinstance(ip_list, list):
+                raise ValueError(
+                    f"IP list for '{subdomain}' must be a list, got {type(ip_list).__name__}"
                 )
 
             if not ip_list:
