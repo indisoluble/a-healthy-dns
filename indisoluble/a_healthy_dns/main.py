@@ -103,7 +103,12 @@ def main():
     args_dict = vars(args)
 
     # Set up logging
-    numeric_level = getattr(logging, args_dict[_LOG_LEVEL_ARG].upper(), logging.INFO)
+    try:
+        numeric_level = getattr(logging, args_dict[_LOG_LEVEL_ARG].upper())
+    except AttributeError:
+        logging.error("Invalid log level: %s", args_dict[_LOG_LEVEL_ARG])
+        return
+
     logging.basicConfig(
         level=numeric_level,
         format="%(asctime)s - %(levelname)s - %(module)s.%(funcName)s - %(message)s",
@@ -113,6 +118,9 @@ def main():
     server_address = ("", args_dict[_PORT_ARG])
     with socketserver.UDPServer(server_address, DNSUDPHandler) as server:
         server.config = dsc.DNSServerConfig.make_config(args_dict)
+        if server.config is None:
+            logging.error("Invalid configuration")
+            return
 
         logging.info("DNS server listening on port %d", args_dict[_PORT_ARG])
         try:
