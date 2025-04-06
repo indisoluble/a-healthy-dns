@@ -4,7 +4,7 @@ import json
 import logging
 import time
 
-from typing import Optional
+from typing import Any, Optional
 
 
 HOSTED_ZONE_ARG = "hosted_zone"
@@ -29,10 +29,6 @@ class DNSServerConfig:
     @property
     def abs_name_servers(self) -> list[str]:
         return self._abs_name_servers
-
-    @property
-    def abs_resolutions(self) -> dict[str, list[str]]:
-        return self._abs_resolutions
 
     @property
     def ttl_a(self) -> int:
@@ -179,7 +175,7 @@ class DNSServerConfig:
         return (True, "")
 
     @classmethod
-    def make_config(cls, args) -> Optional["DNSServerConfig"]:
+    def make_config(cls, args: dict[str, Any]) -> Optional["DNSServerConfig"]:
         try:
             name_servers = json.loads(args[NAME_SERVERS_ARG])
         except json.JSONDecodeError as ex:
@@ -209,3 +205,12 @@ class DNSServerConfig:
             return
 
         return config
+
+    def ips(self, qname: str) -> Optional[list[str]]:
+        if qname not in self._abs_resolutions:
+            logging.warning("No IPs found for %s", qname)
+            return
+
+        ips = self._abs_resolutions[qname]
+        logging.debug("Resolved %s to %s", qname, ips)
+        return ips

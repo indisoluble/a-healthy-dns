@@ -13,12 +13,11 @@ from .dns_server_config import DNSServerConfig
 def _handle_a_record(
     response: dns.message.Message, qname: str, config: DNSServerConfig
 ):
-    if qname not in config.abs_resolutions:
+    ips = config.ips(qname)
+    if not ips:
         logging.warning("Received query for unknown domain: %s", qname)
         response.set_rcode(dns.rcode.NXDOMAIN)
         return
-
-    ips = config.abs_resolutions[qname]
 
     rrset = dns.rrset.from_text(
         qname, config.ttl_a, dns.rdataclass.IN, dns.rdatatype.A, *ips

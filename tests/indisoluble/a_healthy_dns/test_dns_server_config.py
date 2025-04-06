@@ -24,15 +24,29 @@ def test_valid_config():
     assert config.abs_hosted_zone == "dev.example.com."
     assert config.primary_abs_name_server == "ns1.example.com."
     assert config.abs_name_servers == ["ns1.example.com.", "ns2.example.com."]
-    assert config.abs_resolutions == {
-        "www.dev.example.com.": ["192.168.1.1", "192.168.1.2"]
-    }
     assert config.ttl_a == 300
     assert config.ttl_ns == 86400
     assert config.soa_serial == 1234567890
     assert config.soa_refresh == 7200
     assert config.soa_retry == 3600
     assert config.soa_expire == 1209600
+
+
+def test_config_ips():
+    config = dsc.DNSServerConfig(
+        hosted_zone="dev.example.com",
+        name_servers=["ns1.example.com", "ns2.example.com"],
+        resolutions={"www": ["192.168.1.1", "192.168.1.2"]},
+        ttl_a=300,
+        ttl_ns=86400,
+        soa_serial=1234567890,
+        soa_refresh=7200,
+        soa_retry=3600,
+        soa_expire=1209600,
+    )
+
+    assert config.ips("www.dev.example.com.") == ["192.168.1.1", "192.168.1.2"]
+    assert not config.ips("www2.dev.example.com.")
 
 
 def test_invalid_hosted_zone():
