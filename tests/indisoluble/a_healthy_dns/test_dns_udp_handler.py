@@ -19,7 +19,9 @@ def config():
     return DNSServerConfig(
         hosted_zone="dev.example.com",
         name_servers=["ns1.example.com", "ns2.example.com"],
-        resolutions={"www": ["192.168.1.1", "192.168.1.2"]},
+        resolutions={
+            "www": {"ips": ["192.168.1.1", "192.168.1.2"], "health_port": 8080}
+        },
         ttl_a=300,
         ttl_ns=86400,
         soa_serial=1234567890,

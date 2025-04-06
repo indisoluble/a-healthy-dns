@@ -4,9 +4,11 @@ import json
 import logging
 import time
 
-from typing import Any, Optional
+from typing import Any, Optional, Union
 
 
+_SUBDOMAIN_HEALTH_PORT_ARG = "health_port"
+_SUBDOMAIN_IP_LIST_ARG = "ips"
 HOSTED_ZONE_ARG = "hosted_zone"
 NAME_SERVERS_ARG = "name_servers"
 ZONE_RESOLUTIONS_ARG = "zone_resolutions"
@@ -58,7 +60,7 @@ class DNSServerConfig:
         self,
         hosted_zone: str,
         name_servers: list[str],
-        resolutions: dict[str, list[str]],
+        resolutions: dict[str, dict[str, Union[list[str], int]]],
         ttl_a: int,
         ttl_ns: int,
         soa_serial: int,
@@ -93,12 +95,24 @@ class DNSServerConfig:
         if not resolutions:
             raise ValueError("Zone resolutions cannot be empty")
 
-        for subdomain, ip_list in resolutions.items():
+        for subdomain, sub_config in resolutions.items():
             success, error = DNSServerConfig._is_valid_subdomain(subdomain)
             if not success:
                 raise ValueError(
                     f"Zone resolution subdomain '{subdomain}' is not valid: {error}"
                 )
+
+            if not isinstance(sub_config, dict):
+                raise ValueError(
+                    f"Zone resolution for '{subdomain}' must be a dictionary, got {type(sub_config).__name__}"
+                )
+
+            health_port = sub_config[_SUBDOMAIN_HEALTH_PORT_ARG]
+            success, error = DNSServerConfig._is_valid_port(health_port)
+            if not success:
+                raise ValueError(f"Health port for '{subdomain}' is not valid: {error}")
+
+            ip_list = sub_config[_SUBDOMAIN_IP_LIST_ARG]
 
             if not isinstance(ip_list, list):
                 raise ValueError(
@@ -133,18 +147,19 @@ class DNSServerConfig:
         if soa_expire <= 0:
             raise ValueError("SOA expire value must be positive")
 
-        self._abs_hosted_zone = f"{hosted_zone}."
-        self._abs_name_servers = [f"{ns}." for ns in name_servers]
-        self._abs_resolutions = {
-            f"{subdomain}.{hosted_zone}.": ip_list
-            for subdomain, ip_list in resolutions.items()
-        }
         self._ttl_a = ttl_a
         self._ttl_ns = ttl_ns
         self._soa_serial = soa_serial
         self._soa_refresh = soa_refresh
         self._soa_retry = soa_retry
         self._soa_expire = soa_expire
+
+        self._abs_hosted_zone = f"{hosted_zone}."
+        self._abs_name_servers = [f"{ns}." for ns in name_servers]
+        self._abs_resolutions = {
+            f"{subdomain}.{hosted_zone}.": sub_config[_SUBDOMAIN_IP_LIST_ARG]
+            for subdomain, sub_config in resolutions.items()
+        }
 
     @classmethod
     def _is_valid_subdomain(cls, name_server: str) -> tuple[bool, str]:
@@ -171,6 +186,13 @@ class DNSServerConfig:
         for part in parts:
             if not part.isdigit() or not (0 <= int(part) <= 255):
                 return (False, "Each octet must be a number between 0 and 255")
+
+        return (True, "")
+
+    @classmethod
+    def _is_valid_port(cls, port: int) -> tuple[bool, str]:
+        if not (1 <= port <= 65535):
+            return (False, "Port must be between 1 and 65535")
 
         return (True, "")
 
