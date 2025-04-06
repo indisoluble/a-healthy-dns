@@ -138,6 +138,7 @@ def test_handle_valid_a_query(config):
     wire_response = args[0]
     response = dns.message.from_wire(wire_response)
 
+    assert response.flags & dns.flags.AA
     assert len(response.answer) == 1
     rrset = response.answer[0]
     assert rrset.name.to_text() == "www.dev.example.com."
@@ -199,6 +200,7 @@ def test_handle_query_without_question(config):
     wire_response = args[0]
     response = dns.message.from_wire(wire_response)
 
+    assert response.flags & dns.flags.AA
     assert response.rcode() == dns.rcode.FORMERR
     assert len(response.answer) == 0
 
@@ -231,5 +233,6 @@ def test_handle_unsupported_query_type(config):
     wire_response = args[0]
     response = dns.message.from_wire(wire_response)
 
+    assert response.flags & dns.flags.AA
     assert response.rcode() == dns.rcode.NOTIMP
     assert len(response.answer) == 0
