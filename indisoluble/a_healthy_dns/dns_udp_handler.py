@@ -13,7 +13,7 @@ from .dns_server_config import DNSServerConfig
 def _handle_a_record(
     response: dns.message.Message, qname: str, config: DNSServerConfig
 ):
-    ips = config.ips(qname)
+    ips = config.healthy_ips(qname)
     if not ips:
         logging.warning("Received query for unknown domain: %s", qname)
         response.set_rcode(dns.rcode.NXDOMAIN)

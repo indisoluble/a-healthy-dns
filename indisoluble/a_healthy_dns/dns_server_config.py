@@ -4,7 +4,12 @@ import json
 import logging
 import time
 
-from typing import Any, Optional, Union
+from typing import Any, Optional, Union, NamedTuple
+
+
+class _CheckableIp(NamedTuple):
+    ip: str
+    health_port: int
 
 
 _SUBDOMAIN_HEALTH_PORT_ARG = "health_port"
@@ -157,8 +162,16 @@ class DNSServerConfig:
         self._abs_hosted_zone = f"{hosted_zone}."
         self._abs_name_servers = [f"{ns}." for ns in name_servers]
         self._abs_resolutions = {
-            f"{subdomain}.{hosted_zone}.": sub_config[_SUBDOMAIN_IP_LIST_ARG]
+            f"{subdomain}.{hosted_zone}.": [
+                _CheckableIp(ip, sub_config[_SUBDOMAIN_HEALTH_PORT_ARG])
+                for ip in sub_config[_SUBDOMAIN_IP_LIST_ARG]
+            ]
             for subdomain, sub_config in resolutions.items()
+        }
+        self._healthy_ips = {
+            _CheckableIp(ip, sub_config[_SUBDOMAIN_HEALTH_PORT_ARG]): True
+            for ip in sub_config[_SUBDOMAIN_IP_LIST_ARG]
+            for _, sub_config in resolutions.items()
         }
 
     @classmethod
@@ -228,11 +241,15 @@ class DNSServerConfig:
 
         return config
 
-    def ips(self, qname: str) -> Optional[list[str]]:
+    def healthy_ips(self, qname: str) -> Optional[list[str]]:
         if qname not in self._abs_resolutions:
             logging.warning("No IPs found for %s", qname)
             return
 
-        ips = self._abs_resolutions[qname]
+        ips = [
+            checkIp.ip
+            for checkIp in self._abs_resolutions[qname]
+            if self._healthy_ips[checkIp]
+        ]
         logging.debug("Resolved %s to %s", qname, ips)
         return ips

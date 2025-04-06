@@ -34,7 +34,7 @@ def test_valid_config():
     assert config.soa_expire == 1209600
 
 
-def test_config_ips():
+def test_config_healthy_ips():
     config = dsc.DNSServerConfig(
         hosted_zone="dev.example.com",
         name_servers=["ns1.example.com", "ns2.example.com"],
@@ -49,8 +49,8 @@ def test_config_ips():
         soa_expire=1209600,
     )
 
-    assert config.ips("www.dev.example.com.") == ["192.168.1.1", "192.168.1.2"]
-    assert not config.ips("www2.dev.example.com.")
+    assert config.healthy_ips("www.dev.example.com.") == ["192.168.1.1", "192.168.1.2"]
+    assert not config.healthy_ips("www2.dev.example.com.")
 
 
 def test_invalid_hosted_zone():
