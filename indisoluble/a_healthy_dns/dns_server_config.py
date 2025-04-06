@@ -241,15 +241,38 @@ class DNSServerConfig:
 
         return config
 
-    def healthy_ips(self, qname: str) -> Optional[list[str]]:
-        if qname not in self._abs_resolutions:
-            logging.warning("No IPs found for %s", qname)
-            return
+    def _update_ip_status(self, ip: str, health_port: int, status: bool):
+        checkIp = _CheckableIp(ip, health_port)
+        if checkIp in self._healthy_ips:
+            # Update boolean values is an atomic operation in CPython,
+            # following code is thread-safe
+            self._healthy_ips[checkIp] = status
 
+            logging.debug("Updated IP %s to %s", ip, status)
+        else:
+            logging.warning("IP %s not found in the config", ip)
+
+    def enable_ip(self, ip: str, health_port: int):
+        self._update_ip_status(ip, health_port, True)
+
+    def disable_ip(self, ip: str, health_port: int):
+        self._update_ip_status(ip, health_port, False)
+
+    def healthy_ips(self, qname: str) -> list[str]:
+        if qname not in self._abs_resolutions:
+            logging.warning("%s not found", qname)
+            return []
+
+        # Update boolean values is an atomic operation in CPython,
+        # following code is thread-safe
         ips = [
             checkIp.ip
             for checkIp in self._abs_resolutions[qname]
             if self._healthy_ips[checkIp]
         ]
-        logging.debug("Resolved %s to %s", qname, ips)
+        if ips:
+            logging.debug("Resolved %s to %s", qname, ips)
+        else:
+            logging.warning("No healthy IPs for %s", qname)
+
         return ips

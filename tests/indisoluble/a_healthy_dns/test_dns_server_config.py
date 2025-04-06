@@ -32,6 +32,7 @@ def test_valid_config():
     assert config.soa_refresh == 7200
     assert config.soa_retry == 3600
     assert config.soa_expire == 1209600
+    assert config.healthy_ips("www.dev.example.com.") == ["192.168.1.1", "192.168.1.2"]
 
 
 def test_config_healthy_ips():
@@ -49,8 +50,17 @@ def test_config_healthy_ips():
         soa_expire=1209600,
     )
 
-    assert config.healthy_ips("www.dev.example.com.") == ["192.168.1.1", "192.168.1.2"]
     assert not config.healthy_ips("www2.dev.example.com.")
+
+    assert config.healthy_ips("www.dev.example.com.") == ["192.168.1.1", "192.168.1.2"]
+    config.disable_ip("192.168.1.1", 8080)
+    assert config.healthy_ips("www.dev.example.com.") == ["192.168.1.2"]
+    config.disable_ip("192.168.1.2", 8080)
+    assert not config.healthy_ips("www.dev.example.com.")
+    config.enable_ip("192.168.1.1", 8080)
+    assert config.healthy_ips("www.dev.example.com.") == ["192.168.1.1"]
+    config.enable_ip("192.168.1.2", 9090)
+    assert config.healthy_ips("www.dev.example.com.") == ["192.168.1.1"]
 
 
 def test_invalid_hosted_zone():
