@@ -4,12 +4,9 @@ import json
 import logging
 import time
 
-from typing import Any, Optional, Union, NamedTuple
+from typing import Any, Optional, Union
 
-
-class _CheckableIp(NamedTuple):
-    ip: str
-    health_port: int
+from .checkable_ip import CheckableIp
 
 
 _SUBDOMAIN_HEALTH_PORT_ARG = "health_port"
@@ -163,13 +160,13 @@ class DNSServerConfig:
         self._abs_name_servers = [f"{ns}." for ns in name_servers]
         self._abs_resolutions = {
             f"{subdomain}.{hosted_zone}.": [
-                _CheckableIp(ip, sub_config[_SUBDOMAIN_HEALTH_PORT_ARG])
+                CheckableIp(ip, sub_config[_SUBDOMAIN_HEALTH_PORT_ARG])
                 for ip in sub_config[_SUBDOMAIN_IP_LIST_ARG]
             ]
             for subdomain, sub_config in resolutions.items()
         }
         self._healthy_ips = {
-            _CheckableIp(ip, sub_config[_SUBDOMAIN_HEALTH_PORT_ARG]): True
+            CheckableIp(ip, sub_config[_SUBDOMAIN_HEALTH_PORT_ARG]): True
             for ip in sub_config[_SUBDOMAIN_IP_LIST_ARG]
             for _, sub_config in resolutions.items()
         }
@@ -242,7 +239,7 @@ class DNSServerConfig:
         return config
 
     def _update_ip_status(self, ip: str, health_port: int, status: bool):
-        checkIp = _CheckableIp(ip, health_port)
+        checkIp = CheckableIp(ip, health_port)
         if checkIp in self._healthy_ips:
             # Update boolean values is an atomic operation in CPython,
             # following code is thread-safe
