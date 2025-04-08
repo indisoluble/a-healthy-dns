@@ -4,7 +4,7 @@ import argparse
 import logging
 import socketserver
 
-from . import dns_server_config as dsc
+from . import dns_server_config_factory as dscf
 from .dns_udp_handler import DNSUDPHandler
 
 
@@ -19,7 +19,7 @@ def _make_arg_parser() -> argparse.ArgumentParser:
         "--hosted-zone",
         type=str,
         required=True,
-        dest=dsc.HOSTED_ZONE_ARG,
+        dest=dscf.HOSTED_ZONE_ARG,
         help="Hosted zone name",
     )
     parser.add_argument(
@@ -27,7 +27,7 @@ def _make_arg_parser() -> argparse.ArgumentParser:
         "--name-servers",
         type=str,
         required=True,
-        dest=dsc.NAME_SERVERS_ARG,
+        dest=dscf.NAME_SERVERS_ARG,
         help="List of name servers as JSON string (ex. [fqdn1, fqdn2, ...])",
     )
     parser.add_argument(
@@ -35,7 +35,7 @@ def _make_arg_parser() -> argparse.ArgumentParser:
         "--zone-resolutions",
         type=str,
         required=True,
-        dest=dsc.ZONE_RESOLUTIONS_ARG,
+        dest=dscf.ZONE_RESOLUTIONS_ARG,
         help="List of subdomains with their respective IPs and health ports as JSON string (ex. {sd1: {'ips': [ip1, ip2, ...], 'health_port': port}, ...})",
     )
     parser.add_argument(
@@ -51,7 +51,7 @@ def _make_arg_parser() -> argparse.ArgumentParser:
         "--ttl-a",
         type=int,
         default=60,
-        dest=dsc.TTL_A_ARG,
+        dest=dscf.TTL_A_ARG,
         help="TTL in seconds for A records (default: 60)",
     )
     parser.add_argument(
@@ -59,7 +59,7 @@ def _make_arg_parser() -> argparse.ArgumentParser:
         "--ttl-ns",
         type=int,
         default=86400,
-        dest=dsc.TTL_NS_ARG,
+        dest=dscf.TTL_NS_ARG,
         help="TTL in seconds for NS records (default: 86400)",
     )
     parser.add_argument(
@@ -67,7 +67,7 @@ def _make_arg_parser() -> argparse.ArgumentParser:
         "--soa-refresh",
         type=int,
         default=3600,
-        dest=dsc.SOA_REFRESH_ARG,
+        dest=dscf.SOA_REFRESH_ARG,
         help="SOA refresh time in seconds (default: 3600)",
     )
     parser.add_argument(
@@ -75,7 +75,7 @@ def _make_arg_parser() -> argparse.ArgumentParser:
         "--soa-retry",
         type=int,
         default=600,
-        dest=dsc.SOA_RETRY_ARG,
+        dest=dscf.SOA_RETRY_ARG,
         help="SOA retry time in seconds (default: 600)",
     )
     parser.add_argument(
@@ -83,7 +83,7 @@ def _make_arg_parser() -> argparse.ArgumentParser:
         "--soa-expire",
         type=int,
         default=86400,
-        dest=dsc.SOA_EXPIRE_ARG,
+        dest=dscf.SOA_EXPIRE_ARG,
         help="SOA expire time in seconds (default: 86400)",
     )
     parser.add_argument(
@@ -117,7 +117,7 @@ def main():
     # Launch DNS server
     server_address = ("", args_dict[_PORT_ARG])
     with socketserver.UDPServer(server_address, DNSUDPHandler) as server:
-        server.config = dsc.DNSServerConfig.make_config(args_dict)
+        server.config = dscf.make_config(args_dict)
         if server.config is None:
             logging.error("Invalid configuration")
             return
