@@ -6,6 +6,7 @@ import time
 
 from typing import Any, Optional
 
+from .checkable_ip import CheckableIp
 from .dns_server_config import DNSServerConfig
 
 
@@ -17,6 +18,8 @@ TTL_NS_ARG = "ttl_ns"
 SOA_REFRESH_ARG = "soa_refresh"
 SOA_RETRY_ARG = "soa_retry"
 SOA_EXPIRE_ARG = "soa_expire"
+SUBDOMAIN_HEALTH_PORT_ARG = "health_port"
+SUBDOMAIN_IP_LIST_ARG = "ips"
 
 
 def make_config(args: dict[str, Any]) -> Optional[DNSServerConfig]:
@@ -26,11 +29,52 @@ def make_config(args: dict[str, Any]) -> Optional[DNSServerConfig]:
         logging.exception("Failed to parse name servers: %s", ex)
         return
 
+    if not isinstance(name_servers, list):
+        logging.error(
+            "Name servers must be a list, got %s", type(name_servers).__name__
+        )
+        return
+
     try:
-        resolutions = json.loads(args[ZONE_RESOLUTIONS_ARG])
+        raw_resolutions = json.loads(args[ZONE_RESOLUTIONS_ARG])
     except json.JSONDecodeError as ex:
         logging.exception("Failed to parse zone resolutions: %s", ex)
         return
+
+    if not isinstance(raw_resolutions, dict):
+        logging.error(
+            "Zone resolutions must be a dictionary, got %s",
+            type(raw_resolutions).__name__,
+        )
+        return
+
+    resolutions = {}
+    for subdomain, sub_config in raw_resolutions.items():
+        if not isinstance(sub_config, dict):
+            logging.error(
+                "Zone resolution for '%s' must be a dictionary, got %s",
+                subdomain,
+                type(sub_config).__name__,
+            )
+            return
+
+        health_port = sub_config[SUBDOMAIN_HEALTH_PORT_ARG]
+        ip_list = sub_config[SUBDOMAIN_IP_LIST_ARG]
+        if not isinstance(ip_list, list):
+            logging.error(
+                "IP list for '%s' must be a list, got %s",
+                subdomain,
+                type(ip_list).__name__,
+            )
+            return
+
+        try:
+            checkable_ips = [CheckableIp(ip, health_port) for ip in ip_list]
+        except ValueError as ex:
+            logging.exception("Invalid IP address in '%s': %s", subdomain, ex)
+            return
+
+        resolutions[subdomain] = checkable_ips
 
     try:
         config = DNSServerConfig(

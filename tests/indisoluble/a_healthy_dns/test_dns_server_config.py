@@ -4,13 +4,15 @@ import pytest
 
 import indisoluble.a_healthy_dns.dns_server_config as dsc
 
+from indisoluble.a_healthy_dns.checkable_ip import CheckableIp
+
 
 def test_valid_config():
     config = dsc.DNSServerConfig(
         hosted_zone="dev.example.com",
         name_servers=["ns1.example.com", "ns2.example.com"],
         resolutions={
-            "www": {"ips": ["192.168.1.1", "192.168.1.2"], "health_port": 8080}
+            "www": [CheckableIp("192.168.1.1", 8080), CheckableIp("192.168.1.2", 8080)]
         },
         ttl_a=300,
         ttl_ns=86400,
@@ -37,7 +39,7 @@ def test_config_healthy_ips():
         hosted_zone="dev.example.com",
         name_servers=["ns1.example.com", "ns2.example.com"],
         resolutions={
-            "www": {"ips": ["192.168.1.1", "192.168.1.2"], "health_port": 8080}
+            "www": [CheckableIp("192.168.1.1", 8080), CheckableIp("192.168.1.2", 8080)]
         },
         ttl_a=300,
         ttl_ns=86400,
@@ -65,7 +67,7 @@ def test_invalid_hosted_zone():
         dsc.DNSServerConfig(
             hosted_zone="invalid domain!",
             name_servers=["ns1.example.com"],
-            resolutions={"www": {"ips": ["192.168.1.1"], "health_port": 8080}},
+            resolutions={"www": [CheckableIp("192.168.1.1", 8080)]},
             ttl_a=300,
             ttl_ns=86400,
             soa_serial=1234567890,
@@ -81,7 +83,7 @@ def test_empty_name_servers():
         dsc.DNSServerConfig(
             hosted_zone="dev.example.com",
             name_servers=[],
-            resolutions={"www": {"ips": ["192.168.1.1"], "health_port": 8080}},
+            resolutions={"www": [CheckableIp("192.168.1.1", 8080)]},
             ttl_a=300,
             ttl_ns=86400,
             soa_serial=1234567890,
@@ -97,7 +99,7 @@ def test_invalid_name_server():
         dsc.DNSServerConfig(
             hosted_zone="dev.example.com",
             name_servers=["invalid$nameserver"],
-            resolutions={"www": {"ips": ["192.168.1.1"], "health_port": 8080}},
+            resolutions={"www": [CheckableIp("192.168.1.1", 8080)]},
             ttl_a=300,
             ttl_ns=86400,
             soa_serial=1234567890,
@@ -106,38 +108,6 @@ def test_invalid_name_server():
             soa_expire=1209600,
         )
     assert "not a valid FQDN" in str(excinfo.value)
-
-
-def test_no_list_name_server():
-    with pytest.raises(ValueError) as excinfo:
-        dsc.DNSServerConfig(
-            hosted_zone="dev.example.com",
-            name_servers="ns1.example.com",
-            resolutions={"www": {"ips": ["192.168.1.1"], "health_port": 8080}},
-            ttl_a=300,
-            ttl_ns=86400,
-            soa_serial=1234567890,
-            soa_refresh=7200,
-            soa_retry=3600,
-            soa_expire=1209600,
-        )
-    assert "Name servers must be a list" in str(excinfo.value)
-
-
-def test_no_dict_resolutions():
-    with pytest.raises(ValueError) as excinfo:
-        dsc.DNSServerConfig(
-            hosted_zone="dev.example.com",
-            name_servers=["ns1.example.com"],
-            resolutions="not a dict",
-            ttl_a=300,
-            ttl_ns=86400,
-            soa_serial=1234567890,
-            soa_refresh=7200,
-            soa_retry=3600,
-            soa_expire=1209600,
-        )
-    assert "Zone resolutions must be a dictionary" in str(excinfo.value)
 
 
 def test_empty_resolutions():
@@ -161,9 +131,7 @@ def test_invalid_subdomain_in_resolutions():
         dsc.DNSServerConfig(
             hosted_zone="dev.example.com",
             name_servers=["ns1.example.com"],
-            resolutions={
-                "invalid*subdomain": {"ips": ["192.168.1.1"], "health_port": 8080}
-            },
+            resolutions={"invalid*subdomain": [CheckableIp("192.168.1.1", 8080)]},
             ttl_a=300,
             ttl_ns=86400,
             soa_serial=1234567890,
@@ -172,70 +140,6 @@ def test_invalid_subdomain_in_resolutions():
             soa_expire=1209600,
         )
     assert "not valid" in str(excinfo.value)
-
-
-def test_no_health_port_in_resolutions():
-    with pytest.raises(KeyError) as excinfo:
-        dsc.DNSServerConfig(
-            hosted_zone="dev.example.com",
-            name_servers=["ns1.example.com"],
-            resolutions={"www": {"ips": ["192.168.1.1"]}},
-            ttl_a=300,
-            ttl_ns=86400,
-            soa_serial=1234567890,
-            soa_refresh=7200,
-            soa_retry=3600,
-            soa_expire=1209600,
-        )
-    assert "health_port" in str(excinfo.value)
-
-
-def test_invalid_health_port_in_resolutions():
-    with pytest.raises(ValueError) as excinfo:
-        dsc.DNSServerConfig(
-            hosted_zone="dev.example.com",
-            name_servers=["ns1.example.com"],
-            resolutions={"www": {"ips": ["192.168.1.1"], "health_port": 70000}},
-            ttl_a=300,
-            ttl_ns=86400,
-            soa_serial=1234567890,
-            soa_refresh=7200,
-            soa_retry=3600,
-            soa_expire=1209600,
-        )
-    assert "not valid" in str(excinfo.value)
-
-
-def test_no_int_health_port_in_resolutions():
-    with pytest.raises(TypeError) as excinfo:
-        dsc.DNSServerConfig(
-            hosted_zone="dev.example.com",
-            name_servers=["ns1.example.com"],
-            resolutions={"www": {"ips": ["192.168.1.1"], "health_port": "8080"}},
-            ttl_a=300,
-            ttl_ns=86400,
-            soa_serial=1234567890,
-            soa_refresh=7200,
-            soa_retry=3600,
-            soa_expire=1209600,
-        )
-    assert "not supported" in str(excinfo.value)
-
-
-def test_no_ips_in_resolutions():
-    with pytest.raises(KeyError) as excinfo:
-        dsc.DNSServerConfig(
-            hosted_zone="dev.example.com",
-            name_servers=["ns1.example.com"],
-            resolutions={"www": {"health_port": 8080}},
-            ttl_a=300,
-            ttl_ns=86400,
-            soa_serial=1234567890,
-            soa_refresh=7200,
-            soa_retry=3600,
-            soa_expire=1209600,
-        )
-    assert "ips" in str(excinfo.value)
 
 
 def test_empty_ip_list_in_resolutions():
@@ -243,7 +147,7 @@ def test_empty_ip_list_in_resolutions():
         dsc.DNSServerConfig(
             hosted_zone="example.com",
             name_servers=["ns1.example.com"],
-            resolutions={"www": {"ips": [], "health_port": 8080}},
+            resolutions={"www": []},
             ttl_a=300,
             ttl_ns=86400,
             soa_serial=1234567890,
@@ -252,38 +156,6 @@ def test_empty_ip_list_in_resolutions():
             soa_expire=1209600,
         )
     assert "IP list for 'www' cannot be empty" in str(excinfo.value)
-
-
-def test_invalid_ip_address_in_resolution():
-    with pytest.raises(ValueError) as excinfo:
-        dsc.DNSServerConfig(
-            hosted_zone="example.com",
-            name_servers=["ns1.example.com"],
-            resolutions={"www": {"ips": ["192.168.1.300"], "health_port": 8080}},
-            ttl_a=300,
-            ttl_ns=86400,
-            soa_serial=1234567890,
-            soa_refresh=7200,
-            soa_retry=3600,
-            soa_expire=1209600,
-        )
-    assert "Invalid IP address" in str(excinfo.value)
-
-
-def test_ips_no_list_type_in_resolutions():
-    with pytest.raises(ValueError) as excinfo:
-        dsc.DNSServerConfig(
-            hosted_zone="example.com",
-            name_servers=["ns1.example.com"],
-            resolutions={"www": {"ips": "192.168.1.300", "health_port": 8080}},
-            ttl_a=300,
-            ttl_ns=86400,
-            soa_serial=1234567890,
-            soa_refresh=7200,
-            soa_retry=3600,
-            soa_expire=1209600,
-        )
-    assert "IP list for 'www' must be a list" in str(excinfo.value)
 
 
 def test_invalid_ttl_a():

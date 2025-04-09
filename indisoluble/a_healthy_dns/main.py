@@ -36,7 +36,7 @@ def _make_arg_parser() -> argparse.ArgumentParser:
         type=str,
         required=True,
         dest=dscf.ZONE_RESOLUTIONS_ARG,
-        help="List of subdomains with their respective IPs and health ports as JSON string (ex. {sd1: {'ips': [ip1, ip2, ...], 'health_port': port}, ...})",
+        help=f"List of subdomains with their respective IPs and health ports as JSON string (ex. {{sd1: {{'{dscf.SUBDOMAIN_IP_LIST_ARG}': [ip1, ip2, ...], '{dscf.SUBDOMAIN_HEALTH_PORT_ARG}': port}}, ...}})",
     )
     parser.add_argument(
         "-p",

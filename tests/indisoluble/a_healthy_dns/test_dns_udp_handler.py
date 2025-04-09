@@ -11,6 +11,7 @@ from unittest.mock import Mock, patch
 
 import indisoluble.a_healthy_dns.dns_udp_handler as duh
 
+from indisoluble.a_healthy_dns.checkable_ip import CheckableIp
 from indisoluble.a_healthy_dns.dns_server_config import DNSServerConfig
 
 
@@ -20,7 +21,7 @@ def config():
         hosted_zone="dev.example.com",
         name_servers=["ns1.example.com", "ns2.example.com"],
         resolutions={
-            "www": {"ips": ["192.168.1.1", "192.168.1.2"], "health_port": 8080}
+            "www": [CheckableIp("192.168.1.1", 8080), CheckableIp("192.168.1.2", 8080)]
         },
         ttl_a=300,
         ttl_ns=86400,

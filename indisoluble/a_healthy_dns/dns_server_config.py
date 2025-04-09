@@ -2,13 +2,7 @@
 
 import logging
 
-from typing import Union
-
 from .checkable_ip import CheckableIp
-
-
-_SUBDOMAIN_HEALTH_PORT_ARG = "health_port"
-_SUBDOMAIN_IP_LIST_ARG = "ips"
 
 
 class DNSServerConfig:
@@ -52,7 +46,7 @@ class DNSServerConfig:
         self,
         hosted_zone: str,
         name_servers: list[str],
-        resolutions: dict[str, dict[str, Union[list[str], int]]],
+        resolutions: dict[str, CheckableIp],
         ttl_a: int,
         ttl_ns: int,
         soa_serial: int,
@@ -66,11 +60,6 @@ class DNSServerConfig:
                 f"Hosted zone '{hosted_zone}' is not a valid FQDN: {error}"
             )
 
-        if not isinstance(name_servers, list):
-            raise ValueError(
-                f"Name servers must be a list, got {type(name_servers).__name__}"
-            )
-
         if not name_servers:
             raise ValueError("Name server list cannot be empty")
 
@@ -79,47 +68,18 @@ class DNSServerConfig:
             if not success:
                 raise ValueError(f"Name server '{ns}' is not a valid FQDN: {error}")
 
-        if not isinstance(resolutions, dict):
-            raise ValueError(
-                f"Zone resolutions must be a dictionary, got {type(name_servers).__name__}"
-            )
-
         if not resolutions:
             raise ValueError("Zone resolutions cannot be empty")
 
-        for subdomain, sub_config in resolutions.items():
+        for subdomain, checkable_ips in resolutions.items():
             success, error = DNSServerConfig._is_valid_subdomain(subdomain)
             if not success:
                 raise ValueError(
                     f"Zone resolution subdomain '{subdomain}' is not valid: {error}"
                 )
 
-            if not isinstance(sub_config, dict):
-                raise ValueError(
-                    f"Zone resolution for '{subdomain}' must be a dictionary, got {type(sub_config).__name__}"
-                )
-
-            health_port = sub_config[_SUBDOMAIN_HEALTH_PORT_ARG]
-            success, error = DNSServerConfig._is_valid_port(health_port)
-            if not success:
-                raise ValueError(f"Health port for '{subdomain}' is not valid: {error}")
-
-            ip_list = sub_config[_SUBDOMAIN_IP_LIST_ARG]
-
-            if not isinstance(ip_list, list):
-                raise ValueError(
-                    f"IP list for '{subdomain}' must be a list, got {type(ip_list).__name__}"
-                )
-
-            if not ip_list:
+            if not checkable_ips:
                 raise ValueError(f"IP list for '{subdomain}' cannot be empty")
-
-            for ip in ip_list:
-                success, error = DNSServerConfig._is_valid_ip(ip)
-                if not success:
-                    raise ValueError(
-                        f"Invalid IP address '{ip}' for '{subdomain}': {error}"
-                    )
 
         if ttl_a <= 0:
             raise ValueError("TTL for A records must be positive")
@@ -149,16 +109,11 @@ class DNSServerConfig:
         self._abs_hosted_zone = f"{hosted_zone}."
         self._abs_name_servers = [f"{ns}." for ns in name_servers]
         self._abs_resolutions = {
-            f"{subdomain}.{hosted_zone}.": [
-                CheckableIp(ip, sub_config[_SUBDOMAIN_HEALTH_PORT_ARG])
-                for ip in sub_config[_SUBDOMAIN_IP_LIST_ARG]
-            ]
-            for subdomain, sub_config in resolutions.items()
+            f"{subdomain}.{hosted_zone}.": checkable_ips
+            for subdomain, checkable_ips in resolutions.items()
         }
         self._healthy_ips = {
-            CheckableIp(ip, sub_config[_SUBDOMAIN_HEALTH_PORT_ARG]): True
-            for ip in sub_config[_SUBDOMAIN_IP_LIST_ARG]
-            for _, sub_config in resolutions.items()
+            ip: True for ip in checkable_ips for _, checkable_ips in resolutions.items()
         }
 
     @classmethod
@@ -174,25 +129,6 @@ class DNSServerConfig:
                 False,
                 "Labels must contain only alphanumeric characters or hyphens",
             )
-
-        return (True, "")
-
-    @classmethod
-    def _is_valid_ip(cls, ip: str) -> tuple[bool, str]:
-        parts = ip.split(".")
-        if len(parts) != 4:
-            return (False, "IP address must have 4 octets")
-
-        for part in parts:
-            if not part.isdigit() or not (0 <= int(part) <= 255):
-                return (False, "Each octet must be a number between 0 and 255")
-
-        return (True, "")
-
-    @classmethod
-    def _is_valid_port(cls, port: int) -> tuple[bool, str]:
-        if not (1 <= port <= 65535):
-            return (False, "Port must be between 1 and 65535")
 
         return (True, "")
 
