@@ -59,62 +59,57 @@ class DNSServerConfig:
             raise ValueError(
                 f"Hosted zone '{hosted_zone}' is not a valid FQDN: {error}"
             )
+        self._abs_hosted_zone = f"{hosted_zone}."
 
         if not name_servers:
             raise ValueError("Name server list cannot be empty")
 
+        self._abs_name_servers = []
         for ns in name_servers:
             success, error = DNSServerConfig._is_valid_subdomain(ns)
             if not success:
                 raise ValueError(f"Name server '{ns}' is not a valid FQDN: {error}")
+            self._abs_name_servers.append(f"{ns}.")
 
         if not resolutions:
             raise ValueError("Zone resolutions cannot be empty")
 
+        self._abs_resolutions = {}
+        self._healthy_ips = {}
         for subdomain, checkable_ips in resolutions.items():
             success, error = DNSServerConfig._is_valid_subdomain(subdomain)
             if not success:
                 raise ValueError(
                     f"Zone resolution subdomain '{subdomain}' is not valid: {error}"
                 )
-
             if not checkable_ips:
                 raise ValueError(f"IP list for '{subdomain}' cannot be empty")
+            self._abs_resolutions[f"{subdomain}.{hosted_zone}."] = checkable_ips
+            self._healthy_ips.update({ip: True for ip in checkable_ips})
 
         if ttl_a <= 0:
             raise ValueError("TTL for A records must be positive")
+        self._ttl_a = ttl_a
 
         if ttl_ns <= 0:
             raise ValueError("TTL for NS records must be positive")
+        self._ttl_ns = ttl_ns
 
         if soa_serial <= 0:
             raise ValueError("SOA serial must be positive")
+        self._soa_serial = soa_serial
 
         if soa_refresh <= 0:
             raise ValueError("SOA refresh value must be positive")
+        self._soa_refresh = soa_refresh
 
         if soa_retry <= 0:
             raise ValueError("SOA retry value must be positive")
+        self._soa_retry = soa_retry
 
         if soa_expire <= 0:
             raise ValueError("SOA expire value must be positive")
-
-        self._ttl_a = ttl_a
-        self._ttl_ns = ttl_ns
-        self._soa_serial = soa_serial
-        self._soa_refresh = soa_refresh
-        self._soa_retry = soa_retry
         self._soa_expire = soa_expire
-
-        self._abs_hosted_zone = f"{hosted_zone}."
-        self._abs_name_servers = [f"{ns}." for ns in name_servers]
-        self._abs_resolutions = {
-            f"{subdomain}.{hosted_zone}.": checkable_ips
-            for subdomain, checkable_ips in resolutions.items()
-        }
-        self._healthy_ips = {
-            ip: True for ip in checkable_ips for _, checkable_ips in resolutions.items()
-        }
 
     @classmethod
     def _is_valid_subdomain(cls, name_server: str) -> tuple[bool, str]:
