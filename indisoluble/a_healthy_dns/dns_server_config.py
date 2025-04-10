@@ -132,22 +132,21 @@ class DNSServerConfig:
 
         return (True, "")
 
-    def _update_ip_status(self, ip: str, health_port: int, status: bool):
-        checkIp = CheckableIp(ip, health_port)
-        if checkIp in self._healthy_ips:
+    def _update_ip_status(self, checkable_ip: CheckableIp, status: bool):
+        if checkable_ip in self._healthy_ips:
             # Update boolean values is an atomic operation in CPython,
             # following code is thread-safe
-            self._healthy_ips[checkIp] = status
+            self._healthy_ips[checkable_ip] = status
 
-            logging.debug("Updated IP %s to %s", ip, status)
+            logging.debug("Updated IP %s to %s", checkable_ip, status)
         else:
-            logging.warning("IP %s not found in the config", ip)
+            logging.warning("IP %s not found in the config", checkable_ip)
 
-    def enable_ip(self, ip: str, health_port: int):
-        self._update_ip_status(ip, health_port, True)
+    def enable_ip(self, checkable_ip: CheckableIp):
+        self._update_ip_status(checkable_ip, True)
 
-    def disable_ip(self, ip: str, health_port: int):
-        self._update_ip_status(ip, health_port, False)
+    def disable_ip(self, checkable_ip: CheckableIp):
+        self._update_ip_status(checkable_ip, False)
 
     def healthy_ips(self, qname: str) -> list[str]:
         if qname not in self._abs_resolutions:

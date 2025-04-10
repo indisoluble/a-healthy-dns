@@ -52,13 +52,13 @@ def test_config_healthy_ips():
     assert not config.healthy_ips("www2.dev.example.com.")
 
     assert config.healthy_ips("www.dev.example.com.") == ["192.168.1.1", "192.168.1.2"]
-    config.disable_ip("192.168.1.1", 8080)
+    config.disable_ip(CheckableIp("192.168.1.1", 8080))
     assert config.healthy_ips("www.dev.example.com.") == ["192.168.1.2"]
-    config.disable_ip("192.168.1.2", 8080)
+    config.disable_ip(CheckableIp("192.168.1.2", 8080))
     assert not config.healthy_ips("www.dev.example.com.")
-    config.enable_ip("192.168.1.1", 8080)
+    config.enable_ip(CheckableIp("192.168.1.1", 8080))
     assert config.healthy_ips("www.dev.example.com.") == ["192.168.1.1"]
-    config.enable_ip("192.168.1.2", 9090)
+    config.enable_ip(CheckableIp("192.168.1.2", 9090))
     assert config.healthy_ips("www.dev.example.com.") == ["192.168.1.1"]
 
 
