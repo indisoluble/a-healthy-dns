@@ -46,7 +46,7 @@ class DNSServerConfig:
         self,
         hosted_zone: str,
         name_servers: list[str],
-        resolutions: dict[str, CheckableIp],
+        resolutions: dict[str, list[CheckableIp]],
         ttl_a: int,
         ttl_ns: int,
         soa_serial: int,
@@ -84,7 +84,7 @@ class DNSServerConfig:
                 )
             if not checkable_ips:
                 raise ValueError(f"IP list for '{subdomain}' cannot be empty")
-            self._abs_resolutions[f"{subdomain}.{hosted_zone}."] = checkable_ips
+            self._abs_resolutions[f"{subdomain}.{hosted_zone}."] = list(checkable_ips)
             self._healthy_ips.update({ip: True for ip in checkable_ips})
 
         if ttl_a <= 0:

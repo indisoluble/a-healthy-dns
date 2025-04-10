@@ -34,6 +34,26 @@ def test_valid_config():
     assert config.healthy_ips("www.dev.example.com.") == ["192.168.1.1", "192.168.1.2"]
 
 
+def test_config_copy_checkable_ips():
+    checkable_ips = [CheckableIp("192.168.1.1", 8080), CheckableIp("192.168.1.2", 8080)]
+
+    config = dsc.DNSServerConfig(
+        hosted_zone="dev.example.com",
+        name_servers=["ns1.example.com", "ns2.example.com"],
+        resolutions={"www": checkable_ips},
+        ttl_a=300,
+        ttl_ns=86400,
+        soa_serial=1234567890,
+        soa_refresh=7200,
+        soa_retry=3600,
+        soa_expire=1209600,
+    )
+    assert config.healthy_ips("www.dev.example.com.") == ["192.168.1.1", "192.168.1.2"]
+
+    checkable_ips.append(CheckableIp("192.168.1.3", 8080))
+    assert config.healthy_ips("www.dev.example.com.") == ["192.168.1.1", "192.168.1.2"]
+
+
 def test_config_healthy_ips():
     config = dsc.DNSServerConfig(
         hosted_zone="dev.example.com",
