@@ -19,6 +19,10 @@ class DNSServerConfig:
         return self._abs_name_servers
 
     @property
+    def checkable_ips(self) -> list[CheckableIp]:
+        return self._checkable_ips
+
+    @property
     def ttl_a(self) -> int:
         return self._ttl_a
 
@@ -86,6 +90,7 @@ class DNSServerConfig:
                 raise ValueError(f"IP list for '{subdomain}' cannot be empty")
             self._abs_resolutions[f"{subdomain}.{hosted_zone}."] = list(checkable_ips)
             self._healthy_ips.update({ip: True for ip in checkable_ips})
+        self._checkable_ips = list(self._healthy_ips.keys())
 
         if ttl_a <= 0:
             raise ValueError("TTL for A records must be positive")

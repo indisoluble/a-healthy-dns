@@ -25,6 +25,10 @@ def test_valid_config():
     assert config.abs_hosted_zone == "dev.example.com."
     assert config.primary_abs_name_server == "ns1.example.com."
     assert config.abs_name_servers == ["ns1.example.com.", "ns2.example.com."]
+    assert config.checkable_ips == [
+        CheckableIp("192.168.1.1", 8080),
+        CheckableIp("192.168.1.2", 8080),
+    ]
     assert config.ttl_a == 300
     assert config.ttl_ns == 86400
     assert config.soa_serial == 1234567890
@@ -52,6 +56,32 @@ def test_config_copy_checkable_ips():
 
     checkable_ips.append(CheckableIp("192.168.1.3", 8080))
     assert config.healthy_ips("www.dev.example.com.") == ["192.168.1.1", "192.168.1.2"]
+
+
+def test_config_repeated_ips():
+    config = dsc.DNSServerConfig(
+        hosted_zone="dev.example.com",
+        name_servers=["ns1.example.com", "ns2.example.com"],
+        resolutions={
+            "www": [CheckableIp("192.168.1.1", 8080), CheckableIp("192.168.1.2", 8080)],
+            "www2": [CheckableIp("192.168.1.1", 8080)],
+            "www3": [CheckableIp("192.168.1.1", 9090)],
+        },
+        ttl_a=300,
+        ttl_ns=86400,
+        soa_serial=1234567890,
+        soa_refresh=7200,
+        soa_retry=3600,
+        soa_expire=1209600,
+    )
+    assert config.healthy_ips("www.dev.example.com.") == ["192.168.1.1", "192.168.1.2"]
+    assert config.healthy_ips("www2.dev.example.com.") == ["192.168.1.1"]
+    assert config.healthy_ips("www3.dev.example.com.") == ["192.168.1.1"]
+    assert config.checkable_ips == [
+        CheckableIp("192.168.1.1", 8080),
+        CheckableIp("192.168.1.2", 8080),
+        CheckableIp("192.168.1.1", 9090),
+    ]
 
 
 def test_config_healthy_ips():
