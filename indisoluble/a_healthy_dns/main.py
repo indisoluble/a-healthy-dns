@@ -6,10 +6,13 @@ import socketserver
 
 from . import dns_server_config_factory as dscf
 from .dns_udp_handler import DNSUDPHandler
+from .tcp_connectivity_tester import TcpConnectivityTester
 
 
+_CONNECTION_TIMEOUT_ARG = "connection_timeout"
 _LOG_LEVEL_ARG = "log_level"
 _PORT_ARG = "port"
+_TEST_INTERVAL_ARG = "test_interval"
 
 
 def _make_arg_parser() -> argparse.ArgumentParser:
@@ -87,6 +90,22 @@ def _make_arg_parser() -> argparse.ArgumentParser:
         help="SOA expire time in seconds (default: 86400)",
     )
     parser.add_argument(
+        "-i",
+        "--test-interval",
+        type=int,
+        default=30,
+        dest=_TEST_INTERVAL_ARG,
+        help="Interval in seconds for connectivity tests (default: 30)",
+    )
+    parser.add_argument(
+        "-c",
+        "--connection-timeout",
+        type=int,
+        default=2,
+        dest=_CONNECTION_TIMEOUT_ARG,
+        help="Timeout in seconds for connectivity tests (default: 2)",
+    )
+    parser.add_argument(
         "-l",
         "--log-level",
         type=str,
@@ -114,13 +133,28 @@ def main():
         format="%(asctime)s - %(levelname)s - %(module)s.%(funcName)s - %(message)s",
     )
 
+    # Compose configuration
+    config = dscf.make_config(args_dict)
+    if config is None:
+        logging.error("Invalid configuration")
+        return
+
+    # Start TCP connectivity tester
+    try:
+        connectivity_tester = TcpConnectivityTester(
+            config, args_dict[_TEST_INTERVAL_ARG], args_dict[_CONNECTION_TIMEOUT_ARG]
+        )
+    except ValueError as e:
+        logging.error("Error creating TCP connectivity tester: %s", e)
+        return
+
+    connectivity_tester.start()
+    logging.info("TCP connectivity tester started")
+
     # Launch DNS server
     server_address = ("", args_dict[_PORT_ARG])
     with socketserver.UDPServer(server_address, DNSUDPHandler) as server:
-        server.config = dscf.make_config(args_dict)
-        if server.config is None:
-            logging.error("Invalid configuration")
-            return
+        server.config = config
 
         logging.info("DNS server listening on port %d", args_dict[_PORT_ARG])
         try:
