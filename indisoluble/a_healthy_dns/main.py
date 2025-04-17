@@ -5,8 +5,8 @@ import logging
 import socketserver
 
 from . import dns_server_config_factory as dscf
-from .dns_udp_handler import DNSUDPHandler
-from .tcp_connectivity_tester import TcpConnectivityTester
+from .dns_server_zone_factory import make_zone
+from .dns_server_udp_handler import DnsServerUdpHandler
 
 
 _CONNECTION_TIMEOUT_ARG = "connection_timeout"
@@ -134,27 +134,15 @@ def main():
     )
 
     # Compose configuration
-    config = dscf.make_config(args_dict)
-    if config is None:
-        logging.error("Invalid configuration")
+    zone = make_zone(args_dict)
+    if not zone:
+        logging.error("Invalid zone configuration")
         return
-
-    # Start TCP connectivity tester
-    try:
-        connectivity_tester = TcpConnectivityTester(
-            config, args_dict[_TEST_INTERVAL_ARG], args_dict[_CONNECTION_TIMEOUT_ARG]
-        )
-    except ValueError as e:
-        logging.error("Error creating TCP connectivity tester: %s", e)
-        return
-
-    connectivity_tester.start()
-    logging.info("TCP connectivity tester started")
 
     # Launch DNS server
     server_address = ("", args_dict[_PORT_ARG])
-    with socketserver.UDPServer(server_address, DNSUDPHandler) as server:
-        server.config = config
+    with socketserver.UDPServer(server_address, DnsServerUdpHandler) as server:
+        server.zone = zone
 
         logging.info("DNS server listening on port %d", args_dict[_PORT_ARG])
         try:
