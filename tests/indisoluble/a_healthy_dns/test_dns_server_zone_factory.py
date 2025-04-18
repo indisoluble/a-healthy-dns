@@ -45,15 +45,15 @@ def test_make_zone_success(mock_time):
         dszf.SOA_EXPIRE_ARG: 1209600,
     }
 
-    zone = dszf.make_zone(args)
+    ext_zone = dszf.make_zone(args)
 
-    assert zone is not None
-    assert isinstance(zone, dns.versioned.Zone)
+    assert ext_zone is not None
+    assert isinstance(ext_zone, dszf.ExtendedZone)
 
     # Check zone origin
-    assert zone.origin == dns.name.from_text("dev.example.com.")
+    assert ext_zone.zone.origin == dns.name.from_text("dev.example.com.")
 
-    with zone.reader() as txn:
+    with ext_zone.zone.reader() as txn:
         # Check SOA record
         soa_rdataset = txn.get("dev.example.com.", dns.rdatatype.SOA)
         assert soa_rdataset is not None
@@ -126,8 +126,8 @@ def test_make_zone_invalid_hosted_zone():
         dszf.SOA_EXPIRE_ARG: 1209600,
     }
 
-    zone = dszf.make_zone(args)
-    assert zone is None
+    ext_zone = dszf.make_zone(args)
+    assert ext_zone is None
 
 
 def test_make_zone_invalid_hosted_zone_chars():
@@ -149,8 +149,8 @@ def test_make_zone_invalid_hosted_zone_chars():
         dszf.SOA_EXPIRE_ARG: 1209600,
     }
 
-    zone = dszf.make_zone(args)
-    assert zone is None
+    ext_zone = dszf.make_zone(args)
+    assert ext_zone is None
 
 
 def test_make_zone_invalid_json_name_servers():
@@ -172,8 +172,8 @@ def test_make_zone_invalid_json_name_servers():
         dszf.SOA_EXPIRE_ARG: 1209600,
     }
 
-    zone = dszf.make_zone(args)
-    assert zone is None
+    ext_zone = dszf.make_zone(args)
+    assert ext_zone is None
 
 
 def test_make_zone_wrong_type_name_servers():
@@ -197,8 +197,8 @@ def test_make_zone_wrong_type_name_servers():
         dszf.SOA_EXPIRE_ARG: 1209600,
     }
 
-    zone = dszf.make_zone(args)
-    assert zone is None
+    ext_zone = dszf.make_zone(args)
+    assert ext_zone is None
 
 
 def test_make_zone_empty_name_servers():
@@ -220,8 +220,8 @@ def test_make_zone_empty_name_servers():
         dszf.SOA_EXPIRE_ARG: 1209600,
     }
 
-    zone = dszf.make_zone(args)
-    assert zone is None
+    ext_zone = dszf.make_zone(args)
+    assert ext_zone is None
 
 
 def test_make_zone_invalid_name_server():
@@ -245,8 +245,8 @@ def test_make_zone_invalid_name_server():
         dszf.SOA_EXPIRE_ARG: 1209600,
     }
 
-    zone = dszf.make_zone(args)
-    assert zone is None
+    ext_zone = dszf.make_zone(args)
+    assert ext_zone is None
 
 
 def test_make_zone_negative_ttl_a():
@@ -268,8 +268,8 @@ def test_make_zone_negative_ttl_a():
         dszf.SOA_EXPIRE_ARG: 1209600,
     }
 
-    zone = dszf.make_zone(args)
-    assert zone is None
+    ext_zone = dszf.make_zone(args)
+    assert ext_zone is None
 
 
 def test_make_zone_negative_ttl_ns():
@@ -291,8 +291,8 @@ def test_make_zone_negative_ttl_ns():
         dszf.SOA_EXPIRE_ARG: 1209600,
     }
 
-    zone = dszf.make_zone(args)
-    assert zone is None
+    ext_zone = dszf.make_zone(args)
+    assert ext_zone is None
 
 
 def test_make_zone_negative_soa_refresh():
@@ -314,8 +314,8 @@ def test_make_zone_negative_soa_refresh():
         dszf.SOA_EXPIRE_ARG: 1209600,
     }
 
-    zone = dszf.make_zone(args)
-    assert zone is None
+    ext_zone = dszf.make_zone(args)
+    assert ext_zone is None
 
 
 def test_make_zone_negative_soa_retry():
@@ -337,8 +337,8 @@ def test_make_zone_negative_soa_retry():
         dszf.SOA_EXPIRE_ARG: 1209600,
     }
 
-    zone = dszf.make_zone(args)
-    assert zone is None
+    ext_zone = dszf.make_zone(args)
+    assert ext_zone is None
 
 
 def test_make_zone_negative_soa_expire():
@@ -360,8 +360,8 @@ def test_make_zone_negative_soa_expire():
         dszf.SOA_EXPIRE_ARG: -1209600,  # Negative expire
     }
 
-    zone = dszf.make_zone(args)
-    assert zone is None
+    ext_zone = dszf.make_zone(args)
+    assert ext_zone is None
 
 
 def test_make_zone_invalid_json_resolutions():
@@ -376,8 +376,8 @@ def test_make_zone_invalid_json_resolutions():
         dszf.SOA_EXPIRE_ARG: 1209600,
     }
 
-    zone = dszf.make_zone(args)
-    assert zone is None
+    ext_zone = dszf.make_zone(args)
+    assert ext_zone is None
 
 
 def test_make_zone_wrong_type_resolutions():
@@ -394,8 +394,8 @@ def test_make_zone_wrong_type_resolutions():
         dszf.SOA_EXPIRE_ARG: 1209600,
     }
 
-    zone = dszf.make_zone(args)
-    assert zone is None
+    ext_zone = dszf.make_zone(args)
+    assert ext_zone is None
 
 
 def test_make_zone_empty_resolutions():
@@ -410,8 +410,8 @@ def test_make_zone_empty_resolutions():
         dszf.SOA_EXPIRE_ARG: 1209600,
     }
 
-    zone = dszf.make_zone(args)
-    assert zone is None
+    ext_zone = dszf.make_zone(args)
+    assert ext_zone is None
 
 
 def test_make_zone_invalid_subdomain():
@@ -433,8 +433,8 @@ def test_make_zone_invalid_subdomain():
         dszf.SOA_EXPIRE_ARG: 1209600,
     }
 
-    zone = dszf.make_zone(args)
-    assert zone is None
+    ext_zone = dszf.make_zone(args)
+    assert ext_zone is None
 
 
 def test_make_zone_wrong_type_subdomain_config():
@@ -451,8 +451,8 @@ def test_make_zone_wrong_type_subdomain_config():
         dszf.SOA_EXPIRE_ARG: 1209600,
     }
 
-    zone = dszf.make_zone(args)
-    assert zone is None
+    ext_zone = dszf.make_zone(args)
+    assert ext_zone is None
 
 
 def test_make_zone_wrong_type_ip_list():
@@ -474,8 +474,8 @@ def test_make_zone_wrong_type_ip_list():
         dszf.SOA_EXPIRE_ARG: 1209600,
     }
 
-    zone = dszf.make_zone(args)
-    assert zone is None
+    ext_zone = dszf.make_zone(args)
+    assert ext_zone is None
 
 
 def test_make_zone_empty_ip_list():
@@ -497,8 +497,8 @@ def test_make_zone_empty_ip_list():
         dszf.SOA_EXPIRE_ARG: 1209600,
     }
 
-    zone = dszf.make_zone(args)
-    assert zone is None
+    ext_zone = dszf.make_zone(args)
+    assert ext_zone is None
 
 
 def test_make_zone_invalid_ip():
@@ -520,8 +520,8 @@ def test_make_zone_invalid_ip():
         dszf.SOA_EXPIRE_ARG: 1209600,
     }
 
-    zone = dszf.make_zone(args)
-    assert zone is None
+    ext_zone = dszf.make_zone(args)
+    assert ext_zone is None
 
 
 def test_make_zone_malformed_ip():
@@ -543,8 +543,8 @@ def test_make_zone_malformed_ip():
         dszf.SOA_EXPIRE_ARG: 1209600,
     }
 
-    zone = dszf.make_zone(args)
-    assert zone is None
+    ext_zone = dszf.make_zone(args)
+    assert ext_zone is None
 
 
 def test_make_zone_wrong_type_health_port():
@@ -566,8 +566,8 @@ def test_make_zone_wrong_type_health_port():
         dszf.SOA_EXPIRE_ARG: 1209600,
     }
 
-    zone = dszf.make_zone(args)
-    assert zone is None
+    ext_zone = dszf.make_zone(args)
+    assert ext_zone is None
 
 
 def test_make_zone_negative_health_port():
@@ -589,8 +589,8 @@ def test_make_zone_negative_health_port():
         dszf.SOA_EXPIRE_ARG: 1209600,
     }
 
-    zone = dszf.make_zone(args)
-    assert zone is None
+    ext_zone = dszf.make_zone(args)
+    assert ext_zone is None
 
 
 def test_make_zone_invalid_port_range():
@@ -612,5 +612,5 @@ def test_make_zone_invalid_port_range():
         dszf.SOA_EXPIRE_ARG: 1209600,
     }
 
-    zone = dszf.make_zone(args)
-    assert zone is None
+    ext_zone = dszf.make_zone(args)
+    assert ext_zone is None

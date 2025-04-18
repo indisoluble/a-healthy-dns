@@ -133,15 +133,15 @@ def main():
     )
 
     # Compose configuration
-    zone = dszf.make_zone(args_dict)
-    if not zone:
+    ext_zone = dszf.make_zone(args_dict)
+    if not ext_zone:
         logging.error("Invalid zone configuration")
         return
 
     # Launch DNS server
     server_address = ("", args_dict[_PORT_ARG])
     with socketserver.UDPServer(server_address, DnsServerUdpHandler) as server:
-        server.zone = zone
+        server.zone = ext_zone.zone
 
         logging.info("DNS server listening on port %d", args_dict[_PORT_ARG])
         try:
