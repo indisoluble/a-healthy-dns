@@ -4,8 +4,7 @@ import argparse
 import logging
 import socketserver
 
-from . import dns_server_config_factory as dscf
-from .dns_server_zone_factory import make_zone
+from . import dns_server_zone_factory as dszf
 from .dns_server_udp_handler import DnsServerUdpHandler
 
 
@@ -22,7 +21,7 @@ def _make_arg_parser() -> argparse.ArgumentParser:
         "--hosted-zone",
         type=str,
         required=True,
-        dest=dscf.HOSTED_ZONE_ARG,
+        dest=dszf.HOSTED_ZONE_ARG,
         help="Hosted zone name",
     )
     parser.add_argument(
@@ -30,7 +29,7 @@ def _make_arg_parser() -> argparse.ArgumentParser:
         "--name-servers",
         type=str,
         required=True,
-        dest=dscf.NAME_SERVERS_ARG,
+        dest=dszf.NAME_SERVERS_ARG,
         help="List of name servers as JSON string (ex. [fqdn1, fqdn2, ...])",
     )
     parser.add_argument(
@@ -38,8 +37,8 @@ def _make_arg_parser() -> argparse.ArgumentParser:
         "--zone-resolutions",
         type=str,
         required=True,
-        dest=dscf.ZONE_RESOLUTIONS_ARG,
-        help=f"List of subdomains with their respective IPs and health ports as JSON string (ex. {{sd1: {{'{dscf.SUBDOMAIN_IP_LIST_ARG}': [ip1, ip2, ...], '{dscf.SUBDOMAIN_HEALTH_PORT_ARG}': port}}, ...}})",
+        dest=dszf.ZONE_RESOLUTIONS_ARG,
+        help=f"List of subdomains with their respective IPs and health ports as JSON string (ex. {{sd1: {{'{dszf.SUBDOMAIN_IP_LIST_ARG}': [ip1, ip2, ...], '{dszf.SUBDOMAIN_HEALTH_PORT_ARG}': port}}, ...}})",
     )
     parser.add_argument(
         "-p",
@@ -54,7 +53,7 @@ def _make_arg_parser() -> argparse.ArgumentParser:
         "--ttl-a",
         type=int,
         default=60,
-        dest=dscf.TTL_A_ARG,
+        dest=dszf.TTL_A_ARG,
         help="TTL in seconds for A records (default: 60)",
     )
     parser.add_argument(
@@ -62,7 +61,7 @@ def _make_arg_parser() -> argparse.ArgumentParser:
         "--ttl-ns",
         type=int,
         default=86400,
-        dest=dscf.TTL_NS_ARG,
+        dest=dszf.TTL_NS_ARG,
         help="TTL in seconds for NS records (default: 86400)",
     )
     parser.add_argument(
@@ -70,7 +69,7 @@ def _make_arg_parser() -> argparse.ArgumentParser:
         "--soa-refresh",
         type=int,
         default=3600,
-        dest=dscf.SOA_REFRESH_ARG,
+        dest=dszf.SOA_REFRESH_ARG,
         help="SOA refresh time in seconds (default: 3600)",
     )
     parser.add_argument(
@@ -78,7 +77,7 @@ def _make_arg_parser() -> argparse.ArgumentParser:
         "--soa-retry",
         type=int,
         default=600,
-        dest=dscf.SOA_RETRY_ARG,
+        dest=dszf.SOA_RETRY_ARG,
         help="SOA retry time in seconds (default: 600)",
     )
     parser.add_argument(
@@ -86,7 +85,7 @@ def _make_arg_parser() -> argparse.ArgumentParser:
         "--soa-expire",
         type=int,
         default=86400,
-        dest=dscf.SOA_EXPIRE_ARG,
+        dest=dszf.SOA_EXPIRE_ARG,
         help="SOA expire time in seconds (default: 86400)",
     )
     parser.add_argument(
@@ -134,7 +133,7 @@ def main():
     )
 
     # Compose configuration
-    zone = make_zone(args_dict)
+    zone = dszf.make_zone(args_dict)
     if not zone:
         logging.error("Invalid zone configuration")
         return

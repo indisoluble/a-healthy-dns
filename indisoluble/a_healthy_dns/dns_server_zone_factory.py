@@ -23,6 +23,7 @@ TTL_NS_ARG = "ttl_ns"
 SOA_REFRESH_ARG = "soa_refresh"
 SOA_RETRY_ARG = "soa_retry"
 SOA_EXPIRE_ARG = "soa_expire"
+SUBDOMAIN_HEALTH_PORT_ARG = "health_port"
 SUBDOMAIN_IP_LIST_ARG = "ips"
 
 
@@ -151,8 +152,17 @@ def make_zone(args: dict[str, Any]) -> Optional[dns.versioned.Zone]:
             )
             return None
 
+        health_port = sub_config[SUBDOMAIN_HEALTH_PORT_ARG]
+        if not isinstance(health_port, int):
+            logging.error(
+                "Health port for '%s' must be an integer, got %s",
+                subdomain,
+                type(health_port).__name__,
+            )
+            return None
+
         try:
-            checkable_ips = CheckableIps(ip_list, 1)
+            checkable_ips = CheckableIps(ip_list, health_port)
         except ValueError as ex:
             logging.exception("Invalid IP address in '%s': %s", subdomain, ex)
             return None
