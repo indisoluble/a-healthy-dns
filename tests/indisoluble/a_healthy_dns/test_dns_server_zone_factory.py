@@ -26,6 +26,12 @@ def test_make_zone_success(mock_time):
                 "api": {
                     dszf.SUBDOMAIN_IP_LIST_ARG: ["192.168.2.1"],
                 },
+                "repeated": {
+                    dszf.SUBDOMAIN_IP_LIST_ARG: ["10.16.2.1", "10.16.2.1", "10.16.2.1"],
+                },
+                "zeros": {
+                    dszf.SUBDOMAIN_IP_LIST_ARG: ["192.0168.000.020", "0102.018.001.01"],
+                },
             }
         ),
         dszf.TTL_A_ARG: 300,
@@ -80,6 +86,21 @@ def test_make_zone_success(mock_time):
         assert api_a_rdataset.ttl == 300
         assert len(api_a_rdataset) == 1
         assert api_a_rdataset[0].address == "192.168.2.1"
+
+        # Check A records for repeated subdomain
+        repeated_a_rdataset = txn.get("repeated.dev.example.com.", dns.rdatatype.A)
+        assert repeated_a_rdataset is not None
+        assert repeated_a_rdataset.ttl == 300
+        assert len(repeated_a_rdataset) == 1
+        assert repeated_a_rdataset[0].address == "10.16.2.1"
+
+        # Check A records for zeros subdomain
+        zeros_a_rdataset = txn.get("zeros.dev.example.com.", dns.rdatatype.A)
+        assert zeros_a_rdataset is not None
+        assert zeros_a_rdataset.ttl == 300
+        assert len(zeros_a_rdataset) == 2
+        zeros_ips = sorted([rdata.address for rdata in zeros_a_rdataset])
+        assert zeros_ips == ["102.18.1.1", "192.168.0.20"]
 
 
 def test_make_zone_invalid_hosted_zone():

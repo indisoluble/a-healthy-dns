@@ -12,7 +12,7 @@ import dns.versioned
 
 from typing import Any, Optional
 
-from .tools.is_valid_ip import is_valid_ip
+from .checkable_ips import CheckableIps
 from .tools.is_valid_subdomain import is_valid_subdomain
 
 HOSTED_ZONE_ARG = "hosted_zone"
@@ -151,18 +151,14 @@ def make_zone(args: dict[str, Any]) -> Optional[dns.versioned.Zone]:
             )
             return None
 
-        if not ip_list:
-            logging.error(f"IP list for '{subdomain}' cannot be empty")
+        try:
+            checkable_ips = CheckableIps(ip_list, 1)
+        except ValueError as ex:
+            logging.exception("Invalid IP address in '%s': %s", subdomain, ex)
             return None
 
-        for ip in ip_list:
-            success, error = is_valid_ip(ip)
-            if not success:
-                logging.error(f"Invalid IP address '{ip}' in '{subdomain}': {error}")
-                return None
-
         a_rec = dns.rdataset.from_text(
-            dns.rdataclass.IN, dns.rdatatype.A, ttl_a, *ip_list
+            dns.rdataclass.IN, dns.rdatatype.A, ttl_a, *checkable_ips.ips
         )
 
         resolutions[subdomain_name] = a_rec
