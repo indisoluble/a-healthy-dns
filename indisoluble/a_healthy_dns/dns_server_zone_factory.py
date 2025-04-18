@@ -8,7 +8,7 @@ import dns.name
 import dns.rdataclass
 import dns.rdataset
 import dns.rdatatype
-import dns.zone
+import dns.versioned
 
 from typing import Any, Optional, Tuple
 
@@ -47,14 +47,14 @@ def _is_valid_ip(ip: str) -> Tuple[bool, str]:
     return (True, "")
 
 
-def make_zone(args: dict[str, Any]) -> Optional[dns.zone.Zone]:
+def make_zone(args: dict[str, Any]) -> Optional[dns.versioned.Zone]:
     hosted_zone = args[HOSTED_ZONE_ARG]
     success, error = _is_valid_subdomain(hosted_zone)
     if not success:
         logging.error(f"Hosted zone '{hosted_zone}' is not a valid FQDN: {error}")
         return None
 
-    abs_hosted_zone = f"{hosted_zone}."
+    origin_name = dns.name.from_text(hosted_zone, origin=dns.name.root)
 
     try:
         name_servers = json.loads(args[NAME_SERVERS_ARG])
@@ -81,16 +81,18 @@ def make_zone(args: dict[str, Any]) -> Optional[dns.zone.Zone]:
 
         abs_name_servers.append(f"{ns}.")
 
-    primary_abs_name_server = abs_name_servers[0]
+    ttl_ns = int(args[TTL_NS_ARG])
+    if ttl_ns <= 0:
+        logging.error("TTL for NS records must be positive")
+        return None
+
+    ns_rec = dns.rdataset.from_text(
+        dns.rdataclass.IN, dns.rdatatype.NS, ttl_ns, *abs_name_servers
+    )
 
     ttl_a = int(args[TTL_A_ARG])
     if ttl_a <= 0:
         logging.error("TTL for A records must be positive")
-        return None
-
-    ttl_ns = int(args[TTL_NS_ARG])
-    if ttl_ns <= 0:
-        logging.error("TTL for NS records must be positive")
         return None
 
     soa_refresh = int(args[SOA_REFRESH_ARG])
@@ -110,6 +112,23 @@ def make_zone(args: dict[str, Any]) -> Optional[dns.zone.Zone]:
 
     soa_serial = int(time.time())
 
+    soa_rec = dns.rdataset.from_text(
+        dns.rdataclass.IN,
+        dns.rdatatype.SOA,
+        ttl_a,
+        " ".join(
+            [
+                abs_name_servers[0],
+                f"hostmaster.{hosted_zone}.",
+                str(soa_serial),
+                str(soa_refresh),
+                str(soa_retry),
+                str(soa_expire),
+                str(ttl_a),
+            ]
+        ),
+    )
+
     try:
         raw_resolutions = json.loads(args[ZONE_RESOLUTIONS_ARG])
     except json.JSONDecodeError as ex:
@@ -127,7 +146,7 @@ def make_zone(args: dict[str, Any]) -> Optional[dns.zone.Zone]:
         logging.error("Zone resolutions cannot be empty")
         return None
 
-    abs_resolutions = {}
+    resolutions = {}
     for subdomain, sub_config in raw_resolutions.items():
         success, error = _is_valid_subdomain(subdomain)
         if not success:
@@ -135,6 +154,8 @@ def make_zone(args: dict[str, Any]) -> Optional[dns.zone.Zone]:
                 f"Zone resolution subdomain '{subdomain}' is not valid: {error}"
             )
             return None
+
+        subdomain_name = dns.name.from_text(subdomain, origin=origin_name)
 
         if not isinstance(sub_config, dict):
             logging.error(
@@ -161,49 +182,20 @@ def make_zone(args: dict[str, Any]) -> Optional[dns.zone.Zone]:
                 logging.error(f"Invalid IP address '{ip}' in '{subdomain}': {error}")
                 return None
 
-        abs_resolutions[f"{subdomain}.{abs_hosted_zone}"] = ip_list
-
-    try:
-        origin_name = dns.name.from_text(abs_hosted_zone)
-        zone = dns.zone.Zone(origin_name)
-
-        origin_node = zone.get_node(origin_name, create=True)
-
-        soa_rec = dns.rdataset.from_text(
-            dns.rdataclass.IN,
-            dns.rdatatype.SOA,
-            ttl_a,
-            " ".join(
-                [
-                    primary_abs_name_server,
-                    f"hostmaster.{abs_hosted_zone}",
-                    str(soa_serial),
-                    str(soa_refresh),
-                    str(soa_retry),
-                    str(soa_expire),
-                    str(ttl_a),
-                ]
-            ),
+        a_rec = dns.rdataset.from_text(
+            dns.rdataclass.IN, dns.rdatatype.A, ttl_a, *ip_list
         )
-        origin_node.rdatasets.append(soa_rec)
 
-        ns_rec = dns.rdataset.from_text(
-            dns.rdataclass.IN, dns.rdatatype.NS, ttl_ns, *abs_name_servers
-        )
-        origin_node.rdatasets.append(ns_rec)
+        resolutions[subdomain_name] = a_rec
 
-        for subdomain, ips in abs_resolutions.items():
-            subdomain_name = dns.name.from_text(subdomain)
-            subdomain_node = zone.get_node(subdomain_name, create=True)
+    zone = dns.versioned.Zone(origin_name)
+    with zone.writer() as txn:
+        txn.add(dns.name.empty, soa_rec)
+        txn.add(dns.name.empty, ns_rec)
+        for subdomain_name, a_rec in resolutions.items():
+            txn.add(subdomain_name, a_rec)
 
-            a_rec = dns.rdataset.from_text(
-                dns.rdataclass.IN, dns.rdatatype.A, ttl_a, *ips
-            )
-            subdomain_node.replace_rdataset(a_rec)
+        txn.commit()
 
-        logging.info(f"Successfully created DNS zone for {abs_hosted_zone}")
-        return zone
-
-    except Exception as ex:
-        logging.exception(f"Failed to create DNS zone: {ex}")
-        return None
+    logging.info(f"Successfully created versioned DNS zone for {hosted_zone}")
+    return zone

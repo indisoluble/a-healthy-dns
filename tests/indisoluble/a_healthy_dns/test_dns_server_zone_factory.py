@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 import dns.name
 import dns.rdatatype
-import dns.zone
+import dns.versioned
 
 import indisoluble.a_healthy_dns.dns_server_zone_factory as dszf
 
@@ -38,47 +38,48 @@ def test_make_zone_success(mock_time):
     zone = dszf.make_zone(args)
 
     assert zone is not None
-    assert isinstance(zone, dns.zone.Zone)
+    assert isinstance(zone, dns.versioned.Zone)
 
     # Check zone origin
     assert zone.origin == dns.name.from_text("dev.example.com.")
 
-    # Check SOA record
-    soa_rdataset = zone.get_rdataset("dev.example.com.", dns.rdatatype.SOA)
-    assert soa_rdataset is not None
-    assert soa_rdataset.ttl == 300
+    with zone.reader() as txn:
+        # Check SOA record
+        soa_rdataset = txn.get("dev.example.com.", dns.rdatatype.SOA)
+        assert soa_rdataset is not None
+        assert soa_rdataset.ttl == 300
 
-    soa_rdata = soa_rdataset[0]
-    assert str(soa_rdata.mname) == "ns1.example.com."
-    assert str(soa_rdata.rname) == "hostmaster.dev.example.com."
-    assert soa_rdata.serial == 1234567890
-    assert soa_rdata.refresh == 7200
-    assert soa_rdata.retry == 3600
-    assert soa_rdata.expire == 1209600
-    assert soa_rdata.minimum == 300
+        soa_rdata = soa_rdataset[0]
+        assert str(soa_rdata.mname) == "ns1.example.com."
+        assert str(soa_rdata.rname) == "hostmaster.dev.example.com."
+        assert soa_rdata.serial == 1234567890
+        assert soa_rdata.refresh == 7200
+        assert soa_rdata.retry == 3600
+        assert soa_rdata.expire == 1209600
+        assert soa_rdata.minimum == 300
 
-    # Check NS records
-    ns_rdataset = zone.get_rdataset("dev.example.com.", dns.rdatatype.NS)
-    assert ns_rdataset is not None
-    assert ns_rdataset.ttl == 86400
-    assert len(ns_rdataset) == 2
-    ns_names = sorted([str(rdata.target) for rdata in ns_rdataset])
-    assert ns_names == ["ns1.example.com.", "ns2.example.com."]
+        # Check NS records
+        ns_rdataset = txn.get("dev.example.com.", dns.rdatatype.NS)
+        assert ns_rdataset is not None
+        assert ns_rdataset.ttl == 86400
+        assert len(ns_rdataset) == 2
+        ns_names = sorted([str(rdata.target) for rdata in ns_rdataset])
+        assert ns_names == ["ns1.example.com.", "ns2.example.com."]
 
-    # Check A records for www subdomain
-    www_a_rdataset = zone.get_rdataset("www.dev.example.com.", dns.rdatatype.A)
-    assert www_a_rdataset is not None
-    assert www_a_rdataset.ttl == 300
-    assert len(www_a_rdataset) == 2
-    www_ips = sorted([rdata.address for rdata in www_a_rdataset])
-    assert www_ips == ["192.168.1.1", "192.168.1.2"]
+        # Check A records for www subdomain
+        www_a_rdataset = txn.get("www.dev.example.com.", dns.rdatatype.A)
+        assert www_a_rdataset is not None
+        assert www_a_rdataset.ttl == 300
+        assert len(www_a_rdataset) == 2
+        www_ips = sorted([rdata.address for rdata in www_a_rdataset])
+        assert www_ips == ["192.168.1.1", "192.168.1.2"]
 
-    # Check A records for api subdomain
-    api_a_rdataset = zone.get_rdataset("api.dev.example.com.", dns.rdatatype.A)
-    assert api_a_rdataset is not None
-    assert api_a_rdataset.ttl == 300
-    assert len(api_a_rdataset) == 1
-    assert api_a_rdataset[0].address == "192.168.2.1"
+        # Check A records for api subdomain
+        api_a_rdataset = txn.get("api.dev.example.com.", dns.rdatatype.A)
+        assert api_a_rdataset is not None
+        assert api_a_rdataset.ttl == 300
+        assert len(api_a_rdataset) == 1
+        assert api_a_rdataset[0].address == "192.168.2.1"
 
 
 def test_make_zone_invalid_hosted_zone():

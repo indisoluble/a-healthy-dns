@@ -10,43 +10,44 @@ import dns.name
 import dns.rcode
 import dns.rdatatype
 import dns.rrset
-import dns.zone
+import dns.versioned
 
 
 def _update_response(
     response: dns.message.Message,
     query_name: dns.name.Name,
     query_type: dns.rdatatype.RdataType,
-    zone: dns.zone.Zone,
+    zone: dns.versioned.Zone,
 ):
-    node = None
-    if not query_name.is_absolute():
-        node = zone.get_node(query_name)
-    elif query_name.is_subdomain(zone.origin):
-        node = zone.get_node(query_name.relativize(zone.origin))
+    with zone.reader() as txn:
+        node = None
+        if not query_name.is_absolute():
+            node = txn.get_node(query_name)
+        elif query_name.is_subdomain(zone.origin):
+            node = txn.get_node(query_name.relativize(zone.origin))
 
-    if not node:
-        logging.warning("Received query for unknown domain: %s", query_name)
-        response.set_rcode(dns.rcode.NXDOMAIN)
-        return
+        if not node:
+            logging.warning("Received query for unknown domain: %s", query_name)
+            response.set_rcode(dns.rcode.NXDOMAIN)
+            return
 
-    rdataset = node.get_rdataset(zone.rdclass, query_type)
-    if not rdataset:
-        logging.warning(
-            "Domain %s exists but has no %s records",
-            query_name,
-            dns.rdatatype.to_text(query_type),
-        )
-        response.set_rcode(dns.rcode.NXDOMAIN)
-        return
+        rdataset = node.get_rdataset(zone.rdclass, query_type)
+        if not rdataset:
+            logging.warning(
+                "Domain %s exists but has no %s records",
+                query_name,
+                dns.rdatatype.to_text(query_type),
+            )
+            response.set_rcode(dns.rcode.NXDOMAIN)
+            return
 
-    rrset = dns.rrset.RRset(query_name, rdataset.rdclass, rdataset.rdtype)
-    rrset.ttl = rdataset.ttl
-    for rdata in rdataset:
-        rrset.add(rdata)
+        rrset = dns.rrset.RRset(query_name, rdataset.rdclass, rdataset.rdtype)
+        rrset.ttl = rdataset.ttl
+        for rdata in rdataset:
+            rrset.add(rdata)
 
-    response.answer.append(rrset)
-    logging.debug("Answered query for %s with %s", query_name, rrset)
+        response.answer.append(rrset)
+        logging.debug("Answered query for %s with %s", query_name, rrset)
 
 
 class DnsServerUdpHandler(socketserver.BaseRequestHandler):
