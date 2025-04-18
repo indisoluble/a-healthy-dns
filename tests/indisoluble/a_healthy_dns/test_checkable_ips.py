@@ -5,10 +5,43 @@ import pytest
 from indisoluble.a_healthy_dns.checkable_ips import CheckableIps
 
 
-def test_valid_initialization():
-    ips = CheckableIps(["192.168.1.1", "10.0.0.1"], 8080)
-    assert ips.ips == ["192.168.1.1", "10.0.0.1"]
-    assert ips.health_port == 8080
+@pytest.mark.parametrize(
+    "ip_list, port, expected_ips",
+    [
+        (["192.168.1.1", "10.0.0.1"], 8080, ["10.0.0.1", "192.168.1.1"]),
+        (["192.168.001.001", "010.000.000.001"], 8080, ["10.0.0.1", "192.168.1.1"]),
+        (["10.0.0.1", "192.168.1.1"], 8080, ["10.0.0.1", "192.168.1.1"]),
+        (["172.16.0.1", "127.0.0.1"], 80, ["127.0.0.1", "172.16.0.1"]),
+        (["001.002.003.004", "192.168.1.1"], 443, ["1.2.3.4", "192.168.1.1"]),
+        (["192.168.1.1", "10.0.0.1"], 1234, ["10.0.0.1", "192.168.1.1"]),
+        (["102.168.1.1", "19.0.0.1"], 2039, ["102.168.1.1", "19.0.0.1"]),
+        (
+            ["192.168.1.1", "10.0.0.1", "102.168.1.1", "19.0.0.1"],
+            1234,
+            ["10.0.0.1", "102.168.1.1", "19.0.0.1", "192.168.1.1"],
+        ),
+        (
+            [
+                "192.168.001.001",
+                "010.000.000.001",
+                "010.000.000.001",
+                "192.168.001.001",
+            ],
+            8080,
+            ["10.0.0.1", "192.168.1.1"],
+        ),
+        (
+            ["192.168.001.001", "010.000.000.001", "10.0.0.1", "192.168.1.1"],
+            8080,
+            ["10.0.0.1", "192.168.1.1"],
+        ),
+    ],
+)
+def test_valid_initialization(ip_list, port, expected_ips):
+    ips = CheckableIps(ip_list, port)
+    assert isinstance(ips.ips, list)
+    assert ips.ips == expected_ips
+    assert ips.health_port == port
 
 
 def test_empty_ip_list():
@@ -49,23 +82,16 @@ def test_invalid_port(invalid_port):
 
 def test_repr():
     ips = CheckableIps(["192.168.1.1", "10.0.0.1"], 8080)
-    expected = "CheckableIps(ips=['192.168.1.1', '10.0.0.1'], health_port=8080)"
+    expected = "CheckableIps(ips=['10.0.0.1', '192.168.1.1'], health_port=8080)"
     assert repr(ips) == expected
-
-
-def test_property_access():
-    ips = CheckableIps(["192.168.1.1", "10.0.0.1"], 8080)
-    assert isinstance(ips.ips, list)
-    assert ips.ips == ["192.168.1.1", "10.0.0.1"]
-    assert ips.health_port == 8080
 
 
 def test_original_list_modification():
     original_ips = ["192.168.1.1", "10.0.0.1"]
     ips_instance = CheckableIps(original_ips, 8080)
-    
+
     original_ips.append("172.16.0.1")
     original_ips[0] = "192.168.1.100"
-    
-    assert ips_instance.ips == ["192.168.1.1", "10.0.0.1"]
+
+    assert ips_instance.ips == ["10.0.0.1", "192.168.1.1"]
     assert original_ips == ["192.168.1.100", "10.0.0.1", "172.16.0.1"]

@@ -4,6 +4,7 @@ from typing import List
 
 from .tools.is_valid_ip import is_valid_ip
 from .tools.is_valid_port import is_valid_port
+from .tools.normalize_ip import normalize_ip
 
 
 class CheckableIps:
@@ -19,13 +20,15 @@ class CheckableIps:
         if not ips:
             raise ValueError("IP list cannot be empty")
 
-        self._ips = []
+        unique_ips = set()
         for ip in ips:
             success, error = is_valid_ip(ip)
             if not success:
                 raise ValueError(f"Invalid IP address '{ip}': {error}")
 
-            self._ips.append(ip)
+            unique_ips.add(normalize_ip(ip))
+
+        self._ips = sorted(unique_ips)
 
         success, error = is_valid_port(health_port)
         if not success:
