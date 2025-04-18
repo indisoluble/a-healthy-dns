@@ -10,7 +10,10 @@ import dns.rdataset
 import dns.rdatatype
 import dns.versioned
 
-from typing import Any, Optional, Tuple
+from typing import Any, Optional
+
+from .tools.is_valid_ip import is_valid_ip
+from .tools.is_valid_subdomain import is_valid_subdomain
 
 HOSTED_ZONE_ARG = "hosted_zone"
 NAME_SERVERS_ARG = "name_servers"
@@ -23,33 +26,9 @@ SOA_EXPIRE_ARG = "soa_expire"
 SUBDOMAIN_IP_LIST_ARG = "ips"
 
 
-def _is_valid_subdomain(name: str) -> Tuple[bool, str]:
-    if not name:
-        return (False, "It cannot be empty")
-
-    if not all(
-        label and all(c.isalnum() or c == "-" for c in label)
-        for label in name.split(".")
-    ):
-        return (False, "Labels must contain only alphanumeric characters or hyphens")
-
-    return (True, "")
-
-
-def _is_valid_ip(ip: str) -> Tuple[bool, str]:
-    parts = ip.split(".")
-    if len(parts) != 4:
-        return (False, "IP address must have 4 octets")
-
-    if not all(part.isdigit() and (0 <= int(part) <= 255) for part in parts):
-        return (False, "Each octet must be a number between 0 and 255")
-
-    return (True, "")
-
-
 def make_zone(args: dict[str, Any]) -> Optional[dns.versioned.Zone]:
     hosted_zone = args[HOSTED_ZONE_ARG]
-    success, error = _is_valid_subdomain(hosted_zone)
+    success, error = is_valid_subdomain(hosted_zone)
     if not success:
         logging.error(f"Hosted zone '{hosted_zone}' is not a valid FQDN: {error}")
         return None
@@ -74,7 +53,7 @@ def make_zone(args: dict[str, Any]) -> Optional[dns.versioned.Zone]:
 
     abs_name_servers = []
     for ns in name_servers:
-        success, error = _is_valid_subdomain(ns)
+        success, error = is_valid_subdomain(ns)
         if not success:
             logging.error(f"Name server '{ns}' is not a valid FQDN: {error}")
             return None
@@ -148,7 +127,7 @@ def make_zone(args: dict[str, Any]) -> Optional[dns.versioned.Zone]:
 
     resolutions = {}
     for subdomain, sub_config in raw_resolutions.items():
-        success, error = _is_valid_subdomain(subdomain)
+        success, error = is_valid_subdomain(subdomain)
         if not success:
             logging.error(
                 f"Zone resolution subdomain '{subdomain}' is not valid: {error}"
@@ -177,7 +156,7 @@ def make_zone(args: dict[str, Any]) -> Optional[dns.versioned.Zone]:
             return None
 
         for ip in ip_list:
-            success, error = _is_valid_ip(ip)
+            success, error = is_valid_ip(ip)
             if not success:
                 logging.error(f"Invalid IP address '{ip}' in '{subdomain}': {error}")
                 return None
