@@ -11,6 +11,10 @@ class HealthyIp:
         return self._ip
 
     @property
+    def ttl_a(self) -> int:
+        return self._ttl_a
+
+    @property
     def health_port(self) -> int:
         return self._health_port
 
@@ -18,16 +22,20 @@ class HealthyIp:
     def is_healthy(self) -> bool:
         return self._is_healthy
 
-    def __init__(self, ip: str, health_port: int, is_healthy: bool):
+    def __init__(self, ip: str, ttl_a: int, health_port: int, is_healthy: bool):
         success, error = is_valid_ip(ip)
         if not success:
             raise ValueError(f"Invalid IP address: {error}")
+
+        if ttl_a <= 0:
+            raise ValueError("TTL for A records must be positive")
 
         success, error = is_valid_port(health_port)
         if not success:
             raise ValueError(f"Invalid port: {error}")
 
         self._ip = normalize_ip(ip)
+        self._ttl_a = ttl_a
         self._health_port = health_port
         self._is_healthy = is_healthy
 
@@ -35,10 +43,20 @@ class HealthyIp:
         if not isinstance(other, HealthyIp):
             return False
 
-        return self.ip == other.ip and self.health_port == other.health_port and self.is_healthy == other.is_healthy
+        return (
+            self.ip == other.ip
+            and self.ttl_a == other.ttl_a
+            and self.health_port == other.health_port
+            and self.is_healthy == other.is_healthy
+        )
 
     def __hash__(self):
-        return hash((self.ip, self.health_port, self.is_healthy))
+        return hash((self.ip, self.ttl_a, self.health_port, self.is_healthy))
 
     def __repr__(self):
-        return f"HealthyIp(ip='{self.ip}', health_port={self.health_port}, is_healthy={self.is_healthy})"
+        return (
+            f"HealthyIp(ip='{self.ip}', "
+            f"ttl_a={self.ttl_a}, "
+            f"health_port={self.health_port}, "
+            f"is_healthy={self.is_healthy})"
+        )

@@ -6,8 +6,9 @@ from indisoluble.a_healthy_dns.healthy_ip import HealthyIp
 
 
 def test_valid_initialization():
-    ip = HealthyIp("192.168.1.1", 8080, True)
+    ip = HealthyIp("192.168.1.1", 300, 8080, True)
     assert ip.ip == "192.168.1.1"
+    assert ip.ttl_a == 300
     assert ip.health_port == 8080
     assert ip.is_healthy is True
 
@@ -17,7 +18,7 @@ def test_valid_initialization():
     [("192.168.001.001", "192.168.1.1"), ("192.000.1.1", "192.0.1.1")],
 )
 def test_ip_normalization(non_normalized_ip, expected_ip):
-    ip = HealthyIp(non_normalized_ip, 8080, True)
+    ip = HealthyIp(non_normalized_ip, 300, 8080, True)
     assert ip.ip == expected_ip
 
 
@@ -33,8 +34,15 @@ def test_ip_normalization(non_normalized_ip, expected_ip):
 )
 def test_invalid_ip(invalid_ip):
     with pytest.raises(ValueError) as exc_info:
-        HealthyIp(invalid_ip, 8080, True)
+        HealthyIp(invalid_ip, 300, 8080, True)
     assert "Invalid IP address" in str(exc_info.value)
+
+
+@pytest.mark.parametrize("invalid_ttl", [0, -10])
+def test_invalid_ttl(invalid_ttl):
+    with pytest.raises(ValueError) as exc_info:
+        HealthyIp("192.168.1.1", invalid_ttl, 8080, True)
+    assert "TTL for A records must be positive" in str(exc_info.value)
 
 
 @pytest.mark.parametrize(
@@ -47,38 +55,42 @@ def test_invalid_ip(invalid_ip):
 )
 def test_invalid_port(invalid_port):
     with pytest.raises(ValueError) as exc_info:
-        HealthyIp("192.168.1.1", invalid_port, True)
+        HealthyIp("192.168.1.1", 300, invalid_port, True)
     assert "Invalid port" in str(exc_info.value)
 
 
 def test_equality():
-    ip1 = HealthyIp("192.168.1.1", 8080, True)
+    ip1 = HealthyIp("192.168.1.1", 300, 8080, True)
 
-    ip2 = HealthyIp("192.168.1.1", 8080, True)
+    ip2 = HealthyIp("192.168.1.1", 300, 8080, True)
     assert ip1 == ip2
 
-    ip3 = HealthyIp("192.168.001.01", 8080, True)
+    ip3 = HealthyIp("192.168.001.01", 300, 8080, True)
     assert ip1 == ip3
 
-    ip4 = HealthyIp("192.168.1.1", 8080, False)
+    ip4 = HealthyIp("192.168.1.1", 300, 8080, False)
     assert ip1 != ip4
 
-    ip5 = HealthyIp("192.168.1.2", 8080, True)
+    ip5 = HealthyIp("192.168.1.2", 300, 8080, True)
     assert ip1 != ip5
 
-    ip6 = HealthyIp("192.168.1.1", 9090, True)
+    ip6 = HealthyIp("192.168.1.1", 400, 8080, True)
     assert ip1 != ip6
+
+    ip7 = HealthyIp("192.168.1.1", 300, 9090, True)
+    assert ip1 != ip7
 
     assert ip1 != "not a HealthyIp object"
 
 
 def test_hash():
-    ip1 = HealthyIp("192.168.1.1", 8080, True)
-    ip2 = HealthyIp("192.168.1.1", 8080, True)
-    ip3 = HealthyIp("192.168.01.001", 8080, True)
-    ip4 = HealthyIp("192.168.1.1", 8080, False)
-    ip5 = HealthyIp("192.168.1.2", 8080, True)
-    ip6 = HealthyIp("192.168.1.1", 9090, True)
+    ip1 = HealthyIp("192.168.1.1", 300, 8080, True)
+    ip2 = HealthyIp("192.168.1.1", 300, 8080, True)
+    ip3 = HealthyIp("192.168.01.001", 300, 8080, True)
+    ip4 = HealthyIp("192.168.1.1", 300, 8080, False)
+    ip5 = HealthyIp("192.168.1.2", 300, 8080, True)
+    ip6 = HealthyIp("192.168.1.1", 300, 8080, True)
+    ip7 = HealthyIp("192.168.1.1", 300, 9090, True)
 
     ip_dict = {ip1: "server1"}
 
@@ -90,18 +102,23 @@ def test_hash():
         _ = ip_dict[ip4]
         _ = ip_dict[ip5]
         _ = ip_dict[ip6]
+        _ = ip_dict[ip7]
 
     assert {ip1, ip2, ip3} == {ip1}
     assert {ip1, ip5, ip2, ip4, ip3} == {ip1, ip4, ip5}
 
 
 def test_repr():
-    ip1 = HealthyIp("192.168.1.1", 8080, True)
-    ip2 = HealthyIp("192.168.1.1", 8080, False)
-    ip3 = HealthyIp("192.168.001.001", 8080, False)
+    ip1 = HealthyIp("192.168.1.1", 300, 8080, True)
+    ip2 = HealthyIp("192.168.1.1", 300, 8080, False)
+    ip3 = HealthyIp("192.168.001.001", 300, 8080, False)
 
-    expected1 = "HealthyIp(ip='192.168.1.1', health_port=8080, is_healthy=True)"
-    expected2 = "HealthyIp(ip='192.168.1.1', health_port=8080, is_healthy=False)"
+    expected1 = (
+        "HealthyIp(ip='192.168.1.1', ttl_a=300, health_port=8080, is_healthy=True)"
+    )
+    expected2 = (
+        "HealthyIp(ip='192.168.1.1', ttl_a=300, health_port=8080, is_healthy=False)"
+    )
 
     assert repr(ip1) == expected1
     assert repr(ip2) == expected2

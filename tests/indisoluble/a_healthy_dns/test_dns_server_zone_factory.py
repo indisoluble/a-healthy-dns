@@ -55,18 +55,18 @@ def test_make_zone_success(mock_time):
     # Check resolutions
     assert ext_zone.resolutions == {
         dns.name.from_text("www", origin=ext_zone.zone.origin): {
-            HealthyIp("192.168.1.1", 8080, False),
-            HealthyIp("192.168.1.2", 8080, False),
+            HealthyIp("192.168.1.1", 300, 8080, False),
+            HealthyIp("192.168.1.2", 300, 8080, False),
         },
         dns.name.from_text("api", origin=ext_zone.zone.origin): {
-            HealthyIp("192.168.2.1", 8081, False)
+            HealthyIp("192.168.2.1", 300, 8081, False)
         },
         dns.name.from_text("repeated", origin=ext_zone.zone.origin): {
-            HealthyIp("10.16.2.1", 8082, False)
+            HealthyIp("10.16.2.1", 300, 8082, False)
         },
         dns.name.from_text("zeros", origin=ext_zone.zone.origin): {
-            HealthyIp("102.18.1.1", 8083, False),
-            HealthyIp("192.168.0.20", 8083, False),
+            HealthyIp("102.18.1.1", 300, 8083, False),
+            HealthyIp("192.168.0.20", 300, 8083, False),
         },
     }
 

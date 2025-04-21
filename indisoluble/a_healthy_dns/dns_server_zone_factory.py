@@ -56,11 +56,6 @@ def _make_origin_name(args: dict[str, Any]) -> Optional[dns.name.Name]:
 def _make_resolutions(
     origin_name: dns.name.Name, args: dict[str, Any]
 ) -> Optional[ExtendedResolutions]:
-    ttl_a = int(args[TTL_A_ARG])
-    if ttl_a <= 0:
-        logging.error("TTL for A records must be positive")
-        return None
-
     try:
         raw_resolutions = json.loads(args[ZONE_RESOLUTIONS_ARG])
     except json.JSONDecodeError as ex:
@@ -77,6 +72,8 @@ def _make_resolutions(
     if not raw_resolutions:
         logging.error("Zone resolutions cannot be empty")
         return None
+
+    ttl_a = int(args[TTL_A_ARG])
 
     resolutions = {}
     for subdomain, sub_config in raw_resolutions.items():
@@ -118,7 +115,7 @@ def _make_resolutions(
             return None
 
         try:
-            healthy_ips = {HealthyIp(ip, health_port, False) for ip in ip_list}
+            healthy_ips = {HealthyIp(ip, ttl_a, health_port, False) for ip in ip_list}
         except ValueError as ex:
             logging.exception("Invalid IP address in '%s': %s", subdomain, ex)
             return None
