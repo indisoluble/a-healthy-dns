@@ -10,15 +10,14 @@ import dns.rdataset
 import dns.rdatatype
 import dns.versioned
 
-from typing import Any, Dict, Optional, NamedTuple
+from typing import Any, Dict, NamedTuple, Optional, Set
 
-from .checkable_ips import CheckableIps
+from .healthy_ip import HealthyIp
 from .tools.is_valid_subdomain import is_valid_subdomain
 
 
-class ExtendedARecords(NamedTuple):
-    a_recs: Dict[dns.name.Name, dns.rdataset.Rdataset]
-    resolutions: Dict[dns.name.Name, CheckableIps]
+class ExtendedResolutions(NamedTuple):
+    resolutions: Dict[dns.name.Name, Set[HealthyIp]]
     ttl_a: int
 
 
@@ -29,7 +28,7 @@ class ExtendedNsRecord(NamedTuple):
 
 class ExtendedZone(NamedTuple):
     zone: dns.versioned.Zone
-    resolutions: Dict[dns.name.Name, CheckableIps]
+    resolutions: Dict[dns.name.Name, Set[HealthyIp]]
 
 
 HOSTED_ZONE_ARG = "hosted_zone"
@@ -54,9 +53,9 @@ def _make_origin_name(args: dict[str, Any]) -> Optional[dns.name.Name]:
     return dns.name.from_text(hosted_zone, origin=dns.name.root)
 
 
-def _make_a_records(
+def _make_resolutions(
     origin_name: dns.name.Name, args: dict[str, Any]
-) -> Optional[ExtendedARecords]:
+) -> Optional[ExtendedResolutions]:
     ttl_a = int(args[TTL_A_ARG])
     if ttl_a <= 0:
         logging.error("TTL for A records must be positive")
@@ -79,7 +78,6 @@ def _make_a_records(
         logging.error("Zone resolutions cannot be empty")
         return None
 
-    a_recs = {}
     resolutions = {}
     for subdomain, sub_config in raw_resolutions.items():
         success, error = is_valid_subdomain(subdomain)
@@ -106,6 +104,10 @@ def _make_a_records(
             )
             return None
 
+        if not ip_list:
+            logging.error("IP list for '%s' cannot be empty", subdomain)
+            return None
+
         health_port = sub_config[SUBDOMAIN_HEALTH_PORT_ARG]
         if not isinstance(health_port, int):
             logging.error(
@@ -116,17 +118,14 @@ def _make_a_records(
             return None
 
         try:
-            checkable_ips = CheckableIps(ip_list, health_port)
+            healthy_ips = {HealthyIp(ip, health_port, False) for ip in ip_list}
         except ValueError as ex:
             logging.exception("Invalid IP address in '%s': %s", subdomain, ex)
             return None
 
-        a_recs[subdomain_name] = dns.rdataset.from_text(
-            dns.rdataclass.IN, dns.rdatatype.A, ttl_a, *checkable_ips.ips
-        )
-        resolutions[subdomain_name] = checkable_ips
+        resolutions[subdomain_name] = healthy_ips
 
-    return ExtendedARecords(a_recs, resolutions, ttl_a)
+    return ExtendedResolutions(resolutions, ttl_a)
 
 
 def _make_ns_record(args: dict[str, Any]) -> Optional[ExtendedNsRecord]:
@@ -213,8 +212,8 @@ def make_zone(args: dict[str, Any]) -> Optional[ExtendedZone]:
     if origin_name is None:
         return None
 
-    ext_a_recs = _make_a_records(origin_name, args)
-    if ext_a_recs is None:
+    ext_resolutions = _make_resolutions(origin_name, args)
+    if ext_resolutions is None:
         return None
 
     ext_ns_rec = _make_ns_record(args)
@@ -222,7 +221,11 @@ def make_zone(args: dict[str, Any]) -> Optional[ExtendedZone]:
         return None
 
     soa_rec = _make_soa_record(
-        origin_name, ext_ns_rec.primary_ns, int(time.time()), ext_a_recs.ttl_a, args
+        origin_name,
+        ext_ns_rec.primary_ns,
+        int(time.time()),
+        ext_resolutions.ttl_a,
+        args,
     )
     if soa_rec is None:
         return None
@@ -231,10 +234,6 @@ def make_zone(args: dict[str, Any]) -> Optional[ExtendedZone]:
     with zone.writer() as txn:
         txn.add(dns.name.empty, ext_ns_rec.ns_rec)
         txn.add(dns.name.empty, soa_rec)
-        for subdomain_name, a_rec in ext_a_recs.a_recs.items():
-            txn.add(subdomain_name, a_rec)
-
-        txn.commit()
 
     logging.info(f"Successfully created versioned DNS zone for {origin_name}")
-    return ExtendedZone(zone, ext_a_recs.resolutions)
+    return ExtendedZone(zone, ext_resolutions.resolutions)

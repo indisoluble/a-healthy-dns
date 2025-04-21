@@ -10,6 +10,8 @@ import dns.versioned
 
 import indisoluble.a_healthy_dns.dns_server_zone_factory as dszf
 
+from indisoluble.a_healthy_dns.healthy_ip import HealthyIp
+
 
 @patch("time.time")
 def test_make_zone_success(mock_time):
@@ -50,6 +52,24 @@ def test_make_zone_success(mock_time):
     assert ext_zone is not None
     assert isinstance(ext_zone, dszf.ExtendedZone)
 
+    # Check resolutions
+    assert ext_zone.resolutions == {
+        dns.name.from_text("www", origin=ext_zone.zone.origin): {
+            HealthyIp("192.168.1.1", 8080, False),
+            HealthyIp("192.168.1.2", 8080, False),
+        },
+        dns.name.from_text("api", origin=ext_zone.zone.origin): {
+            HealthyIp("192.168.2.1", 8081, False)
+        },
+        dns.name.from_text("repeated", origin=ext_zone.zone.origin): {
+            HealthyIp("10.16.2.1", 8082, False)
+        },
+        dns.name.from_text("zeros", origin=ext_zone.zone.origin): {
+            HealthyIp("102.18.1.1", 8083, False),
+            HealthyIp("192.168.0.20", 8083, False),
+        },
+    }
+
     # Check zone origin
     assert ext_zone.zone.origin == dns.name.from_text("dev.example.com.")
 
@@ -75,36 +95,6 @@ def test_make_zone_success(mock_time):
         assert len(ns_rdataset) == 2
         ns_names = sorted([str(rdata.target) for rdata in ns_rdataset])
         assert ns_names == ["ns1.example.com.", "ns2.example.com."]
-
-        # Check A records for www subdomain
-        www_a_rdataset = txn.get("www.dev.example.com.", dns.rdatatype.A)
-        assert www_a_rdataset is not None
-        assert www_a_rdataset.ttl == 300
-        assert len(www_a_rdataset) == 2
-        www_ips = sorted([rdata.address for rdata in www_a_rdataset])
-        assert www_ips == ["192.168.1.1", "192.168.1.2"]
-
-        # Check A records for api subdomain
-        api_a_rdataset = txn.get("api.dev.example.com.", dns.rdatatype.A)
-        assert api_a_rdataset is not None
-        assert api_a_rdataset.ttl == 300
-        assert len(api_a_rdataset) == 1
-        assert api_a_rdataset[0].address == "192.168.2.1"
-
-        # Check A records for repeated subdomain
-        repeated_a_rdataset = txn.get("repeated.dev.example.com.", dns.rdatatype.A)
-        assert repeated_a_rdataset is not None
-        assert repeated_a_rdataset.ttl == 300
-        assert len(repeated_a_rdataset) == 1
-        assert repeated_a_rdataset[0].address == "10.16.2.1"
-
-        # Check A records for zeros subdomain
-        zeros_a_rdataset = txn.get("zeros.dev.example.com.", dns.rdatatype.A)
-        assert zeros_a_rdataset is not None
-        assert zeros_a_rdataset.ttl == 300
-        assert len(zeros_a_rdataset) == 2
-        zeros_ips = sorted([rdata.address for rdata in zeros_a_rdataset])
-        assert zeros_ips == ["102.18.1.1", "192.168.0.20"]
 
 
 def test_make_zone_invalid_hosted_zone():
