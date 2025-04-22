@@ -108,6 +108,39 @@ def test_hash():
     assert {ip1, ip5, ip2, ip4, ip3} == {ip1, ip4, ip5}
 
 
+def test_updated_status():
+    ip1 = HealthyIp("192.168.1.1", 300, 8080, True)
+
+    # Test when status doesn't change
+    ip2 = ip1.updated_status(True)
+    # Should be the same instance
+    assert ip2 is ip1
+
+    # Test when status changes
+    ip3 = ip1.updated_status(False)
+    assert ip3 is not ip1
+    assert ip3.ip == ip1.ip
+    assert ip3.ttl_a == ip1.ttl_a
+    assert ip3.health_port == ip1.health_port
+    assert ip3.is_healthy is False
+    assert ip1.is_healthy is True
+
+
+def test_updated_status_maintains_equality():
+    ip1 = HealthyIp("192.168.1.1", 300, 8080, True)
+    ip2 = HealthyIp("192.168.1.1", 300, 8080, True)
+
+    assert ip1.updated_status(True) is ip1
+    assert ip2.updated_status(True) is ip2
+
+    ip1_unhealthy = ip1.updated_status(False)
+    ip2_unhealthy = ip2.updated_status(False)
+
+    assert ip1_unhealthy != ip1
+    assert ip2_unhealthy != ip2
+    assert ip1_unhealthy == ip2_unhealthy
+
+
 def test_repr():
     ip1 = HealthyIp("192.168.1.1", 300, 8080, True)
     ip2 = HealthyIp("192.168.1.1", 300, 8080, False)

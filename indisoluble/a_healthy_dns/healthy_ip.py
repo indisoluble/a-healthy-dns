@@ -39,6 +39,17 @@ class HealthyIp:
         self._health_port = health_port
         self._is_healthy = is_healthy
 
+    def updated_status(self, is_healthy: bool) -> "HealthyIp":
+        if is_healthy == self._is_healthy:
+            return self
+
+        return HealthyIp(
+            ip=self.ip,
+            ttl_a=self.ttl_a,
+            health_port=self.health_port,
+            is_healthy=is_healthy,
+        )
+
     def __eq__(self, other):
         if not isinstance(other, HealthyIp):
             return False
