@@ -6,7 +6,6 @@ from unittest.mock import patch
 
 import dns.name
 import dns.rdatatype
-import dns.versioned
 
 import indisoluble.a_healthy_dns.dns_server_zone_factory as dszf
 
@@ -52,26 +51,52 @@ def test_make_zone_success(mock_time):
     assert ext_zone is not None
     assert isinstance(ext_zone, dszf.ExtendedZone)
 
-    # Check resolutions
-    assert ext_zone.resolutions == {
-        dns.name.from_text("www", origin=ext_zone.zone.origin): {
-            HealthyIp("192.168.1.1", 300, 8080, False),
-            HealthyIp("192.168.1.2", 300, 8080, False),
-        },
-        dns.name.from_text("api", origin=ext_zone.zone.origin): {
-            HealthyIp("192.168.2.1", 300, 8081, False)
-        },
-        dns.name.from_text("repeated", origin=ext_zone.zone.origin): {
-            HealthyIp("10.16.2.1", 300, 8082, False)
-        },
-        dns.name.from_text("zeros", origin=ext_zone.zone.origin): {
-            HealthyIp("102.18.1.1", 300, 8083, False),
-            HealthyIp("192.168.0.20", 300, 8083, False),
-        },
-    }
-
     # Check zone origin
     assert ext_zone.zone.origin == dns.name.from_text("dev.example.com.")
+
+    assert len(ext_zone.a_records) == 4
+
+    healthy_ips_by_subdomain = {}
+    for record in ext_zone.a_records:
+        healthy_ips_by_subdomain[record.subdomain] = (record.ttl_a, record.healthy_ips)
+
+    # Check www subdomain
+    www_name = dns.name.from_text("www", origin=ext_zone.zone.origin)
+    assert www_name in healthy_ips_by_subdomain
+    assert healthy_ips_by_subdomain[www_name][0] == 300
+    assert healthy_ips_by_subdomain[www_name][1] == frozenset(
+        [
+            HealthyIp("192.168.1.1", 300, 8080, False),
+            HealthyIp("192.168.1.2", 300, 8080, False),
+        ]
+    )
+
+    # Check api subdomain
+    api_name = dns.name.from_text("api", origin=ext_zone.zone.origin)
+    assert api_name in healthy_ips_by_subdomain
+    assert healthy_ips_by_subdomain[api_name][0] == 300
+    assert healthy_ips_by_subdomain[api_name][1] == frozenset(
+        [HealthyIp("192.168.2.1", 300, 8081, False)]
+    )
+
+    # Check repeated subdomain
+    repeated_name = dns.name.from_text("repeated", origin=ext_zone.zone.origin)
+    assert repeated_name in healthy_ips_by_subdomain
+    assert healthy_ips_by_subdomain[repeated_name][0] == 300
+    assert healthy_ips_by_subdomain[repeated_name][1] == frozenset(
+        [HealthyIp("10.16.2.1", 300, 8082, False)]
+    )
+
+    # Check zeros subdomain
+    zeros_name = dns.name.from_text("zeros", origin=ext_zone.zone.origin)
+    assert zeros_name in healthy_ips_by_subdomain
+    assert healthy_ips_by_subdomain[zeros_name][0] == 300
+    assert healthy_ips_by_subdomain[zeros_name][1] == frozenset(
+        [
+            HealthyIp("102.18.1.1", 300, 8083, False),
+            HealthyIp("192.168.0.20", 300, 8083, False),
+        ]
+    )
 
     with ext_zone.zone.reader() as txn:
         # Check SOA record

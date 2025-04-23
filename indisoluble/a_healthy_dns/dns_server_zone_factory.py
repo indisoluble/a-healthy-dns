@@ -12,12 +12,13 @@ import dns.versioned
 
 from typing import Any, Dict, NamedTuple, Optional, Set
 
+from .healthy_a_record import HealthyARecord
 from .healthy_ip import HealthyIp
 from .tools.is_valid_subdomain import is_valid_subdomain
 
 
-class ExtendedResolutions(NamedTuple):
-    resolutions: Dict[dns.name.Name, Set[HealthyIp]]
+class ExtendedARecords(NamedTuple):
+    a_records: Set[HealthyARecord]
     ttl_a: int
 
 
@@ -28,7 +29,7 @@ class ExtendedNsRecord(NamedTuple):
 
 class ExtendedZone(NamedTuple):
     zone: dns.versioned.Zone
-    resolutions: Dict[dns.name.Name, Set[HealthyIp]]
+    a_records: Set[HealthyARecord]
 
 
 HOSTED_ZONE_ARG = "hosted_zone"
@@ -53,9 +54,9 @@ def _make_origin_name(args: dict[str, Any]) -> Optional[dns.name.Name]:
     return dns.name.from_text(hosted_zone, origin=dns.name.root)
 
 
-def _make_resolutions(
+def _make_a_records(
     origin_name: dns.name.Name, args: dict[str, Any]
-) -> Optional[ExtendedResolutions]:
+) -> Optional[ExtendedARecords]:
     try:
         raw_resolutions = json.loads(args[ZONE_RESOLUTIONS_ARG])
     except json.JSONDecodeError as ex:
@@ -75,7 +76,7 @@ def _make_resolutions(
 
     ttl_a = int(args[TTL_A_ARG])
 
-    resolutions = {}
+    a_records = set()
     for subdomain, sub_config in raw_resolutions.items():
         success, error = is_valid_subdomain(subdomain)
         if not success:
@@ -120,9 +121,9 @@ def _make_resolutions(
             logging.exception("Invalid IP address in '%s': %s", subdomain, ex)
             return None
 
-        resolutions[subdomain_name] = healthy_ips
+        a_records.add(HealthyARecord(subdomain_name, ttl_a, healthy_ips))
 
-    return ExtendedResolutions(resolutions, ttl_a)
+    return ExtendedARecords(a_records, ttl_a)
 
 
 def _make_ns_record(args: dict[str, Any]) -> Optional[ExtendedNsRecord]:
@@ -209,8 +210,8 @@ def make_zone(args: dict[str, Any]) -> Optional[ExtendedZone]:
     if origin_name is None:
         return None
 
-    ext_resolutions = _make_resolutions(origin_name, args)
-    if ext_resolutions is None:
+    ext_a_records = _make_a_records(origin_name, args)
+    if ext_a_records is None:
         return None
 
     ext_ns_rec = _make_ns_record(args)
@@ -221,7 +222,7 @@ def make_zone(args: dict[str, Any]) -> Optional[ExtendedZone]:
         origin_name,
         ext_ns_rec.primary_ns,
         int(time.time()),
-        ext_resolutions.ttl_a,
+        ext_a_records.ttl_a,
         args,
     )
     if soa_rec is None:
@@ -233,4 +234,4 @@ def make_zone(args: dict[str, Any]) -> Optional[ExtendedZone]:
         txn.add(dns.name.empty, soa_rec)
 
     logging.info(f"Successfully created versioned DNS zone for {origin_name}")
-    return ExtendedZone(zone, ext_resolutions.resolutions)
+    return ExtendedZone(zone, ext_a_records.a_records)
