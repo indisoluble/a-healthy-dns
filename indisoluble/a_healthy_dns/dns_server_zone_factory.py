@@ -116,12 +116,16 @@ def _make_a_records(
             return None
 
         try:
-            healthy_ips = {HealthyIp(ip, ttl_a, health_port, False) for ip in ip_list}
+            healthy_ips = {HealthyIp(ip, health_port, False) for ip in ip_list}
         except ValueError as ex:
             logging.exception("Invalid IP address in '%s': %s", subdomain, ex)
             return None
 
-        a_records.add(HealthyARecord(subdomain_name, ttl_a, healthy_ips))
+        try:
+            a_records.add(HealthyARecord(subdomain_name, ttl_a, healthy_ips))
+        except ValueError as ex:
+            logging.exception("Invalid A record for '%s': %s", subdomain, ex)
+            return None
 
     return ExtendedARecords(a_records, ttl_a)
 

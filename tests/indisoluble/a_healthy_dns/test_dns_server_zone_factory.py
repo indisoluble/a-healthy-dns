@@ -65,10 +65,7 @@ def test_make_zone_success(mock_time):
     assert www_name in healthy_ips_by_subdomain
     assert healthy_ips_by_subdomain[www_name][0] == 300
     assert healthy_ips_by_subdomain[www_name][1] == frozenset(
-        [
-            HealthyIp("192.168.1.1", 300, 8080, False),
-            HealthyIp("192.168.1.2", 300, 8080, False),
-        ]
+        [HealthyIp("192.168.1.1", 8080, False), HealthyIp("192.168.1.2", 8080, False)]
     )
 
     # Check api subdomain
@@ -76,7 +73,7 @@ def test_make_zone_success(mock_time):
     assert api_name in healthy_ips_by_subdomain
     assert healthy_ips_by_subdomain[api_name][0] == 300
     assert healthy_ips_by_subdomain[api_name][1] == frozenset(
-        [HealthyIp("192.168.2.1", 300, 8081, False)]
+        [HealthyIp("192.168.2.1", 8081, False)]
     )
 
     # Check repeated subdomain
@@ -84,7 +81,7 @@ def test_make_zone_success(mock_time):
     assert repeated_name in healthy_ips_by_subdomain
     assert healthy_ips_by_subdomain[repeated_name][0] == 300
     assert healthy_ips_by_subdomain[repeated_name][1] == frozenset(
-        [HealthyIp("10.16.2.1", 300, 8082, False)]
+        [HealthyIp("10.16.2.1", 8082, False)]
     )
 
     # Check zeros subdomain
@@ -92,10 +89,7 @@ def test_make_zone_success(mock_time):
     assert zeros_name in healthy_ips_by_subdomain
     assert healthy_ips_by_subdomain[zeros_name][0] == 300
     assert healthy_ips_by_subdomain[zeros_name][1] == frozenset(
-        [
-            HealthyIp("102.18.1.1", 300, 8083, False),
-            HealthyIp("192.168.0.20", 300, 8083, False),
-        ]
+        [HealthyIp("102.18.1.1", 8083, False), HealthyIp("192.168.0.20", 8083, False)]
     )
 
     with ext_zone.zone.reader() as txn:

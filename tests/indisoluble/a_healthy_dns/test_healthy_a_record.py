@@ -11,10 +11,7 @@ def test_init_with_valid_parameters():
     subdomain = dns.name.from_text("test.example.com")
     ttl_a = 300
     healthy_ips = frozenset(
-        [
-            HealthyIp(ip="192.168.1.1", ttl_a=300, health_port=80, is_healthy=True),
-            HealthyIp(ip="192.168.1.2", ttl_a=300, health_port=80, is_healthy=True),
-        ]
+        [HealthyIp("192.168.1.1", 80, True), HealthyIp("192.168.1.2", 80, True)]
     )
 
     record = HealthyARecord(subdomain=subdomain, ttl_a=ttl_a, healthy_ips=healthy_ips)
@@ -30,13 +27,7 @@ def test_init_with_invalid_ttl(invalid_ttl):
         HealthyARecord(
             subdomain=dns.name.from_text("test.example.com"),
             ttl_a=invalid_ttl,
-            healthy_ips=frozenset(
-                [
-                    HealthyIp(
-                        ip="192.168.1.1", ttl_a=300, health_port=80, is_healthy=True
-                    )
-                ]
-            ),
+            healthy_ips=frozenset([HealthyIp("192.168.1.1", 80, True)]),
         )
 
 
@@ -46,16 +37,12 @@ def test_equality_with_same_subdomain():
     record1 = HealthyARecord(
         subdomain=subdomain,
         ttl_a=300,
-        healthy_ips=frozenset(
-            [HealthyIp(ip="192.168.1.1", ttl_a=300, health_port=80, is_healthy=True)]
-        ),
+        healthy_ips=frozenset([HealthyIp("192.168.1.1", 80, True)]),
     )
     record2 = HealthyARecord(
         subdomain=subdomain,
         ttl_a=600,
-        healthy_ips=frozenset(
-            [HealthyIp(ip="192.168.1.2", ttl_a=600, health_port=443, is_healthy=False)]
-        ),
+        healthy_ips=frozenset([HealthyIp("192.168.1.2", 443, False)]),
     )
 
     assert record1 == record2
@@ -67,7 +54,7 @@ def test_equality_with_same_subdomain():
 
 def test_equality_with_different_subdomain():
     ttl_a = 300
-    healthy_ip = HealthyIp(ip="192.168.1.1", ttl_a=300, health_port=80, is_healthy=True)
+    healthy_ip = HealthyIp("192.168.1.1", 80, True)
 
     record1 = HealthyARecord(
         subdomain=dns.name.from_text("test1.example.com"),
@@ -87,19 +74,18 @@ def test_equality_with_different_subdomain():
 def test_repr():
     subdomain = dns.name.from_text("test.example.com")
     ttl_a = 300
-    healthy_ip1 = HealthyIp(
-        ip="192.168.1.1", ttl_a=300, health_port=80, is_healthy=True
-    )
-    healthy_ip2 = HealthyIp(
-        ip="192.168.1.2", ttl_a=300, health_port=80, is_healthy=True
-    )
+    healthy_ip1 = HealthyIp("192.168.1.1", 80, True)
+    healthy_ip2 = HealthyIp("192.168.1.2", 80, True)
     record = HealthyARecord(
         subdomain=subdomain,
         ttl_a=ttl_a,
         healthy_ips=frozenset([healthy_ip1, healthy_ip2]),
     )
 
-    assert (
-        f"{record}"
-        == f"HealthyARecord(subdomain={subdomain}, ttl_a={ttl_a}, healthy_ips=[{healthy_ip1}, {healthy_ip2}])"
+    as_text = f"{record}"
+
+    assert as_text.startswith(
+        f"HealthyARecord(subdomain={subdomain}, ttl_a={ttl_a}, healthy_ips=["
     )
+    assert f"{healthy_ip1}" in as_text
+    assert f"{healthy_ip2}" in as_text

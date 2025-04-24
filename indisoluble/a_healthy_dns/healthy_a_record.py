@@ -30,6 +30,14 @@ class HealthyARecord:
         self._ttl_a = ttl_a
         self._healthy_ips = healthy_ips
 
+    def updated_ips(self, updated_ips: FrozenSet[HealthyIp]) -> "HealthyARecord":
+        if updated_ips == self.healthy_ips:
+            return self
+
+        return HealthyARecord(
+            subdomain=self.subdomain, ttl_a=self.ttl_a, healthy_ips=updated_ips
+        )
+
     def __eq__(self, other):
         if not isinstance(other, HealthyARecord):
             return False
