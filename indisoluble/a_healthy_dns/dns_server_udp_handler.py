@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
-import socketserver
 import logging
+import socketserver
 
 import dns.exception
 import dns.flags

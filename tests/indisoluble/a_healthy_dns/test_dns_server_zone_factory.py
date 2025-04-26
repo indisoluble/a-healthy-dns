@@ -2,12 +2,12 @@
 
 import json
 
-from unittest.mock import patch
-
 import dns.name
 import dns.rdatatype
 
 import indisoluble.a_healthy_dns.dns_server_zone_factory as dszf
+
+from unittest.mock import patch
 
 from indisoluble.a_healthy_dns.healthy_ip import HealthyIp
 

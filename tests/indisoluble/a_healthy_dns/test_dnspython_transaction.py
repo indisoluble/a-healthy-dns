@@ -1,14 +1,12 @@
 #!/usr/bin/env python3
 
-import pytest
 import dns.name
 import dns.rdataclass
 import dns.rdataset
 import dns.rdatatype
-import dns.rdtypes.IN.A
 import dns.transaction
 import dns.versioned
-import dns.zone
+import pytest
 
 
 @pytest.fixture

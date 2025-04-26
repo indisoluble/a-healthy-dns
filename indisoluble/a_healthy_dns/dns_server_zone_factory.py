@@ -10,7 +10,7 @@ import dns.rdataset
 import dns.rdatatype
 import dns.versioned
 
-from typing import Any, Dict, NamedTuple, Optional, Set
+from typing import Any, NamedTuple, Optional, Set
 
 from .healthy_a_record import HealthyARecord
 from .healthy_ip import HealthyIp

@@ -1,9 +1,5 @@
 #!/usr/bin/env python3
 
-import pytest
-
-from unittest.mock import MagicMock, patch
-
 import dns.exception
 import dns.flags
 import dns.message
@@ -12,6 +8,10 @@ import dns.rcode
 import dns.rdataclass
 import dns.rdatatype
 import dns.zone
+
+import pytest
+
+from unittest.mock import MagicMock, patch
 
 from indisoluble.a_healthy_dns.dns_server_udp_handler import (
     _update_response,

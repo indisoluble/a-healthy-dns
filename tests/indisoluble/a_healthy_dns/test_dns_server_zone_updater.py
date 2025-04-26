@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
 
-from typing import List, NamedTuple
-
 import dns.name
 import dns.rdatatype
 import dns.versioned
 import pytest
 
+from typing import List, NamedTuple
 from unittest.mock import patch
 
 from indisoluble.a_healthy_dns.dns_server_zone_factory import ExtendedZone
