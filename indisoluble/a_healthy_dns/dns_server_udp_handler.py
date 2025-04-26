@@ -33,7 +33,7 @@ def _update_response(
 
         rdataset = node.get_rdataset(zone.rdclass, query_type)
         if not rdataset:
-            logging.warning(
+            logging.debug(
                 "Domain %s exists but has no %s records",
                 query_name,
                 dns.rdatatype.to_text(query_type),
@@ -57,7 +57,7 @@ class DnsServerUdpHandler(socketserver.BaseRequestHandler):
         try:
             query = dns.message.from_wire(data)
         except dns.exception.DNSException as ex:
-            logging.exception("Failed to parse DNS query: %s", ex)
+            logging.warning("Failed to parse DNS query: %s", ex)
             return
 
         response = dns.message.make_response(query)

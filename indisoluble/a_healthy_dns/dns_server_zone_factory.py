@@ -60,7 +60,7 @@ def _make_a_records(
     try:
         raw_resolutions = json.loads(args[ZONE_RESOLUTIONS_ARG])
     except json.JSONDecodeError as ex:
-        logging.exception("Failed to parse zone resolutions: %s", ex)
+        logging.error("Failed to parse zone resolutions: %s", ex)
         return None
 
     if not isinstance(raw_resolutions, dict):
@@ -118,13 +118,13 @@ def _make_a_records(
         try:
             healthy_ips = {HealthyIp(ip, health_port, False) for ip in ip_list}
         except ValueError as ex:
-            logging.exception("Invalid IP address in '%s': %s", subdomain, ex)
+            logging.error("Invalid IP address in '%s': %s", subdomain, ex)
             return None
 
         try:
             a_records.add(HealthyARecord(subdomain_name, ttl_a, healthy_ips))
         except ValueError as ex:
-            logging.exception("Invalid A record for '%s': %s", subdomain, ex)
+            logging.error("Invalid A record for '%s': %s", subdomain, ex)
             return None
 
     return ExtendedARecords(a_records, ttl_a)
@@ -134,7 +134,7 @@ def _make_ns_record(args: dict[str, Any]) -> Optional[ExtendedNsRecord]:
     try:
         name_servers = json.loads(args[NAME_SERVERS_ARG])
     except json.JSONDecodeError as ex:
-        logging.exception("Failed to parse name servers: %s", ex)
+        logging.error("Failed to parse name servers: %s", ex)
         return None
 
     if not isinstance(name_servers, list):

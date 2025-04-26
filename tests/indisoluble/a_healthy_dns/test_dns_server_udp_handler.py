@@ -226,7 +226,7 @@ def test_handle_exception_parsing_query(
     mock_from_wire.side_effect = dns.exception.DNSException("Test exception")
 
     # No need to call handle() as it's called automatically by the constructor
-    with patch("logging.exception") as mock_logging:
+    with patch("logging.warning") as mock_logging:
         _ = DnsServerUdpHandler(dns_request, dns_client_address, mock_server)
 
         mock_logging.assert_called_once()

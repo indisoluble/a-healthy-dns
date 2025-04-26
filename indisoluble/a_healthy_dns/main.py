@@ -129,8 +129,7 @@ def main():
     try:
         numeric_level = getattr(logging, args_dict[_LOG_LEVEL_ARG].upper())
     except AttributeError:
-        logging.error("Invalid log level: %s", args_dict[_LOG_LEVEL_ARG])
-        return
+        raise ValueError(f"Invalid log level: {args_dict[_LOG_LEVEL_ARG]}")
 
     logging.basicConfig(
         level=numeric_level,
