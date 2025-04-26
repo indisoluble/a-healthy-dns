@@ -49,9 +49,9 @@ def _make_arg_parser() -> argparse.ArgumentParser:
         "-p",
         "--port",
         type=int,
-        default=5053,
+        default=53053,
         dest=_PORT_ARG,
-        help="DNS server port (default: 5053)",
+        help="DNS server port (default: 53053)",
     )
     parser.add_argument(
         "-a",
