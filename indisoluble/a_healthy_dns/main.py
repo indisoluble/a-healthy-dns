@@ -6,6 +6,7 @@ import socketserver
 
 from . import dns_server_zone_factory as dszf
 from .dns_server_udp_handler import DnsServerUdpHandler
+from .dns_server_zone_updater import DnsServerZoneUpdater
 
 
 _CONNECTION_TIMEOUT_ARG = "connection_timeout"
@@ -135,11 +136,17 @@ def main():
         format="%(asctime)s - %(levelname)s - %(module)s.%(funcName)s - %(message)s",
     )
 
-    # Compose configuration
+    # Compose zone
     ext_zone = dszf.make_zone(args_dict)
     if not ext_zone:
         logging.error("Invalid zone configuration")
         return
+
+    # Start zone updater
+    zone_updater = DnsServerZoneUpdater(
+        ext_zone, args_dict[_TEST_INTERVAL_ARG], args_dict[_CONNECTION_TIMEOUT_ARG]
+    )
+    zone_updater.start()
 
     # Launch DNS server
     server_address = ("", args_dict[_PORT_ARG])
@@ -151,3 +158,6 @@ def main():
             server.serve_forever()
         except KeyboardInterrupt:
             logging.info("Shutting down DNS server")
+
+    # Stop zone updater
+    zone_updater.stop()
