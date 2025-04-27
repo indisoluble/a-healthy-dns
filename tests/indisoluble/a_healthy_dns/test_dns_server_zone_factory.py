@@ -41,6 +41,7 @@ def test_make_zone_success(mock_time):
         ),
         dszf.TTL_A_ARG: 300,
         dszf.TTL_NS_ARG: 86400,
+        dszf.TTL_SOA_ARG: 301,
         dszf.SOA_REFRESH_ARG: 7200,
         dszf.SOA_RETRY_ARG: 3600,
         dszf.SOA_EXPIRE_ARG: 1209600,
@@ -96,7 +97,7 @@ def test_make_zone_success(mock_time):
         # Check SOA record
         soa_rdataset = txn.get("dev.example.com.", dns.rdatatype.SOA)
         assert soa_rdataset is not None
-        assert soa_rdataset.ttl == 300
+        assert soa_rdataset.ttl == 301
 
         soa_rdata = soa_rdataset[0]
         assert str(soa_rdata.mname) == "ns1.example.com."
@@ -105,7 +106,7 @@ def test_make_zone_success(mock_time):
         assert soa_rdata.refresh == 7200
         assert soa_rdata.retry == 3600
         assert soa_rdata.expire == 1209600
-        assert soa_rdata.minimum == 300
+        assert soa_rdata.minimum == 301
 
         # Check NS records
         ns_rdataset = txn.get("dev.example.com.", dns.rdatatype.NS)
@@ -130,6 +131,7 @@ def test_make_zone_invalid_hosted_zone():
         ),
         dszf.TTL_A_ARG: 300,
         dszf.TTL_NS_ARG: 86400,
+        dszf.TTL_SOA_ARG: 301,
         dszf.SOA_REFRESH_ARG: 7200,
         dszf.SOA_RETRY_ARG: 3600,
         dszf.SOA_EXPIRE_ARG: 1209600,
@@ -153,6 +155,7 @@ def test_make_zone_invalid_hosted_zone_chars():
         ),
         dszf.TTL_A_ARG: 300,
         dszf.TTL_NS_ARG: 86400,
+        dszf.TTL_SOA_ARG: 301,
         dszf.SOA_REFRESH_ARG: 7200,
         dszf.SOA_RETRY_ARG: 3600,
         dszf.SOA_EXPIRE_ARG: 1209600,
@@ -176,6 +179,7 @@ def test_make_zone_invalid_json_name_servers():
         ),
         dszf.TTL_A_ARG: 300,
         dszf.TTL_NS_ARG: 86400,
+        dszf.TTL_SOA_ARG: 301,
         dszf.SOA_REFRESH_ARG: 7200,
         dszf.SOA_RETRY_ARG: 3600,
         dszf.SOA_EXPIRE_ARG: 1209600,
@@ -201,6 +205,7 @@ def test_make_zone_wrong_type_name_servers():
         ),
         dszf.TTL_A_ARG: 300,
         dszf.TTL_NS_ARG: 86400,
+        dszf.TTL_SOA_ARG: 301,
         dszf.SOA_REFRESH_ARG: 7200,
         dszf.SOA_RETRY_ARG: 3600,
         dszf.SOA_EXPIRE_ARG: 1209600,
@@ -224,6 +229,7 @@ def test_make_zone_empty_name_servers():
         ),
         dszf.TTL_A_ARG: 300,
         dszf.TTL_NS_ARG: 86400,
+        dszf.TTL_SOA_ARG: 301,
         dszf.SOA_REFRESH_ARG: 7200,
         dszf.SOA_RETRY_ARG: 3600,
         dszf.SOA_EXPIRE_ARG: 1209600,
@@ -249,6 +255,7 @@ def test_make_zone_invalid_name_server():
         ),
         dszf.TTL_A_ARG: 300,
         dszf.TTL_NS_ARG: 86400,
+        dszf.TTL_SOA_ARG: 301,
         dszf.SOA_REFRESH_ARG: 7200,
         dszf.SOA_RETRY_ARG: 3600,
         dszf.SOA_EXPIRE_ARG: 1209600,
@@ -272,6 +279,7 @@ def test_make_zone_negative_ttl_a():
         ),
         dszf.TTL_A_ARG: -300,  # Negative TTL
         dszf.TTL_NS_ARG: 86400,
+        dszf.TTL_SOA_ARG: 301,
         dszf.SOA_REFRESH_ARG: 7200,
         dszf.SOA_RETRY_ARG: 3600,
         dszf.SOA_EXPIRE_ARG: 1209600,
@@ -295,6 +303,31 @@ def test_make_zone_negative_ttl_ns():
         ),
         dszf.TTL_A_ARG: 300,
         dszf.TTL_NS_ARG: -86400,  # Negative TTL
+        dszf.TTL_SOA_ARG: 301,
+        dszf.SOA_REFRESH_ARG: 7200,
+        dszf.SOA_RETRY_ARG: 3600,
+        dszf.SOA_EXPIRE_ARG: 1209600,
+    }
+
+    ext_zone = dszf.make_zone(args)
+    assert ext_zone is None
+
+
+def test_make_zone_negative_ttl_soa():
+    args = {
+        dszf.HOSTED_ZONE_ARG: "dev.example.com",
+        dszf.NAME_SERVERS_ARG: json.dumps(["ns1.example.com"]),
+        dszf.ZONE_RESOLUTIONS_ARG: json.dumps(
+            {
+                "www": {
+                    dszf.SUBDOMAIN_IP_LIST_ARG: ["192.168.1.1"],
+                    dszf.SUBDOMAIN_HEALTH_PORT_ARG: 8080,
+                }
+            }
+        ),
+        dszf.TTL_A_ARG: 300,
+        dszf.TTL_NS_ARG: 86400,
+        dszf.TTL_SOA_ARG: -301,  # Negative TTL
         dszf.SOA_REFRESH_ARG: 7200,
         dszf.SOA_RETRY_ARG: 3600,
         dszf.SOA_EXPIRE_ARG: 1209600,
@@ -318,6 +351,7 @@ def test_make_zone_negative_soa_refresh():
         ),
         dszf.TTL_A_ARG: 300,
         dszf.TTL_NS_ARG: 86400,
+        dszf.TTL_SOA_ARG: 301,
         dszf.SOA_REFRESH_ARG: -7200,  # Negative refresh
         dszf.SOA_RETRY_ARG: 3600,
         dszf.SOA_EXPIRE_ARG: 1209600,
@@ -341,6 +375,7 @@ def test_make_zone_negative_soa_retry():
         ),
         dszf.TTL_A_ARG: 300,
         dszf.TTL_NS_ARG: 86400,
+        dszf.TTL_SOA_ARG: 301,
         dszf.SOA_REFRESH_ARG: 7200,
         dszf.SOA_RETRY_ARG: -3600,  # Negative retry
         dszf.SOA_EXPIRE_ARG: 1209600,
@@ -364,6 +399,7 @@ def test_make_zone_negative_soa_expire():
         ),
         dszf.TTL_A_ARG: 300,
         dszf.TTL_NS_ARG: 86400,
+        dszf.TTL_SOA_ARG: 301,
         dszf.SOA_REFRESH_ARG: 7200,
         dszf.SOA_RETRY_ARG: 3600,
         dszf.SOA_EXPIRE_ARG: -1209600,  # Negative expire
@@ -380,6 +416,7 @@ def test_make_zone_invalid_json_resolutions():
         dszf.ZONE_RESOLUTIONS_ARG: "invalid json",  # Invalid JSON
         dszf.TTL_A_ARG: 300,
         dszf.TTL_NS_ARG: 86400,
+        dszf.TTL_SOA_ARG: 301,
         dszf.SOA_REFRESH_ARG: 7200,
         dszf.SOA_RETRY_ARG: 3600,
         dszf.SOA_EXPIRE_ARG: 1209600,
@@ -398,6 +435,7 @@ def test_make_zone_wrong_type_resolutions():
         ),  # Wrong type (list instead of dict)
         dszf.TTL_A_ARG: 300,
         dszf.TTL_NS_ARG: 86400,
+        dszf.TTL_SOA_ARG: 301,
         dszf.SOA_REFRESH_ARG: 7200,
         dszf.SOA_RETRY_ARG: 3600,
         dszf.SOA_EXPIRE_ARG: 1209600,
@@ -414,6 +452,7 @@ def test_make_zone_empty_resolutions():
         dszf.ZONE_RESOLUTIONS_ARG: json.dumps({}),  # Empty dict
         dszf.TTL_A_ARG: 300,
         dszf.TTL_NS_ARG: 86400,
+        dszf.TTL_SOA_ARG: 301,
         dszf.SOA_REFRESH_ARG: 7200,
         dszf.SOA_RETRY_ARG: 3600,
         dszf.SOA_EXPIRE_ARG: 1209600,
@@ -437,6 +476,7 @@ def test_make_zone_invalid_subdomain():
         ),
         dszf.TTL_A_ARG: 300,
         dszf.TTL_NS_ARG: 86400,
+        dszf.TTL_SOA_ARG: 301,
         dszf.SOA_REFRESH_ARG: 7200,
         dszf.SOA_RETRY_ARG: 3600,
         dszf.SOA_EXPIRE_ARG: 1209600,
@@ -455,6 +495,7 @@ def test_make_zone_wrong_type_subdomain_config():
         ),
         dszf.TTL_A_ARG: 300,
         dszf.TTL_NS_ARG: 86400,
+        dszf.TTL_SOA_ARG: 301,
         dszf.SOA_REFRESH_ARG: 7200,
         dszf.SOA_RETRY_ARG: 3600,
         dszf.SOA_EXPIRE_ARG: 1209600,
@@ -478,6 +519,7 @@ def test_make_zone_wrong_type_ip_list():
         ),
         dszf.TTL_A_ARG: 300,
         dszf.TTL_NS_ARG: 86400,
+        dszf.TTL_SOA_ARG: 301,
         dszf.SOA_REFRESH_ARG: 7200,
         dszf.SOA_RETRY_ARG: 3600,
         dszf.SOA_EXPIRE_ARG: 1209600,
@@ -501,6 +543,7 @@ def test_make_zone_empty_ip_list():
         ),
         dszf.TTL_A_ARG: 300,
         dszf.TTL_NS_ARG: 86400,
+        dszf.TTL_SOA_ARG: 301,
         dszf.SOA_REFRESH_ARG: 7200,
         dszf.SOA_RETRY_ARG: 3600,
         dszf.SOA_EXPIRE_ARG: 1209600,
@@ -524,6 +567,7 @@ def test_make_zone_invalid_ip():
         ),
         dszf.TTL_A_ARG: 300,
         dszf.TTL_NS_ARG: 86400,
+        dszf.TTL_SOA_ARG: 301,
         dszf.SOA_REFRESH_ARG: 7200,
         dszf.SOA_RETRY_ARG: 3600,
         dszf.SOA_EXPIRE_ARG: 1209600,
@@ -547,6 +591,7 @@ def test_make_zone_malformed_ip():
         ),
         dszf.TTL_A_ARG: 300,
         dszf.TTL_NS_ARG: 86400,
+        dszf.TTL_SOA_ARG: 301,
         dszf.SOA_REFRESH_ARG: 7200,
         dszf.SOA_RETRY_ARG: 3600,
         dszf.SOA_EXPIRE_ARG: 1209600,
@@ -570,6 +615,7 @@ def test_make_zone_wrong_type_health_port():
         ),
         dszf.TTL_A_ARG: 300,
         dszf.TTL_NS_ARG: 86400,
+        dszf.TTL_SOA_ARG: 301,
         dszf.SOA_REFRESH_ARG: 7200,
         dszf.SOA_RETRY_ARG: 3600,
         dszf.SOA_EXPIRE_ARG: 1209600,
@@ -593,6 +639,7 @@ def test_make_zone_negative_health_port():
         ),
         dszf.TTL_A_ARG: 300,
         dszf.TTL_NS_ARG: 86400,
+        dszf.TTL_SOA_ARG: 301,
         dszf.SOA_REFRESH_ARG: 7200,
         dszf.SOA_RETRY_ARG: 3600,
         dszf.SOA_EXPIRE_ARG: 1209600,
@@ -616,6 +663,7 @@ def test_make_zone_invalid_port_range():
         ),
         dszf.TTL_A_ARG: 300,
         dszf.TTL_NS_ARG: 86400,
+        dszf.TTL_SOA_ARG: 301,
         dszf.SOA_REFRESH_ARG: 7200,
         dszf.SOA_RETRY_ARG: 3600,
         dszf.SOA_EXPIRE_ARG: 1209600,

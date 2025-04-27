@@ -17,11 +17,6 @@ from .healthy_ip import HealthyIp
 from .tools.is_valid_subdomain import is_valid_subdomain
 
 
-class ExtendedARecords(NamedTuple):
-    a_records: Set[HealthyARecord]
-    ttl_a: int
-
-
 class ExtendedNsRecord(NamedTuple):
     ns_rec: dns.rdataset.Rdataset
     primary_ns: str
@@ -37,6 +32,7 @@ NAME_SERVERS_ARG = "name_servers"
 ZONE_RESOLUTIONS_ARG = "zone_resolutions"
 TTL_A_ARG = "ttl_a"
 TTL_NS_ARG = "ttl_ns"
+TTL_SOA_ARG = "ttl_soa"
 SOA_REFRESH_ARG = "soa_refresh"
 SOA_RETRY_ARG = "soa_retry"
 SOA_EXPIRE_ARG = "soa_expire"
@@ -56,7 +52,7 @@ def _make_origin_name(args: dict[str, Any]) -> Optional[dns.name.Name]:
 
 def _make_a_records(
     origin_name: dns.name.Name, args: dict[str, Any]
-) -> Optional[ExtendedARecords]:
+) -> Optional[Set[HealthyARecord]]:
     try:
         raw_resolutions = json.loads(args[ZONE_RESOLUTIONS_ARG])
     except json.JSONDecodeError as ex:
@@ -73,8 +69,6 @@ def _make_a_records(
     if not raw_resolutions:
         logging.error("Zone resolutions cannot be empty")
         return None
-
-    ttl_a = int(args[TTL_A_ARG])
 
     a_records = set()
     for subdomain, sub_config in raw_resolutions.items():
@@ -122,12 +116,14 @@ def _make_a_records(
             return None
 
         try:
-            a_records.add(HealthyARecord(subdomain_name, ttl_a, healthy_ips))
+            a_records.add(
+                HealthyARecord(subdomain_name, int(args[TTL_A_ARG]), healthy_ips)
+            )
         except ValueError as ex:
             logging.error("Invalid A record for '%s': %s", subdomain, ex)
             return None
 
-    return ExtendedARecords(a_records, ttl_a)
+    return a_records
 
 
 def _make_ns_record(args: dict[str, Any]) -> Optional[ExtendedNsRecord]:
@@ -170,12 +166,13 @@ def _make_ns_record(args: dict[str, Any]) -> Optional[ExtendedNsRecord]:
 
 
 def _make_soa_record(
-    origin_name: dns.name.Name,
-    primary_ns: str,
-    soa_serial: int,
-    ttl_a: int,
-    args: dict[str, Any],
+    origin_name: dns.name.Name, primary_ns: str, soa_serial: int, args: dict[str, Any]
 ) -> Optional[dns.rdataset.Rdataset]:
+    ttl_soa = int(args[TTL_SOA_ARG])
+    if ttl_soa <= 0:
+        logging.error("TTL for SOA records must be positive")
+        return None
+
     soa_refresh = int(args[SOA_REFRESH_ARG])
     if soa_refresh <= 0:
         logging.error("SOA refresh value must be positive")
@@ -194,7 +191,7 @@ def _make_soa_record(
     return dns.rdataset.from_text(
         dns.rdataclass.IN,
         dns.rdatatype.SOA,
-        ttl_a,
+        ttl_soa,
         " ".join(
             [
                 primary_ns,
@@ -203,7 +200,7 @@ def _make_soa_record(
                 str(soa_refresh),
                 str(soa_retry),
                 str(soa_expire),
-                str(ttl_a),
+                str(ttl_soa),
             ]
         ),
     )
@@ -214,8 +211,8 @@ def make_zone(args: dict[str, Any]) -> Optional[ExtendedZone]:
     if origin_name is None:
         return None
 
-    ext_a_records = _make_a_records(origin_name, args)
-    if ext_a_records is None:
+    a_records = _make_a_records(origin_name, args)
+    if a_records is None:
         return None
 
     ext_ns_rec = _make_ns_record(args)
@@ -223,11 +220,7 @@ def make_zone(args: dict[str, Any]) -> Optional[ExtendedZone]:
         return None
 
     soa_rec = _make_soa_record(
-        origin_name,
-        ext_ns_rec.primary_ns,
-        int(time.time()),
-        ext_a_records.ttl_a,
-        args,
+        origin_name, ext_ns_rec.primary_ns, int(time.time()), args
     )
     if soa_rec is None:
         return None
@@ -238,4 +231,4 @@ def make_zone(args: dict[str, Any]) -> Optional[ExtendedZone]:
         txn.add(dns.name.empty, soa_rec)
 
     logging.info(f"Successfully created versioned DNS zone for {origin_name}")
-    return ExtendedZone(zone, ext_a_records.a_records)
+    return ExtendedZone(zone, a_records)

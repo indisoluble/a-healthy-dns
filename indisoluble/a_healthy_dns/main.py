@@ -70,6 +70,14 @@ def _make_arg_parser() -> argparse.ArgumentParser:
         help="TTL in seconds for NS records (default: 86400)",
     )
     parser.add_argument(
+        "-o",
+        "--ttl-soa",
+        type=int,
+        default=60,
+        dest=dszf.TTL_SOA_ARG,
+        help="TTL in seconds for SOA records (default: 60)",
+    )
+    parser.add_argument(
         "-f",
         "--soa-refresh",
         type=int,
