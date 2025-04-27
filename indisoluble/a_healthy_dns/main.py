@@ -121,7 +121,8 @@ def _make_arg_parser() -> argparse.ArgumentParser:
         "-l",
         "--log-level",
         type=str,
-        default="info",
+        choices=[name.lower() for name in logging._levelToName.values()],
+        default=logging._levelToName[logging.INFO].lower(),
         dest=_LOG_LEVEL_ARG,
         help="Logging level (default: info)",
     )
@@ -134,11 +135,7 @@ def main():
     args_dict = vars(args)
 
     # Set up logging
-    try:
-        numeric_level = getattr(logging, args_dict[_LOG_LEVEL_ARG].upper())
-    except AttributeError:
-        raise ValueError(f"Invalid log level: {args_dict[_LOG_LEVEL_ARG]}")
-
+    numeric_level = getattr(logging, args_dict[_LOG_LEVEL_ARG].upper())
     logging.basicConfig(
         level=numeric_level,
         format="%(asctime)s - %(levelname)s - %(module)s.%(funcName)s - %(message)s",
