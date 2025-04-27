@@ -185,36 +185,33 @@ def _completed_config(args: Dict[str, Any]):
         )
 
 
-def main():
-    args = _make_arg_parser().parse_args()
-    args_dict = vars(args)
-
+def _main(args: Dict[str, Any]):
     # Set up logging
-    numeric_level = getattr(logging, args_dict[_ARG_LOG_LEVEL].upper())
+    numeric_level = getattr(logging, args[_ARG_LOG_LEVEL].upper())
     logging.basicConfig(
         level=numeric_level,
         format="%(asctime)s - %(levelname)s - %(module)s.%(funcName)s - %(message)s",
     )
 
     # Complete config
-    _completed_config(args_dict)
+    _completed_config(args)
 
     # Compose zone
-    ext_zone = dszf.make_zone(args_dict)
+    ext_zone = dszf.make_zone(args)
     if not ext_zone:
         logging.error("Invalid zone configuration")
         return
 
     # Start zone updater
-    zone_updater = DnsServerZoneUpdater(ext_zone, args_dict)
+    zone_updater = DnsServerZoneUpdater(ext_zone, args)
     zone_updater.start()
 
     # Launch DNS server
-    server_address = ("", args_dict[_ARG_PORT])
+    server_address = ("", args[_ARG_PORT])
     with socketserver.UDPServer(server_address, DnsServerUdpHandler) as server:
         server.zone = ext_zone.zone
 
-        logging.info("DNS server listening on port %d", args_dict[_ARG_PORT])
+        logging.info("DNS server listening on port %d", args[_ARG_PORT])
         try:
             server.serve_forever()
         except KeyboardInterrupt:
@@ -222,3 +219,8 @@ def main():
 
     # Stop zone updater
     zone_updater.stop()
+
+
+def main():
+    args = _make_arg_parser().parse_args()
+    _main(vars(args))
