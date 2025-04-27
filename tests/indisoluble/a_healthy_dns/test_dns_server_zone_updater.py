@@ -9,7 +9,11 @@ from typing import List, NamedTuple
 from unittest.mock import patch
 
 from indisoluble.a_healthy_dns.dns_server_zone_factory import ExtendedZone
-from indisoluble.a_healthy_dns.dns_server_zone_updater import DnsServerZoneUpdater
+from indisoluble.a_healthy_dns.dns_server_zone_updater import (
+    ARG_CONNECTION_TIMEOUT,
+    ARG_TEST_INTERVAL,
+    DnsServerZoneUpdater,
+)
 from indisoluble.a_healthy_dns.healthy_a_record import HealthyARecord
 from indisoluble.a_healthy_dns.healthy_ip import HealthyIp
 
@@ -112,7 +116,7 @@ def extended_zone():
 @pytest.fixture
 def zone_updater(extended_zone):
     return DnsServerZoneUpdater(
-        extended_zone, check_interval_seconds=1, connection_timeout=1
+        extended_zone, {ARG_TEST_INTERVAL: 1, ARG_CONNECTION_TIMEOUT: 1}
     )
 
 
@@ -120,13 +124,13 @@ def test_init_with_invalid_parameters(extended_zone):
     # Test with invalid check interval
     with pytest.raises(ValueError):
         DnsServerZoneUpdater(
-            extended_zone, check_interval_seconds=0, connection_timeout=1
+            extended_zone, {ARG_TEST_INTERVAL: 0, ARG_CONNECTION_TIMEOUT: 1}
         )
 
     # Test with invalid connection timeout
     with pytest.raises(ValueError):
         DnsServerZoneUpdater(
-            extended_zone, check_interval_seconds=1, connection_timeout=0
+            extended_zone, {ARG_TEST_INTERVAL: 1, ARG_CONNECTION_TIMEOUT: 0}
         )
 
 

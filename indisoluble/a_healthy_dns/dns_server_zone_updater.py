@@ -7,20 +7,23 @@ import time
 import dns.rdataclass
 import dns.rdataset
 
+from typing import Any, Dict
+
 from .dns_server_zone_factory import ExtendedZone
 from .tools.can_create_connection import can_create_connection
 
 
+ARG_CONNECTION_TIMEOUT = "connection_timeout"
+ARG_TEST_INTERVAL = "test_interval"
+
+
 class DnsServerZoneUpdater:
-    def __init__(
-        self,
-        ext_zone: ExtendedZone,
-        check_interval_seconds: int,
-        connection_timeout: int,
-    ):
+    def __init__(self, ext_zone: ExtendedZone, args: Dict[str, Any]):
+        check_interval_seconds = args[ARG_TEST_INTERVAL]
         if check_interval_seconds <= 0:
             raise ValueError("Check interval must be positive")
 
+        connection_timeout = args[ARG_CONNECTION_TIMEOUT]
         if connection_timeout <= 0:
             raise ValueError("Connection timeout must be positive")
 
@@ -88,7 +91,7 @@ class DnsServerZoneUpdater:
                 logging.debug("Completed sleep between connectivity tests")
 
     def start(self):
-        if self._updater_thread is not None and self._updater_thread.is_alive():
+        if self._updater_thread and self._updater_thread.is_alive():
             logging.warning("Zone Updater is already running")
             return
 
@@ -100,7 +103,7 @@ class DnsServerZoneUpdater:
         self._updater_thread.start()
 
     def stop(self) -> bool:
-        if self._updater_thread is None or not self._updater_thread.is_alive():
+        if not self._updater_thread or not self._updater_thread.is_alive():
             logging.warning("Zone Updater is not running")
             return True
 
