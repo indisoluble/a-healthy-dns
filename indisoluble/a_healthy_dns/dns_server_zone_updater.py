@@ -6,10 +6,12 @@ import time
 
 import dns.rdataclass
 import dns.rdataset
+import dns.transaction
 
 from typing import Any, Dict
 
 from .dns_server_zone_factory import ExtendedZone
+from .healthy_a_record import HealthyARecord
 from .tools.can_create_connection import can_create_connection
 
 
@@ -35,49 +37,44 @@ class DnsServerZoneUpdater:
         self._stop_event = threading.Event()
         self._updater_thread = None
 
+    def _update_a_record_in_zone(
+        self, a_record: HealthyARecord, txn: dns.transaction.Transaction
+    ) -> HealthyARecord:
+        updated_ips = frozenset(
+            health_ip.updated_status(
+                can_create_connection(
+                    health_ip.ip, health_ip.health_port, self._connection_timeout
+                )
+            )
+            for health_ip in a_record.healthy_ips
+        )
+        if updated_ips == a_record.healthy_ips:
+            return a_record
+
+        logging.debug(f"Updating A record {a_record.subdomain} with IPs: {updated_ips}")
+        updated_a_record = a_record.updated_ips(updated_ips)
+
+        ips = [ip.ip for ip in updated_a_record.healthy_ips if ip.is_healthy]
+        if ips:
+            txn.replace(
+                updated_a_record.subdomain,
+                dns.rdataset.from_text(
+                    dns.rdataclass.IN, dns.rdatatype.A, updated_a_record.ttl_a, *ips
+                ),
+            )
+        else:
+            txn.delete(updated_a_record.subdomain)
+
+        return updated_a_record
+
     def _update_zone(self):
         with self._zone.writer() as txn:
-            updated_records = set()
-
-            for a_record in self._a_records:
-                updated_ips = frozenset(
-                    health_ip.updated_status(
-                        can_create_connection(
-                            health_ip.ip,
-                            health_ip.health_port,
-                            self._connection_timeout,
-                        )
-                    )
-                    for health_ip in a_record.healthy_ips
-                )
-                if updated_ips == a_record.healthy_ips:
-                    updated_records.add(a_record)
-                else:
-                    logging.debug(
-                        f"Updating A record {a_record.subdomain} with IPs: {updated_ips}"
-                    )
-
-                    updated_a_record = a_record.updated_ips(updated_ips)
-                    updated_records.add(updated_a_record)
-
-                    ips = [
-                        ip.ip for ip in updated_a_record.healthy_ips if ip.is_healthy
-                    ]
-                    if ips:
-                        updated_dataset = dns.rdataset.from_text(
-                            dns.rdataclass.IN,
-                            dns.rdatatype.A,
-                            updated_a_record.ttl_a,
-                            *ips,
-                        )
-                        txn.replace(updated_a_record.subdomain, updated_dataset)
-                    else:
-                        txn.delete(updated_a_record.subdomain)
-
+            self._a_records = set(
+                self._update_a_record_in_zone(a_record, txn)
+                for a_record in self._a_records
+            )
             if txn.changed():
                 txn.update_serial()
-
-            self._a_records = updated_records
 
     def _update_zone_loop(self):
         while not self._stop_event.is_set():
