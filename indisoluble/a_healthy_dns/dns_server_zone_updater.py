@@ -15,6 +15,7 @@ from .healthy_a_record import HealthyARecord
 from .tools.can_create_connection import can_create_connection
 
 
+_STOP_JOIN_EXTRA_TIMEOUT = 1
 ARG_CONNECTION_TIMEOUT = "connection_timeout"
 ARG_TEST_INTERVAL = "test_interval"
 
@@ -40,19 +41,25 @@ class DnsServerZoneUpdater:
     def _update_a_record_in_zone(
         self, a_record: HealthyARecord, txn: dns.transaction.Transaction
     ) -> HealthyARecord:
-        updated_ips = frozenset(
-            health_ip.updated_status(
-                can_create_connection(
-                    health_ip.ip, health_ip.health_port, self._connection_timeout
+        updated_ips = set()
+        for health_ip in a_record.healthy_ips:
+            if self._stop_event.is_set():
+                logging.debug("Abort record update. Return A record as it is")
+                return a_record
+
+            updated_ips.add(
+                health_ip.updated_status(
+                    can_create_connection(
+                        health_ip.ip, health_ip.health_port, self._connection_timeout
+                    )
                 )
             )
-            for health_ip in a_record.healthy_ips
-        )
+
         if updated_ips == a_record.healthy_ips:
             return a_record
 
         logging.debug(f"Updating A record {a_record.subdomain} with IPs: {updated_ips}")
-        updated_a_record = a_record.updated_ips(updated_ips)
+        updated_a_record = a_record.updated_ips(frozenset(updated_ips))
 
         ips = [ip.ip for ip in updated_a_record.healthy_ips if ip.is_healthy]
         if ips:
@@ -69,10 +76,16 @@ class DnsServerZoneUpdater:
 
     def _update_zone(self):
         with self._zone.writer() as txn:
-            self._a_records = set(
-                self._update_a_record_in_zone(a_record, txn)
-                for a_record in self._a_records
-            )
+            updated_a_records = set()
+            for a_record in self._a_records:
+                if self._stop_event.is_set():
+                    logging.debug("Zone updater stopped")
+                    break
+
+                updated_a_records.add(self._update_a_record_in_zone(a_record, txn))
+
+            self._a_records = updated_a_records | self._a_records
+
             if txn.changed():
                 txn.update_serial()
 
@@ -106,7 +119,9 @@ class DnsServerZoneUpdater:
 
         logging.info("Stopping Zone Updater")
         self._stop_event.set()
-        self._updater_thread.join(timeout=self._connection_timeout + 1)
+        self._updater_thread.join(
+            timeout=self._connection_timeout + _STOP_JOIN_EXTRA_TIMEOUT
+        )
         if self._updater_thread.is_alive():
             logging.warning("Zone Updater thread did not terminate gracefully")
             return False
