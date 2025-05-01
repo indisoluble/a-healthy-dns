@@ -71,6 +71,15 @@ def test_equality_with_different_subdomain():
     assert set([record1]) != set([record2])
 
 
+def test_equality_with_non_healthy_a_record():
+    record = HealthyARecord(
+        subdomain=dns.name.from_text("test.example.com"),
+        ttl_a=300,
+        healthy_ips=frozenset([HealthyIp("192.168.1.1", 80, True)]),
+    )
+    assert record != "test.example.com"
+
+
 def test_repr():
     subdomain = dns.name.from_text("test.example.com")
     ttl_a = 300
@@ -89,3 +98,38 @@ def test_repr():
     )
     assert f"{healthy_ip1}" in as_text
     assert f"{healthy_ip2}" in as_text
+
+
+def test_updated_ips_with_new_ips():
+    subdomain = dns.name.from_text("test.example.com")
+    ttl_a = 300
+    original_ips = frozenset(
+        [HealthyIp("192.168.1.1", 80, True), HealthyIp("192.168.1.2", 80, True)]
+    )
+
+    record = HealthyARecord(subdomain=subdomain, ttl_a=ttl_a, healthy_ips=original_ips)
+
+    new_ips = frozenset(
+        [HealthyIp("192.168.1.3", 80, True), HealthyIp("192.168.1.4", 443, True)]
+    )
+    updated_record = record.updated_ips(new_ips)
+
+    assert updated_record is not record
+    assert updated_record.subdomain == record.subdomain
+    assert updated_record.ttl_a == record.ttl_a
+    assert updated_record.healthy_ips == new_ips
+
+
+def test_updated_ips_with_same_ips():
+    subdomain = dns.name.from_text("test.example.com")
+    ttl_a = 300
+    healthy_ips = frozenset(
+        [HealthyIp("192.168.1.1", 80, True), HealthyIp("192.168.1.2", 80, True)]
+    )
+
+    record = HealthyARecord(subdomain=subdomain, ttl_a=ttl_a, healthy_ips=healthy_ips)
+
+    updated_record = record.updated_ips(healthy_ips)
+
+    assert updated_record is record
+    assert updated_record.healthy_ips == healthy_ips
