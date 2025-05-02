@@ -4,6 +4,7 @@ import json
 
 import dns.name
 import dns.rdatatype
+import pytest
 
 import indisoluble.a_healthy_dns.dns_server_zone_factory as dszf
 
@@ -12,11 +13,9 @@ from unittest.mock import patch
 from indisoluble.a_healthy_dns.healthy_ip import HealthyIp
 
 
-@patch("time.time")
-def test_make_zone_success(mock_time):
-    mock_time.return_value = 1234567890
-
-    args = {
+@pytest.fixture
+def args():
+    return {
         dszf.ARG_HOSTED_ZONE: "dev.example.com",
         dszf.ARG_NAME_SERVERS: json.dumps(["ns1.example.com", "ns2.example.com"]),
         dszf.ARG_ZONE_RESOLUTIONS: json.dumps(
@@ -45,7 +44,17 @@ def test_make_zone_success(mock_time):
         dszf.ARG_SOA_REFRESH: 7200,
         dszf.ARG_SOA_RETRY: 3600,
         dszf.ARG_SOA_EXPIRE: 1209600,
+        dszf.ARG_SOA_MIN_TTL: 601,
+        dszf.ARG_DNSSEC_PRIVATE_KEY_PEM: None,
+        dszf.ARG_DNSSEC_ALGORITHM: "RSASHA256",
+        dszf.ARG_DNSSEC_LIFETIME: 1209600,
+        dszf.ARG_DNSSEC_TTL_DNSKEY: 86400,
     }
+
+
+@patch("time.time")
+def test_make_zone_success(mock_time, args):
+    mock_time.return_value = 1234567890
 
     ext_zone = dszf.make_zone(args)
 
@@ -106,7 +115,7 @@ def test_make_zone_success(mock_time):
         assert soa_rdata.refresh == 7200
         assert soa_rdata.retry == 3600
         assert soa_rdata.expire == 1209600
-        assert soa_rdata.minimum == 301
+        assert soa_rdata.minimum == 601
 
         # Check NS records
         ns_rdataset = txn.get("dev.example.com.", dns.rdatatype.NS)
@@ -117,557 +126,260 @@ def test_make_zone_success(mock_time):
         assert ns_names == ["ns1.example.com.", "ns2.example.com."]
 
 
-def test_make_zone_invalid_hosted_zone():
-    args = {
-        dszf.ARG_HOSTED_ZONE: "",  # Invalid empty hosted zone
-        dszf.ARG_NAME_SERVERS: json.dumps(["ns1.example.com"]),
-        dszf.ARG_ZONE_RESOLUTIONS: json.dumps(
-            {
-                "www": {
-                    dszf.ARG_SUBDOMAIN_IP_LIST: ["192.168.1.1"],
-                    dszf.ARG_SUBDOMAIN_HEALTH_PORT: 8080,
-                }
+def test_make_zone_invalid_hosted_zone(args):
+    args[dszf.ARG_HOSTED_ZONE] = ""  # Invalid empty hosted zone
+
+    ext_zone = dszf.make_zone(args)
+
+    assert ext_zone is None
+
+
+def test_make_zone_invalid_hosted_zone_chars(args):
+    args[dszf.ARG_HOSTED_ZONE] = "dev.example@.com"  # Invalid character in domain
+
+    ext_zone = dszf.make_zone(args)
+
+    assert ext_zone is None
+
+
+def test_make_zone_invalid_json_name_servers(args):
+    args[dszf.ARG_NAME_SERVERS] = "invalid json"  # Invalid JSON
+
+    ext_zone = dszf.make_zone(args)
+
+    assert ext_zone is None
+
+
+def test_make_zone_wrong_type_name_servers(args):
+    args[dszf.ARG_NAME_SERVERS] = json.dumps(
+        {"ns": "ns1.example.com"}
+    )  # Wrong type (dict instead of list)
+
+    ext_zone = dszf.make_zone(args)
+
+    assert ext_zone is None
+
+
+def test_make_zone_empty_name_servers(args):
+    args[dszf.ARG_NAME_SERVERS] = json.dumps([])  # Empty list
+
+    ext_zone = dszf.make_zone(args)
+
+    assert ext_zone is None
+
+
+def test_make_zone_invalid_name_server(args):
+    args[dszf.ARG_NAME_SERVERS] = json.dumps(
+        ["ns1.example@.com"]
+    )  # Invalid character in name server
+
+    ext_zone = dszf.make_zone(args)
+
+    assert ext_zone is None
+
+
+def test_make_zone_negative_ttl_a(args):
+    args[dszf.ARG_TTL_A] = -300  # Negative TTL
+
+    ext_zone = dszf.make_zone(args)
+
+    assert ext_zone is None
+
+
+def test_make_zone_negative_ttl_ns(args):
+    args[dszf.ARG_TTL_NS] = -86400  # Negative TTL
+
+    ext_zone = dszf.make_zone(args)
+
+    assert ext_zone is None
+
+
+def test_make_zone_negative_ttl_soa(args):
+    args[dszf.ARG_TTL_SOA] = -301  # Negative TTL
+
+    ext_zone = dszf.make_zone(args)
+
+    assert ext_zone is None
+
+
+def test_make_zone_negative_soa_refresh(args):
+    args[dszf.ARG_SOA_REFRESH] = -7200  # Negative refresh
+
+    ext_zone = dszf.make_zone(args)
+
+    assert ext_zone is None
+
+
+def test_make_zone_negative_soa_retry(args):
+    args[dszf.ARG_SOA_RETRY] = -3600  # Negative retry
+
+    ext_zone = dszf.make_zone(args)
+
+    assert ext_zone is None
+
+
+def test_make_zone_negative_soa_expire(args):
+    args[dszf.ARG_SOA_EXPIRE] = -1209600  # Negative expire
+
+    ext_zone = dszf.make_zone(args)
+
+    assert ext_zone is None
+
+
+def test_make_zone_negative_soa_min_ttl(args):
+    args[dszf.ARG_SOA_MIN_TTL] = -601  # Negative minimum TTL
+
+    ext_zone = dszf.make_zone(args)
+
+    assert ext_zone is None
+
+
+def test_make_zone_invalid_json_resolutions(args):
+    args[dszf.ARG_ZONE_RESOLUTIONS] = "invalid json"  # Invalid JSON
+
+    ext_zone = dszf.make_zone(args)
+
+    assert ext_zone is None
+
+
+def test_make_zone_wrong_type_resolutions(args):
+    args[dszf.ARG_ZONE_RESOLUTIONS] = json.dumps(
+        ["192.168.1.1", 8080]
+    )  # Wrong type (list instead of dict)
+
+    ext_zone = dszf.make_zone(args)
+
+    assert ext_zone is None
+
+
+def test_make_zone_empty_resolutions(args):
+    args[dszf.ARG_ZONE_RESOLUTIONS] = json.dumps({})  # Empty dict
+
+    ext_zone = dszf.make_zone(args)
+
+    assert ext_zone is None
+
+
+def test_make_zone_invalid_subdomain(args):
+    args[dszf.ARG_ZONE_RESOLUTIONS] = json.dumps(
+        {
+            "www@": {
+                dszf.ARG_SUBDOMAIN_IP_LIST: ["192.168.1.1"],
+                dszf.ARG_SUBDOMAIN_HEALTH_PORT: 8080,
             }
-        ),
-        dszf.ARG_TTL_A: 300,
-        dszf.ARG_TTL_NS: 86400,
-        dszf.ARG_TTL_SOA: 301,
-        dszf.ARG_SOA_REFRESH: 7200,
-        dszf.ARG_SOA_RETRY: 3600,
-        dszf.ARG_SOA_EXPIRE: 1209600,
-    }
+        }
+    )  # Invalid subdomain
 
     ext_zone = dszf.make_zone(args)
+
     assert ext_zone is None
 
 
-def test_make_zone_invalid_hosted_zone_chars():
-    args = {
-        dszf.ARG_HOSTED_ZONE: "dev.example@.com",  # Invalid character in domain
-        dszf.ARG_NAME_SERVERS: json.dumps(["ns1.example.com"]),
-        dszf.ARG_ZONE_RESOLUTIONS: json.dumps(
-            {
-                "www": {
-                    dszf.ARG_SUBDOMAIN_IP_LIST: ["192.168.1.1"],
-                    dszf.ARG_SUBDOMAIN_HEALTH_PORT: 8080,
-                }
+def test_make_zone_wrong_type_subdomain_config(args):
+    args[dszf.ARG_ZONE_RESOLUTIONS] = json.dumps(
+        {"www": ["192.168.1.1", 8080]}
+    )  # Wrong type (list instead of dict)
+
+    ext_zone = dszf.make_zone(args)
+
+    assert ext_zone is None
+
+
+def test_make_zone_wrong_type_ip_list(args):
+    args[dszf.ARG_ZONE_RESOLUTIONS] = json.dumps(
+        {
+            "www": {
+                dszf.ARG_SUBDOMAIN_IP_LIST: "192.168.1.1",
+                dszf.ARG_SUBDOMAIN_HEALTH_PORT: 8080,
             }
-        ),
-        dszf.ARG_TTL_A: 300,
-        dszf.ARG_TTL_NS: 86400,
-        dszf.ARG_TTL_SOA: 301,
-        dszf.ARG_SOA_REFRESH: 7200,
-        dszf.ARG_SOA_RETRY: 3600,
-        dszf.ARG_SOA_EXPIRE: 1209600,
-    }
+        }
+    )  # Wrong type (string instead of list)
 
     ext_zone = dszf.make_zone(args)
+
     assert ext_zone is None
 
 
-def test_make_zone_invalid_json_name_servers():
-    args = {
-        dszf.ARG_HOSTED_ZONE: "dev.example.com",
-        dszf.ARG_NAME_SERVERS: "invalid json",  # Invalid JSON
-        dszf.ARG_ZONE_RESOLUTIONS: json.dumps(
-            {
-                "www": {
-                    dszf.ARG_SUBDOMAIN_IP_LIST: ["192.168.1.1"],
-                    dszf.ARG_SUBDOMAIN_HEALTH_PORT: 8080,
-                }
+def test_make_zone_empty_ip_list(args):
+    args[dszf.ARG_ZONE_RESOLUTIONS] = json.dumps(
+        {"www": {dszf.ARG_SUBDOMAIN_IP_LIST: [], dszf.ARG_SUBDOMAIN_HEALTH_PORT: 8080}}
+    )  # Empty list
+
+    ext_zone = dszf.make_zone(args)
+
+    assert ext_zone is None
+
+
+def test_make_zone_invalid_ip(args):
+    args[dszf.ARG_ZONE_RESOLUTIONS] = json.dumps(
+        {
+            "www": {
+                dszf.ARG_SUBDOMAIN_IP_LIST: ["192.168.1.300"],
+                dszf.ARG_SUBDOMAIN_HEALTH_PORT: 8080,
             }
-        ),
-        dszf.ARG_TTL_A: 300,
-        dszf.ARG_TTL_NS: 86400,
-        dszf.ARG_TTL_SOA: 301,
-        dszf.ARG_SOA_REFRESH: 7200,
-        dszf.ARG_SOA_RETRY: 3600,
-        dszf.ARG_SOA_EXPIRE: 1209600,
-    }
+        }
+    )  # Invalid IP (octet > 255)
 
     ext_zone = dszf.make_zone(args)
+
     assert ext_zone is None
 
 
-def test_make_zone_wrong_type_name_servers():
-    args = {
-        dszf.ARG_HOSTED_ZONE: "dev.example.com",
-        dszf.ARG_NAME_SERVERS: json.dumps(
-            {"ns": "ns1.example.com"}
-        ),  # Wrong type (dict instead of list)
-        dszf.ARG_ZONE_RESOLUTIONS: json.dumps(
-            {
-                "www": {
-                    dszf.ARG_SUBDOMAIN_IP_LIST: ["192.168.1.1"],
-                    dszf.ARG_SUBDOMAIN_HEALTH_PORT: 8080,
-                }
+def test_make_zone_malformed_ip(args):
+    args[dszf.ARG_ZONE_RESOLUTIONS] = json.dumps(
+        {
+            "www": {
+                dszf.ARG_SUBDOMAIN_IP_LIST: ["192.168.1"],
+                dszf.ARG_SUBDOMAIN_HEALTH_PORT: 8080,
             }
-        ),
-        dszf.ARG_TTL_A: 300,
-        dszf.ARG_TTL_NS: 86400,
-        dszf.ARG_TTL_SOA: 301,
-        dszf.ARG_SOA_REFRESH: 7200,
-        dszf.ARG_SOA_RETRY: 3600,
-        dszf.ARG_SOA_EXPIRE: 1209600,
-    }
+        }
+    )  # Malformed IP (missing octet)
 
     ext_zone = dszf.make_zone(args)
+
     assert ext_zone is None
 
 
-def test_make_zone_empty_name_servers():
-    args = {
-        dszf.ARG_HOSTED_ZONE: "dev.example.com",
-        dszf.ARG_NAME_SERVERS: json.dumps([]),  # Empty list
-        dszf.ARG_ZONE_RESOLUTIONS: json.dumps(
-            {
-                "www": {
-                    dszf.ARG_SUBDOMAIN_IP_LIST: ["192.168.1.1"],
-                    dszf.ARG_SUBDOMAIN_HEALTH_PORT: 8080,
-                }
+def test_make_zone_wrong_type_health_port(args):
+    args[dszf.ARG_ZONE_RESOLUTIONS] = json.dumps(
+        {
+            "www": {
+                dszf.ARG_SUBDOMAIN_IP_LIST: ["192.168.1.1"],
+                dszf.ARG_SUBDOMAIN_HEALTH_PORT: "8080",
             }
-        ),
-        dszf.ARG_TTL_A: 300,
-        dszf.ARG_TTL_NS: 86400,
-        dszf.ARG_TTL_SOA: 301,
-        dszf.ARG_SOA_REFRESH: 7200,
-        dszf.ARG_SOA_RETRY: 3600,
-        dszf.ARG_SOA_EXPIRE: 1209600,
-    }
+        }
+    )  # String instead of int
 
     ext_zone = dszf.make_zone(args)
+
     assert ext_zone is None
 
 
-def test_make_zone_invalid_name_server():
-    args = {
-        dszf.ARG_HOSTED_ZONE: "dev.example.com",
-        dszf.ARG_NAME_SERVERS: json.dumps(
-            ["ns1.example@.com"]
-        ),  # Invalid character in name server
-        dszf.ARG_ZONE_RESOLUTIONS: json.dumps(
-            {
-                "www": {
-                    dszf.ARG_SUBDOMAIN_IP_LIST: ["192.168.1.1"],
-                    dszf.ARG_SUBDOMAIN_HEALTH_PORT: 8080,
-                }
+def test_make_zone_negative_health_port(args):
+    args[dszf.ARG_ZONE_RESOLUTIONS] = json.dumps(
+        {
+            "www": {
+                dszf.ARG_SUBDOMAIN_IP_LIST: ["192.168.1.1"],
+                dszf.ARG_SUBDOMAIN_HEALTH_PORT: -8080,
             }
-        ),
-        dszf.ARG_TTL_A: 300,
-        dszf.ARG_TTL_NS: 86400,
-        dszf.ARG_TTL_SOA: 301,
-        dszf.ARG_SOA_REFRESH: 7200,
-        dszf.ARG_SOA_RETRY: 3600,
-        dszf.ARG_SOA_EXPIRE: 1209600,
-    }
+        }
+    )  # Negative port
 
     ext_zone = dszf.make_zone(args)
+
     assert ext_zone is None
 
 
-def test_make_zone_negative_ttl_a():
-    args = {
-        dszf.ARG_HOSTED_ZONE: "dev.example.com",
-        dszf.ARG_NAME_SERVERS: json.dumps(["ns1.example.com"]),
-        dszf.ARG_ZONE_RESOLUTIONS: json.dumps(
-            {
-                "www": {
-                    dszf.ARG_SUBDOMAIN_IP_LIST: ["192.168.1.1"],
-                    dszf.ARG_SUBDOMAIN_HEALTH_PORT: 8080,
-                }
+def test_make_zone_invalid_port_range(args):
+    args[dszf.ARG_ZONE_RESOLUTIONS] = json.dumps(
+        {
+            "www": {
+                dszf.ARG_SUBDOMAIN_IP_LIST: ["192.168.1.1"],
+                dszf.ARG_SUBDOMAIN_HEALTH_PORT: 65536,
             }
-        ),
-        dszf.ARG_TTL_A: -300,  # Negative TTL
-        dszf.ARG_TTL_NS: 86400,
-        dszf.ARG_TTL_SOA: 301,
-        dszf.ARG_SOA_REFRESH: 7200,
-        dszf.ARG_SOA_RETRY: 3600,
-        dszf.ARG_SOA_EXPIRE: 1209600,
-    }
+        }
+    )  # Port > 65535 (invalid)
 
     ext_zone = dszf.make_zone(args)
-    assert ext_zone is None
 
-
-def test_make_zone_negative_ttl_ns():
-    args = {
-        dszf.ARG_HOSTED_ZONE: "dev.example.com",
-        dszf.ARG_NAME_SERVERS: json.dumps(["ns1.example.com"]),
-        dszf.ARG_ZONE_RESOLUTIONS: json.dumps(
-            {
-                "www": {
-                    dszf.ARG_SUBDOMAIN_IP_LIST: ["192.168.1.1"],
-                    dszf.ARG_SUBDOMAIN_HEALTH_PORT: 8080,
-                }
-            }
-        ),
-        dszf.ARG_TTL_A: 300,
-        dszf.ARG_TTL_NS: -86400,  # Negative TTL
-        dszf.ARG_TTL_SOA: 301,
-        dszf.ARG_SOA_REFRESH: 7200,
-        dszf.ARG_SOA_RETRY: 3600,
-        dszf.ARG_SOA_EXPIRE: 1209600,
-    }
-
-    ext_zone = dszf.make_zone(args)
-    assert ext_zone is None
-
-
-def test_make_zone_negative_ttl_soa():
-    args = {
-        dszf.ARG_HOSTED_ZONE: "dev.example.com",
-        dszf.ARG_NAME_SERVERS: json.dumps(["ns1.example.com"]),
-        dszf.ARG_ZONE_RESOLUTIONS: json.dumps(
-            {
-                "www": {
-                    dszf.ARG_SUBDOMAIN_IP_LIST: ["192.168.1.1"],
-                    dszf.ARG_SUBDOMAIN_HEALTH_PORT: 8080,
-                }
-            }
-        ),
-        dszf.ARG_TTL_A: 300,
-        dszf.ARG_TTL_NS: 86400,
-        dszf.ARG_TTL_SOA: -301,  # Negative TTL
-        dszf.ARG_SOA_REFRESH: 7200,
-        dszf.ARG_SOA_RETRY: 3600,
-        dszf.ARG_SOA_EXPIRE: 1209600,
-    }
-
-    ext_zone = dszf.make_zone(args)
-    assert ext_zone is None
-
-
-def test_make_zone_negative_soa_refresh():
-    args = {
-        dszf.ARG_HOSTED_ZONE: "dev.example.com",
-        dszf.ARG_NAME_SERVERS: json.dumps(["ns1.example.com"]),
-        dszf.ARG_ZONE_RESOLUTIONS: json.dumps(
-            {
-                "www": {
-                    dszf.ARG_SUBDOMAIN_IP_LIST: ["192.168.1.1"],
-                    dszf.ARG_SUBDOMAIN_HEALTH_PORT: 8080,
-                }
-            }
-        ),
-        dszf.ARG_TTL_A: 300,
-        dszf.ARG_TTL_NS: 86400,
-        dszf.ARG_TTL_SOA: 301,
-        dszf.ARG_SOA_REFRESH: -7200,  # Negative refresh
-        dszf.ARG_SOA_RETRY: 3600,
-        dszf.ARG_SOA_EXPIRE: 1209600,
-    }
-
-    ext_zone = dszf.make_zone(args)
-    assert ext_zone is None
-
-
-def test_make_zone_negative_soa_retry():
-    args = {
-        dszf.ARG_HOSTED_ZONE: "dev.example.com",
-        dszf.ARG_NAME_SERVERS: json.dumps(["ns1.example.com"]),
-        dszf.ARG_ZONE_RESOLUTIONS: json.dumps(
-            {
-                "www": {
-                    dszf.ARG_SUBDOMAIN_IP_LIST: ["192.168.1.1"],
-                    dszf.ARG_SUBDOMAIN_HEALTH_PORT: 8080,
-                }
-            }
-        ),
-        dszf.ARG_TTL_A: 300,
-        dszf.ARG_TTL_NS: 86400,
-        dszf.ARG_TTL_SOA: 301,
-        dszf.ARG_SOA_REFRESH: 7200,
-        dszf.ARG_SOA_RETRY: -3600,  # Negative retry
-        dszf.ARG_SOA_EXPIRE: 1209600,
-    }
-
-    ext_zone = dszf.make_zone(args)
-    assert ext_zone is None
-
-
-def test_make_zone_negative_soa_expire():
-    args = {
-        dszf.ARG_HOSTED_ZONE: "dev.example.com",
-        dszf.ARG_NAME_SERVERS: json.dumps(["ns1.example.com"]),
-        dszf.ARG_ZONE_RESOLUTIONS: json.dumps(
-            {
-                "www": {
-                    dszf.ARG_SUBDOMAIN_IP_LIST: ["192.168.1.1"],
-                    dszf.ARG_SUBDOMAIN_HEALTH_PORT: 8080,
-                }
-            }
-        ),
-        dszf.ARG_TTL_A: 300,
-        dszf.ARG_TTL_NS: 86400,
-        dszf.ARG_TTL_SOA: 301,
-        dszf.ARG_SOA_REFRESH: 7200,
-        dszf.ARG_SOA_RETRY: 3600,
-        dszf.ARG_SOA_EXPIRE: -1209600,  # Negative expire
-    }
-
-    ext_zone = dszf.make_zone(args)
-    assert ext_zone is None
-
-
-def test_make_zone_invalid_json_resolutions():
-    args = {
-        dszf.ARG_HOSTED_ZONE: "dev.example.com",
-        dszf.ARG_NAME_SERVERS: json.dumps(["ns1.example.com"]),
-        dszf.ARG_ZONE_RESOLUTIONS: "invalid json",  # Invalid JSON
-        dszf.ARG_TTL_A: 300,
-        dszf.ARG_TTL_NS: 86400,
-        dszf.ARG_TTL_SOA: 301,
-        dszf.ARG_SOA_REFRESH: 7200,
-        dszf.ARG_SOA_RETRY: 3600,
-        dszf.ARG_SOA_EXPIRE: 1209600,
-    }
-
-    ext_zone = dszf.make_zone(args)
-    assert ext_zone is None
-
-
-def test_make_zone_wrong_type_resolutions():
-    args = {
-        dszf.ARG_HOSTED_ZONE: "dev.example.com",
-        dszf.ARG_NAME_SERVERS: json.dumps(["ns1.example.com"]),
-        dszf.ARG_ZONE_RESOLUTIONS: json.dumps(
-            ["192.168.1.1", 8080]
-        ),  # Wrong type (list instead of dict)
-        dszf.ARG_TTL_A: 300,
-        dszf.ARG_TTL_NS: 86400,
-        dszf.ARG_TTL_SOA: 301,
-        dszf.ARG_SOA_REFRESH: 7200,
-        dszf.ARG_SOA_RETRY: 3600,
-        dszf.ARG_SOA_EXPIRE: 1209600,
-    }
-
-    ext_zone = dszf.make_zone(args)
-    assert ext_zone is None
-
-
-def test_make_zone_empty_resolutions():
-    args = {
-        dszf.ARG_HOSTED_ZONE: "dev.example.com",
-        dszf.ARG_NAME_SERVERS: json.dumps(["ns1.example.com"]),
-        dszf.ARG_ZONE_RESOLUTIONS: json.dumps({}),  # Empty dict
-        dszf.ARG_TTL_A: 300,
-        dszf.ARG_TTL_NS: 86400,
-        dszf.ARG_TTL_SOA: 301,
-        dszf.ARG_SOA_REFRESH: 7200,
-        dszf.ARG_SOA_RETRY: 3600,
-        dszf.ARG_SOA_EXPIRE: 1209600,
-    }
-
-    ext_zone = dszf.make_zone(args)
-    assert ext_zone is None
-
-
-def test_make_zone_invalid_subdomain():
-    args = {
-        dszf.ARG_HOSTED_ZONE: "dev.example.com",
-        dszf.ARG_NAME_SERVERS: json.dumps(["ns1.example.com"]),
-        dszf.ARG_ZONE_RESOLUTIONS: json.dumps(
-            {
-                "www@": {
-                    dszf.ARG_SUBDOMAIN_IP_LIST: ["192.168.1.1"],
-                    dszf.ARG_SUBDOMAIN_HEALTH_PORT: 8080,
-                }
-            }  # Invalid subdomain
-        ),
-        dszf.ARG_TTL_A: 300,
-        dszf.ARG_TTL_NS: 86400,
-        dszf.ARG_TTL_SOA: 301,
-        dszf.ARG_SOA_REFRESH: 7200,
-        dszf.ARG_SOA_RETRY: 3600,
-        dszf.ARG_SOA_EXPIRE: 1209600,
-    }
-
-    ext_zone = dszf.make_zone(args)
-    assert ext_zone is None
-
-
-def test_make_zone_wrong_type_subdomain_config():
-    args = {
-        dszf.ARG_HOSTED_ZONE: "dev.example.com",
-        dszf.ARG_NAME_SERVERS: json.dumps(["ns1.example.com"]),
-        dszf.ARG_ZONE_RESOLUTIONS: json.dumps(
-            {"www": ["192.168.1.1", 8080]}  # Wrong type (list instead of dict)
-        ),
-        dszf.ARG_TTL_A: 300,
-        dszf.ARG_TTL_NS: 86400,
-        dszf.ARG_TTL_SOA: 301,
-        dszf.ARG_SOA_REFRESH: 7200,
-        dszf.ARG_SOA_RETRY: 3600,
-        dszf.ARG_SOA_EXPIRE: 1209600,
-    }
-
-    ext_zone = dszf.make_zone(args)
-    assert ext_zone is None
-
-
-def test_make_zone_wrong_type_ip_list():
-    args = {
-        dszf.ARG_HOSTED_ZONE: "dev.example.com",
-        dszf.ARG_NAME_SERVERS: json.dumps(["ns1.example.com"]),
-        dszf.ARG_ZONE_RESOLUTIONS: json.dumps(
-            {
-                "www": {
-                    dszf.ARG_SUBDOMAIN_IP_LIST: "192.168.1.1",
-                    dszf.ARG_SUBDOMAIN_HEALTH_PORT: 8080,
-                }
-            }  # Wrong type (string instead of list)
-        ),
-        dszf.ARG_TTL_A: 300,
-        dszf.ARG_TTL_NS: 86400,
-        dszf.ARG_TTL_SOA: 301,
-        dszf.ARG_SOA_REFRESH: 7200,
-        dszf.ARG_SOA_RETRY: 3600,
-        dszf.ARG_SOA_EXPIRE: 1209600,
-    }
-
-    ext_zone = dszf.make_zone(args)
-    assert ext_zone is None
-
-
-def test_make_zone_empty_ip_list():
-    args = {
-        dszf.ARG_HOSTED_ZONE: "dev.example.com",
-        dszf.ARG_NAME_SERVERS: json.dumps(["ns1.example.com"]),
-        dszf.ARG_ZONE_RESOLUTIONS: json.dumps(
-            {
-                "www": {
-                    dszf.ARG_SUBDOMAIN_IP_LIST: [],
-                    dszf.ARG_SUBDOMAIN_HEALTH_PORT: 8080,
-                }
-            }  # Empty list
-        ),
-        dszf.ARG_TTL_A: 300,
-        dszf.ARG_TTL_NS: 86400,
-        dszf.ARG_TTL_SOA: 301,
-        dszf.ARG_SOA_REFRESH: 7200,
-        dszf.ARG_SOA_RETRY: 3600,
-        dszf.ARG_SOA_EXPIRE: 1209600,
-    }
-
-    ext_zone = dszf.make_zone(args)
-    assert ext_zone is None
-
-
-def test_make_zone_invalid_ip():
-    args = {
-        dszf.ARG_HOSTED_ZONE: "dev.example.com",
-        dszf.ARG_NAME_SERVERS: json.dumps(["ns1.example.com"]),
-        dszf.ARG_ZONE_RESOLUTIONS: json.dumps(
-            {
-                "www": {
-                    dszf.ARG_SUBDOMAIN_IP_LIST: ["192.168.1.300"],
-                    dszf.ARG_SUBDOMAIN_HEALTH_PORT: 8080,
-                }
-            }  # Invalid IP (octet > 255)
-        ),
-        dszf.ARG_TTL_A: 300,
-        dszf.ARG_TTL_NS: 86400,
-        dszf.ARG_TTL_SOA: 301,
-        dszf.ARG_SOA_REFRESH: 7200,
-        dszf.ARG_SOA_RETRY: 3600,
-        dszf.ARG_SOA_EXPIRE: 1209600,
-    }
-
-    ext_zone = dszf.make_zone(args)
-    assert ext_zone is None
-
-
-def test_make_zone_malformed_ip():
-    args = {
-        dszf.ARG_HOSTED_ZONE: "dev.example.com",
-        dszf.ARG_NAME_SERVERS: json.dumps(["ns1.example.com"]),
-        dszf.ARG_ZONE_RESOLUTIONS: json.dumps(
-            {
-                "www": {
-                    dszf.ARG_SUBDOMAIN_IP_LIST: ["192.168.1"],
-                    dszf.ARG_SUBDOMAIN_HEALTH_PORT: 8080,
-                }
-            }  # Malformed IP (missing octet)
-        ),
-        dszf.ARG_TTL_A: 300,
-        dszf.ARG_TTL_NS: 86400,
-        dszf.ARG_TTL_SOA: 301,
-        dszf.ARG_SOA_REFRESH: 7200,
-        dszf.ARG_SOA_RETRY: 3600,
-        dszf.ARG_SOA_EXPIRE: 1209600,
-    }
-
-    ext_zone = dszf.make_zone(args)
-    assert ext_zone is None
-
-
-def test_make_zone_wrong_type_health_port():
-    args = {
-        dszf.ARG_HOSTED_ZONE: "dev.example.com",
-        dszf.ARG_NAME_SERVERS: json.dumps(["ns1.example.com"]),
-        dszf.ARG_ZONE_RESOLUTIONS: json.dumps(
-            {
-                "www": {
-                    dszf.ARG_SUBDOMAIN_IP_LIST: ["192.168.1.1"],
-                    dszf.ARG_SUBDOMAIN_HEALTH_PORT: "8080",  # String instead of int
-                }
-            }
-        ),
-        dszf.ARG_TTL_A: 300,
-        dszf.ARG_TTL_NS: 86400,
-        dszf.ARG_TTL_SOA: 301,
-        dszf.ARG_SOA_REFRESH: 7200,
-        dszf.ARG_SOA_RETRY: 3600,
-        dszf.ARG_SOA_EXPIRE: 1209600,
-    }
-
-    ext_zone = dszf.make_zone(args)
-    assert ext_zone is None
-
-
-def test_make_zone_negative_health_port():
-    args = {
-        dszf.ARG_HOSTED_ZONE: "dev.example.com",
-        dszf.ARG_NAME_SERVERS: json.dumps(["ns1.example.com"]),
-        dszf.ARG_ZONE_RESOLUTIONS: json.dumps(
-            {
-                "www": {
-                    dszf.ARG_SUBDOMAIN_IP_LIST: ["192.168.1.1"],
-                    dszf.ARG_SUBDOMAIN_HEALTH_PORT: -8080,  # Negative port
-                }
-            }
-        ),
-        dszf.ARG_TTL_A: 300,
-        dszf.ARG_TTL_NS: 86400,
-        dszf.ARG_TTL_SOA: 301,
-        dszf.ARG_SOA_REFRESH: 7200,
-        dszf.ARG_SOA_RETRY: 3600,
-        dszf.ARG_SOA_EXPIRE: 1209600,
-    }
-
-    ext_zone = dszf.make_zone(args)
-    assert ext_zone is None
-
-
-def test_make_zone_invalid_port_range():
-    args = {
-        dszf.ARG_HOSTED_ZONE: "dev.example.com",
-        dszf.ARG_NAME_SERVERS: json.dumps(["ns1.example.com"]),
-        dszf.ARG_ZONE_RESOLUTIONS: json.dumps(
-            {
-                "www": {
-                    dszf.ARG_SUBDOMAIN_IP_LIST: ["192.168.1.1"],
-                    dszf.ARG_SUBDOMAIN_HEALTH_PORT: 65536,  # Port > 65535 (invalid)
-                }
-            }
-        ),
-        dszf.ARG_TTL_A: 300,
-        dszf.ARG_TTL_NS: 86400,
-        dszf.ARG_TTL_SOA: 301,
-        dszf.ARG_SOA_REFRESH: 7200,
-        dszf.ARG_SOA_RETRY: 3600,
-        dszf.ARG_SOA_EXPIRE: 1209600,
-    }
-
-    ext_zone = dszf.make_zone(args)
     assert ext_zone is None

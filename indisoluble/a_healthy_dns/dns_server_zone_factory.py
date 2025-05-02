@@ -4,13 +4,15 @@ import json
 import logging
 import time
 
+import dns.dnssec
+import dns.dnssecalgs
 import dns.name
 import dns.rdataclass
 import dns.rdataset
 import dns.rdatatype
 import dns.versioned
 
-from typing import Any, Dict, List, NamedTuple, Optional, Set, Union
+from typing import Any, Dict, List, NamedTuple, Optional, Set, Tuple, Union
 
 from .healthy_a_record import HealthyARecord
 from .healthy_ip import HealthyIp
@@ -22,11 +24,22 @@ class ExtendedNsRecord(NamedTuple):
     primary_ns: str
 
 
+class ExtendedPrivateKey(NamedTuple):
+    private_key: dns.dnssec.PrivateKey
+    dnskey: dns.dnssec.DNSKEY
+    dnskey_ttl: int
+    lifetime: int
+
+
 class ExtendedZone(NamedTuple):
     zone: dns.versioned.Zone
     a_records: Set[HealthyARecord]
 
 
+ARG_DNSSEC_ALGORITHM = "dnssec_alg"
+ARG_DNSSEC_LIFETIME = "dnssec_lifetime"
+ARG_DNSSEC_PRIVATE_KEY_PEM = "dnssec_priv_key_pem"
+ARG_DNSSEC_TTL_DNSKEY = "dnssec_ttl_dnskey"
 ARG_HOSTED_ZONE = "hosted_zone"
 ARG_NAME_SERVERS = "name_servers"
 ARG_SOA_EXPIRE = "soa_expire"
@@ -198,6 +211,11 @@ def _make_soa_record(
     if soa_expire <= 0:
         logging.error("SOA expire value must be positive")
         return None
+    
+    soa_min_ttl = args[ARG_SOA_MIN_TTL]
+    if soa_min_ttl <= 0:
+        logging.error("SOA minimum TTL value must be positive")
+        return None
 
     return dns.rdataset.from_text(
         dns.rdataclass.IN,
@@ -211,10 +229,34 @@ def _make_soa_record(
                 str(soa_refresh),
                 str(soa_retry),
                 str(soa_expire),
-                str(ttl_soa),
+                str(soa_min_ttl),
             ]
         ),
     )
+
+
+def _make_private_key(args: Dict[str, Any]) -> Optional[ExtendedPrivateKey]:
+    try:
+        alg = dns.dnssec.algorithm_from_text(args[ARG_DNSSEC_ALGORITHM])
+        priv_key_pem = args[ARG_DNSSEC_PRIVATE_KEY_PEM]
+        priv_key = dns.dnssecalgs.get_algorithm_cls(alg).from_pem(priv_key_pem)
+
+        dnskey = dns.dnssec.make_dnskey(priv_key.public_key, alg)
+    except Exception as ex:
+        logging.error(f"Failed to load private key: {ex}")
+        return None
+
+    dnskey_ttl = args[ARG_DNSSEC_TTL_DNSKEY]
+    if dnskey_ttl <= 0:
+        logging.error("TTL for DNSKEY records must be positive")
+        return None
+
+    lifetime = args[ARG_DNSSEC_LIFETIME]
+    if lifetime <= 0:
+        logging.error("DNSSEC lifetime must be positive")
+        return None
+
+    return ExtendedPrivateKey(priv_key, dnskey, dnskey_ttl, lifetime)
 
 
 def make_zone(args: Dict[str, Any]) -> Optional[ExtendedZone]:
@@ -236,10 +278,25 @@ def make_zone(args: Dict[str, Any]) -> Optional[ExtendedZone]:
     if not soa_rec:
         return None
 
+    ext_private_key = None
+    if args[ARG_DNSSEC_PRIVATE_KEY_PEM]:
+        ext_private_key = _make_private_key(args)
+        if not ext_private_key:
+            return None
+
     zone = dns.versioned.Zone(origin_name)
     with zone.writer() as txn:
         txn.add(dns.name.empty, ext_ns_rec.ns_rec)
         txn.add(dns.name.empty, soa_rec)
+
+        if ext_private_key:
+            dns.dnssec.sign_zone(
+                zone,
+                txn=txn,
+                keys=[(ext_private_key.private_key, ext_private_key.dnskey)],
+                dnskey_ttl=ext_private_key.dnskey_ttl,
+                lifetime=ext_private_key.lifetime,
+            )
 
     logging.info(f"Successfully created versioned DNS zone for {origin_name}")
     return ExtendedZone(zone, a_records)
