@@ -2,7 +2,6 @@
 
 import json
 import logging
-import time
 
 import dns.dnssec
 import dns.dnssecalgs
@@ -12,7 +11,7 @@ import dns.rdataset
 import dns.rdatatype
 import dns.versioned
 
-from typing import Any, Dict, List, NamedTuple, Optional, Set, Tuple, Union
+from typing import Any, Dict, List, NamedTuple, Optional, Set, Union
 
 from .healthy_a_record import HealthyARecord
 from .healthy_ip import HealthyIp
@@ -20,7 +19,7 @@ from .tools.is_valid_subdomain import is_valid_subdomain
 
 
 class ExtendedNsRecord(NamedTuple):
-    ns_rec: dns.rdataset.Rdataset
+    ns_rec: dns.rdataset.ImmutableRdataset
     primary_ns: str
 
 
@@ -28,12 +27,15 @@ class ExtendedPrivateKey(NamedTuple):
     private_key: dns.dnssec.PrivateKey
     dnskey: dns.dnssec.DNSKEY
     dnskey_ttl: int
-    lifetime: int
+    rrsig_lifetime: int
 
 
 class ExtendedZone(NamedTuple):
     zone: dns.versioned.Zone
-    a_records: Set[HealthyARecord]
+    ns_rec: dns.rdataset.ImmutableRdataset
+    soa_rec: dns.rdataset.ImmutableRdataset
+    a_recs: Set[HealthyARecord]
+    ext_priv_key: Optional[ExtendedPrivateKey]
 
 
 ARG_DNSSEC_ALGORITHM = "dnssec_alg"
@@ -58,7 +60,7 @@ def _make_origin_name(args: Dict[str, Any]) -> Optional[dns.name.Name]:
     hosted_zone = args[ARG_HOSTED_ZONE]
     success, error = is_valid_subdomain(hosted_zone)
     if not success:
-        logging.error(f"Hosted zone '{hosted_zone}' is not a valid FQDN: {error}")
+        logging.error("Hosted zone '%s' is not a valid FQDN: %s", hosted_zone, error)
         return None
 
     return dns.name.from_text(hosted_zone, origin=dns.name.root)
@@ -72,14 +74,18 @@ def _make_healthy_a_record(
 ) -> Optional[HealthyARecord]:
     success, error = is_valid_subdomain(subdomain)
     if not success:
-        logging.error(f"Zone resolution subdomain '{subdomain}' is not valid: {error}")
+        logging.error(
+            "Zone resolution subdomain '%s' is not valid: %s", subdomain, error
+        )
         return None
 
     subdomain_name = dns.name.from_text(subdomain, origin=origin_name)
 
     if not isinstance(sub_config, dict):
         logging.error(
-            f"Zone resolution for '{subdomain}' must be a dictionary, got {type(sub_config).__name__}"
+            "Zone resolution for '%s' must be a dictionary, got %s",
+            subdomain,
+            type(sub_config).__name__,
         )
         return None
 
@@ -171,7 +177,7 @@ def _make_ns_record(args: Dict[str, Any]) -> Optional[ExtendedNsRecord]:
     for ns in name_servers:
         success, error = is_valid_subdomain(ns)
         if not success:
-            logging.error(f"Name server '{ns}' is not a valid FQDN: {error}")
+            logging.error("Name server '%s' is not a valid FQDN: %s", ns, error)
             return None
 
         abs_name_servers.append(f"{ns}.")
@@ -182,16 +188,18 @@ def _make_ns_record(args: Dict[str, Any]) -> Optional[ExtendedNsRecord]:
         return None
 
     return ExtendedNsRecord(
-        dns.rdataset.from_text(
-            dns.rdataclass.IN, dns.rdatatype.NS, ttl_ns, *abs_name_servers
+        dns.rdataset.ImmutableRdataset(
+            dns.rdataset.from_text(
+                dns.rdataclass.IN, dns.rdatatype.NS, ttl_ns, *abs_name_servers
+            )
         ),
         abs_name_servers[0],
     )
 
 
 def _make_soa_record(
-    origin_name: dns.name.Name, primary_ns: str, soa_serial: int, args: Dict[str, Any]
-) -> Optional[dns.rdataset.Rdataset]:
+    origin_name: dns.name.Name, primary_ns: str, args: Dict[str, Any]
+) -> Optional[dns.rdataset.ImmutableRdataset]:
     ttl_soa = args[ARG_TTL_SOA]
     if ttl_soa <= 0:
         logging.error("TTL for SOA records must be positive")
@@ -211,41 +219,35 @@ def _make_soa_record(
     if soa_expire <= 0:
         logging.error("SOA expire value must be positive")
         return None
-    
+
     soa_min_ttl = args[ARG_SOA_MIN_TTL]
     if soa_min_ttl <= 0:
         logging.error("SOA minimum TTL value must be positive")
         return None
 
-    return dns.rdataset.from_text(
-        dns.rdataclass.IN,
-        dns.rdatatype.SOA,
-        ttl_soa,
-        " ".join(
-            [
-                primary_ns,
-                f"hostmaster.{origin_name}",
-                str(soa_serial),
-                str(soa_refresh),
-                str(soa_retry),
-                str(soa_expire),
-                str(soa_min_ttl),
-            ]
-        ),
+    soa_serial = 0
+
+    return dns.rdataset.ImmutableRdataset(
+        dns.rdataset.from_text(
+            dns.rdataclass.IN,
+            dns.rdatatype.SOA,
+            ttl_soa,
+            " ".join(
+                [
+                    primary_ns,
+                    f"hostmaster.{origin_name}",
+                    str(soa_serial),
+                    str(soa_refresh),
+                    str(soa_retry),
+                    str(soa_expire),
+                    str(soa_min_ttl),
+                ]
+            ),
+        )
     )
 
 
 def _make_private_key(args: Dict[str, Any]) -> Optional[ExtendedPrivateKey]:
-    try:
-        alg = dns.dnssec.algorithm_from_text(args[ARG_DNSSEC_ALGORITHM])
-        priv_key_pem = args[ARG_DNSSEC_PRIVATE_KEY_PEM]
-        priv_key = dns.dnssecalgs.get_algorithm_cls(alg).from_pem(priv_key_pem)
-
-        dnskey = dns.dnssec.make_dnskey(priv_key.public_key, alg)
-    except Exception as ex:
-        logging.error(f"Failed to load private key: {ex}")
-        return None
-
     dnskey_ttl = args[ARG_DNSSEC_TTL_DNSKEY]
     if dnskey_ttl <= 0:
         logging.error("TTL for DNSKEY records must be positive")
@@ -254,6 +256,17 @@ def _make_private_key(args: Dict[str, Any]) -> Optional[ExtendedPrivateKey]:
     lifetime = args[ARG_DNSSEC_LIFETIME]
     if lifetime <= 0:
         logging.error("DNSSEC lifetime must be positive")
+        return None
+
+    try:
+        alg = dns.dnssec.algorithm_from_text(args[ARG_DNSSEC_ALGORITHM])
+        priv_key_pem = args[ARG_DNSSEC_PRIVATE_KEY_PEM]
+
+        priv_key = dns.dnssecalgs.get_algorithm_cls(alg).from_pem(priv_key_pem)
+
+        dnskey = dns.dnssec.make_dnskey(priv_key.public_key(), alg)
+    except Exception as ex:
+        logging.error("Failed to load private key: %s", ex)
         return None
 
     return ExtendedPrivateKey(priv_key, dnskey, dnskey_ttl, lifetime)
@@ -272,9 +285,7 @@ def make_zone(args: Dict[str, Any]) -> Optional[ExtendedZone]:
     if not ext_ns_rec:
         return None
 
-    soa_rec = _make_soa_record(
-        origin_name, ext_ns_rec.primary_ns, int(time.time()), args
-    )
+    soa_rec = _make_soa_record(origin_name, ext_ns_rec.primary_ns, args)
     if not soa_rec:
         return None
 
@@ -285,18 +296,5 @@ def make_zone(args: Dict[str, Any]) -> Optional[ExtendedZone]:
             return None
 
     zone = dns.versioned.Zone(origin_name)
-    with zone.writer() as txn:
-        txn.add(dns.name.empty, ext_ns_rec.ns_rec)
-        txn.add(dns.name.empty, soa_rec)
 
-        if ext_private_key:
-            dns.dnssec.sign_zone(
-                zone,
-                txn=txn,
-                keys=[(ext_private_key.private_key, ext_private_key.dnskey)],
-                dnskey_ttl=ext_private_key.dnskey_ttl,
-                lifetime=ext_private_key.lifetime,
-            )
-
-    logging.info(f"Successfully created versioned DNS zone for {origin_name}")
-    return ExtendedZone(zone, a_records)
+    return ExtendedZone(zone, ext_ns_rec.ns_rec, soa_rec, a_records, ext_private_key)

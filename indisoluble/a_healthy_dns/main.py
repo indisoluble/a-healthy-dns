@@ -324,11 +324,11 @@ def _main(args: Dict[str, Any]):
     with socketserver.UDPServer(server_address, DnsServerUdpHandler) as server:
         server.zone = ext_zone.zone
 
-        logging.info("DNS server listening on port %d", config[_ARG_PORT])
+        logging.info("DNS server listening on port %d...", config[_ARG_PORT])
         try:
             server.serve_forever()
         except KeyboardInterrupt:
-            logging.info("Shutting down DNS server")
+            logging.info("Shutting down DNS server...")
 
     # Stop zone updater
     zone_updater.stop()

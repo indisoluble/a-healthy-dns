@@ -1,16 +1,25 @@
 #!/usr/bin/env python3
 
+import datetime
+import threading
 import time
 
+import dns.dnssectypes
 import dns.name
+import dns.rdataset
 import dns.rdatatype
 import dns.versioned
 import pytest
 
-from typing import List, NamedTuple
-from unittest.mock import call, MagicMock, patch
+from typing import List, NamedTuple, Tuple
+from unittest.mock import patch
 
-from indisoluble.a_healthy_dns.dns_server_zone_factory import ExtendedZone
+from dns.dnssecalgs.rsa import PrivateRSASHA256
+
+from indisoluble.a_healthy_dns.dns_server_zone_factory import (
+    ExtendedPrivateKey,
+    ExtendedZone,
+)
 from indisoluble.a_healthy_dns.dns_server_zone_updater import (
     _STOP_JOIN_EXTRA_TIMEOUT,
     ARG_CONNECTION_TIMEOUT,
@@ -48,6 +57,10 @@ SUBDOMAINS = [
         [SimpleHealthyIp("192.168.1.4", False), SimpleHealthyIp("192.168.1.5", True)],
     ),
     SUBDOMAIN_2_HEALTHY,
+    SimpleSubdomain(
+        "server5",
+        [SimpleHealthyIp("192.168.1.8", False), SimpleHealthyIp("192.168.1.9", False)],
+    ),
 ]
 VAL_CONNECTION_TIMEOUT = 2
 
@@ -58,76 +71,113 @@ def _make_a_record(name: dns.name.Name, ips: List[SimpleHealthyIp]) -> HealthyAR
     )
 
 
-@pytest.fixture
-def extended_zone():
+def _extended_zone() -> ExtendedZone:
     origin = dns.name.from_text(DOMAIN)
+
+    # Create zone
+    zone = dns.versioned.Zone(origin)
+
+    # Create NS record
+    ns_record = dns.rdataset.ImmutableRdataset(
+        dns.rdataset.from_text(
+            dns.rdataclass.IN, dns.rdatatype.NS, 300, f"ns1.{DOMAIN}"
+        )
+    )
+
+    # Create SOA record
+    soa_record = dns.rdataset.ImmutableRdataset(
+        dns.rdataset.from_text(
+            dns.rdataclass.IN,
+            dns.rdatatype.SOA,
+            300,
+            f"ns1.{DOMAIN} admin.{DOMAIN} 1 3600 1800 604800 300",
+        )
+    )
 
     # Create A records with different subdomains
     a_records = [
         _make_a_record(dns.name.from_text(sd.name, origin), sd.ips) for sd in SUBDOMAINS
     ]
 
-    # Initialize zone with A records
-    zone = dns.versioned.Zone(origin)
-    with zone.writer() as txn:
-        # Add A records to the zone
-        for a_rec in a_records:
-            txn.add(
-                a_rec.subdomain,
-                dns.rdataset.from_text(
-                    dns.rdataclass.IN,
-                    dns.rdatatype.A,
-                    a_rec.ttl_a,
-                    *[
-                        health_ip.ip
-                        for health_ip in a_rec.healthy_ips
-                        if health_ip.is_healthy
-                    ],
-                ),
-            )
-
-        # Set SOA record
-        txn.add(
-            dns.name.empty,
-            dns.rdataset.from_text(
-                dns.rdataclass.IN,
-                dns.rdatatype.SOA,
-                300,
-                f"ns1.{DOMAIN} admin.{DOMAIN} 1 3600 1800 604800 300",
-            ),
-        )
-
-    return ExtendedZone(zone, set(a_records))
+    return ExtendedZone(zone, ns_record, soa_record, set(a_records), None)
 
 
-@pytest.fixture
-def zone_updater(extended_zone):
+def _zone_updater() -> DnsServerZoneUpdater:
     return DnsServerZoneUpdater(
-        extended_zone,
+        _extended_zone(),
         {ARG_TEST_INTERVAL: 1, ARG_CONNECTION_TIMEOUT: VAL_CONNECTION_TIMEOUT},
     )
 
 
+def _extended_zone_with_priv_key() -> ExtendedZone:
+    ext_zone = _extended_zone()
+
+    private_key = PrivateRSASHA256.generate(key_size=2048)
+    dnskey = dns.dnssec.make_dnskey(
+        private_key.public_key(), dns.dnssectypes.Algorithm.RSASHA256
+    )
+    ext_priv_key = ExtendedPrivateKey(private_key, dnskey, 86400, 1209600)
+
+    return ExtendedZone(
+        ext_zone.zone, ext_zone.ns_rec, ext_zone.soa_rec, ext_zone.a_recs, ext_priv_key
+    )
+
+
+def _zone_updater_with_priv_key() -> DnsServerZoneUpdater:
+    return DnsServerZoneUpdater(
+        _extended_zone_with_priv_key(),
+        {ARG_TEST_INTERVAL: 1, ARG_CONNECTION_TIMEOUT: VAL_CONNECTION_TIMEOUT},
+    )
+
+
+def _subdomains_with_at_least_one_healthy_ip() -> List[dns.name.Name]:
+    return [
+        dns.name.from_text(sd.name, origin=None)
+        for sd in SUBDOMAINS
+        if any(ip.is_healthy for ip in sd.ips)
+    ]
+
+
+def _is_ip_healthy(ip: str) -> bool:
+    simple_ip = next(
+        simple_ip for sd in SUBDOMAINS for simple_ip in sd.ips if simple_ip.ip == ip
+    )
+    return simple_ip.is_healthy
+
+
+def _assert_compare_rdatasets(
+    records: Tuple[dns.name.Name, dns.rdataset.Rdataset],
+    other_records: Tuple[dns.name.Name, dns.rdataset.Rdataset],
+    *,
+    only_name_identical: bool,
+):
+    assert len(records) == len(other_records)
+    if len(records) > 0:
+        if only_name_identical:
+            assert all(
+                one_rec[0] in [name for name, _ in other_records] for one_rec in records
+            )
+            assert all(
+                one_rec[1] not in [rsets for _, rsets in other_records]
+                for one_rec in records
+            )
+        else:
+            assert all(one_rec in other_records for one_rec in records)
+
+
 @pytest.fixture
-def zone_writer_with_changes():
-    mock_txn = MagicMock()
-    mock_txn.changed.return_value = True
-
-    mock_writer = MagicMock()
-    mock_writer.__enter__.return_value = mock_txn
-
-    return mock_writer
+def extended_zone():
+    return _extended_zone()
 
 
 @pytest.fixture
-def zone_writer_without_changes():
-    mock_txn = MagicMock()
-    mock_txn.changed.return_value = False
+def zone_updater():
+    return _zone_updater()
 
-    mock_writer = MagicMock()
-    mock_writer.__enter__.return_value = mock_txn
 
-    return mock_writer
+@pytest.fixture
+def zone_updater_with_priv_key():
+    return _zone_updater_with_priv_key()
 
 
 def test_init_with_invalid_parameters(extended_zone):
@@ -144,38 +194,101 @@ def test_init_with_invalid_parameters(extended_zone):
         )
 
 
+@pytest.mark.parametrize(
+    "updater,with_priv_key",
+    [(_zone_updater(), False), (_zone_updater_with_priv_key(), True)],
+)
+@patch("time.time")
 @patch.object(DnsServerZoneUpdater, "_update_zone")
-def test_start_stop(mock_update_zone, zone_updater):
-    assert zone_updater._updater_thread is None
+def test_start_stop(mock_update_zone, mock_time, updater, with_priv_key):
+    # Mock current time to ensure a new SOA serial is calculated
+    mock_time.return_value = 1234567890.0
 
-    zone_updater.start()
+    # Configure mock_update_zone to indicate when called
+    update_zone_called = threading.Event()
+    mock_update_zone.side_effect = lambda: update_zone_called.set()
 
-    assert zone_updater._updater_thread is not None
-    assert zone_updater._updater_thread.is_alive()
-    assert zone_updater._updater_thread.daemon is True
+    # Check that the updater thread is not started
+    assert updater._updater_thread is None
 
-    # Wait a bit to ensure the thread runs
-    time.sleep(0.2)
+    # Check updater zone is not initialized
+    assert updater._zone is not None
+    assert len(updater._zone.nodes) == 0
+
+    # Start the updater
+    updater.start()
+
+    # Check that the thread is created and alive
+    assert updater._updater_thread is not None
+    assert updater._updater_thread.is_alive()
+    assert updater._updater_thread.daemon is True
 
     # Check that update_zone was called at least once
+    assert update_zone_called.wait(timeout=1)
     assert mock_update_zone.called
 
-    result = zone_updater.stop()
+    # Stop the updater
+    result = updater.stop()
 
+    # Check that the thread is no longer alive
     assert result is True
-    assert not zone_updater._updater_thread.is_alive()
+    assert not updater._updater_thread.is_alive()
+
+    # Check updater zone is initialized
+    assert len(list(updater._zone.iterate_rdatasets(dns.rdatatype.NS))) == 1
+    ns_rrsigs = list(
+        updater._zone.iterate_rdatasets(dns.rdatatype.RRSIG, dns.rdatatype.NS)
+    )
+    assert len(ns_rrsigs) == (1 if with_priv_key else 0)
+    soa_records = list(updater._zone.iterate_rdatasets(dns.rdatatype.SOA))
+    assert len(soa_records) == 1
+    soa_rdata = soa_records[0][1][0]
+    assert soa_rdata.serial == 1234567890
+    soa_rrsigs = list(
+        updater._zone.iterate_rdatasets(dns.rdatatype.RRSIG, dns.rdatatype.SOA)
+    )
+    assert len(soa_rrsigs) == (1 if with_priv_key else 0)
+    a_records = list(updater._zone.iterate_rdatasets(dns.rdatatype.A))
+    healthy_subdomains = _subdomains_with_at_least_one_healthy_ip()
+    assert len(a_records) == len(healthy_subdomains)
+    assert all([name in healthy_subdomains for name, _ in a_records])
+    a_rrsigs = list(
+        updater._zone.iterate_rdatasets(dns.rdatatype.RRSIG, dns.rdatatype.A)
+    )
+    assert len(a_rrsigs) == (len(a_records) if with_priv_key else 0)
+    dnskey_records = list(updater._zone.iterate_rdatasets(dns.rdatatype.DNSKEY))
+    assert len(dnskey_records) == (1 if with_priv_key else 0)
+    assert dnskey_records[0][1].ttl == 86400 if with_priv_key else True
+    dnskey_rrsigs = list(
+        updater._zone.iterate_rdatasets(dns.rdatatype.RRSIG, dns.rdatatype.DNSKEY)
+    )
+    assert len(dnskey_rrsigs) == (1 if with_priv_key else 0)
+    nsec_records = list(updater._zone.iterate_rdatasets(dns.rdatatype.NSEC))
+    assert len(nsec_records) > 0 if with_priv_key else len(nsec_records) == 0
+    nsec_rrsigs = list(
+        updater._zone.iterate_rdatasets(dns.rdatatype.RRSIG, dns.rdatatype.NSEC)
+    )
+    assert len(nsec_rrsigs) == (len(nsec_records) if with_priv_key else 0)
 
 
+@patch.object(DnsServerZoneUpdater, "_initialize_zone")
 @patch.object(DnsServerZoneUpdater, "_update_zone")
-def test_start_when_already_running(_, zone_updater):
+def test_start_when_already_running(_, mock_initialize_zone, zone_updater):
+    # Start the updater
     zone_updater.start()
     original_thread = zone_updater._updater_thread
+
+    # Check zone was initialized
+    assert mock_initialize_zone.call_count == 1
 
     # Try to start again
     zone_updater.start()
 
     # Verify the thread is the same
     assert zone_updater._updater_thread is original_thread
+
+    # Check zone was not re-initialized
+    assert mock_initialize_zone.call_count == 1
 
     # Clean up
     zone_updater.stop()
@@ -201,197 +314,286 @@ def test_stop_timeout(_, __, mock_join, zone_updater):
     )
 
 
-@patch.object(DnsServerZoneUpdater, "_update_a_record_in_zone")
-def test_update_zone(
-    mock_update_a_record_in_zone, zone_updater, zone_writer_with_changes
+@pytest.mark.parametrize("is_zone_sign_expire", [False, True])
+@patch("time.time")
+@patch("indisoluble.a_healthy_dns.dns_server_zone_updater.datetime")
+@patch("indisoluble.a_healthy_dns.dns_server_zone_updater.can_create_connection")
+def test_update_zone_without_changes(
+    mock_can_create_connection,
+    mock_datetime,
+    mock_time,
+    is_zone_sign_expire,
+    zone_updater_with_priv_key,
 ):
-    zone_updater._zone = MagicMock()
-    zone_updater._zone.writer.return_value = zone_writer_with_changes
+    # Mock the connection check to return the current healthy values
+    mock_can_create_connection.side_effect = lambda ip, _, __: _is_ip_healthy(ip)
 
-    mock_txn = zone_writer_with_changes.__enter__.return_value
+    # Check updater zone is not initialized
+    assert zone_updater_with_priv_key._zone is not None
+    assert len(zone_updater_with_priv_key._zone.nodes) == 0
 
-    original_a_records = zone_updater._a_records.copy()
-    updated_records = {
-        a_record: a_record.updated_ips(
-            frozenset(
-                ip.updated_status(not ip.is_healthy) for ip in a_record.healthy_ips
-            )
+    # Mock current time
+    mock_time.return_value = 1234567890.0
+    mock_datetime.datetime.now.return_value = (
+        zone_updater_with_priv_key._zone_key.rrsig_resign_time
+    )
+
+    # Initialize the zone
+    zone_updater_with_priv_key._initialize_zone()
+
+    # Check that the zone is initialized
+    ns_records = list(
+        zone_updater_with_priv_key._zone.iterate_rdatasets(dns.rdatatype.NS)
+    )
+    assert len(ns_records) == 1
+    ns_rrsigs = list(
+        zone_updater_with_priv_key._zone.iterate_rdatasets(
+            dns.rdatatype.RRSIG, dns.rdatatype.NS
         )
-        for a_record in original_a_records
-    }
-    mock_update_a_record_in_zone.side_effect = lambda r, _: updated_records[r]
-
-    zone_updater._update_zone()
-
-    assert mock_update_a_record_in_zone.call_count == len(original_a_records)
-    mock_update_a_record_in_zone.assert_has_calls(
-        [call(record, mock_txn) for record in original_a_records], any_order=True
     )
-    mock_txn.update_serial.assert_called_once()
-    assert zone_updater._a_records == set(updated_records.values())
+    assert len(ns_rrsigs) == 1
+    soa_records = list(
+        zone_updater_with_priv_key._zone.iterate_rdatasets(dns.rdatatype.SOA)
+    )
+    assert len(soa_records) == 1
+    soa_rrsigs = list(
+        zone_updater_with_priv_key._zone.iterate_rdatasets(
+            dns.rdatatype.RRSIG, dns.rdatatype.SOA
+        )
+    )
+    assert len(soa_rrsigs) == 1
+    a_records = list(
+        zone_updater_with_priv_key._zone.iterate_rdatasets(dns.rdatatype.A)
+    )
+    healthy_subdomains = _subdomains_with_at_least_one_healthy_ip()
+    assert len(a_records) == len(healthy_subdomains)
+    assert all([name in healthy_subdomains for name, _ in a_records])
+    a_rrsigs = list(
+        zone_updater_with_priv_key._zone.iterate_rdatasets(
+            dns.rdatatype.RRSIG, dns.rdatatype.A
+        )
+    )
+    assert len(a_rrsigs) == len(a_records)
+    dnskey_records = list(
+        zone_updater_with_priv_key._zone.iterate_rdatasets(dns.rdatatype.DNSKEY)
+    )
+    assert len(dnskey_records) == 1
+    dnskey_rrsigs = list(
+        zone_updater_with_priv_key._zone.iterate_rdatasets(
+            dns.rdatatype.RRSIG, dns.rdatatype.DNSKEY
+        )
+    )
+    assert len(dnskey_rrsigs) == 1
+    nsec_records = list(
+        zone_updater_with_priv_key._zone.iterate_rdatasets(dns.rdatatype.NSEC)
+    )
+    assert len(nsec_records) > 0
+    nsec_rrsigs = list(
+        zone_updater_with_priv_key._zone.iterate_rdatasets(
+            dns.rdatatype.RRSIG, dns.rdatatype.NSEC
+        )
+    )
+    assert len(nsec_rrsigs) == len(nsec_records)
+
+    # Set mock time to a future value to ensure a new soa serial
+    # would be calculated if neceesary
+    mock_time.return_value += 1.0
+
+    # Mock current time so the zone sign is expired or not
+    if is_zone_sign_expire:
+        mock_datetime.datetime.now.return_value = (
+            zone_updater_with_priv_key._zone_key.rrsig_resign_time
+        )
+    else:
+        mock_datetime.datetime.now.return_value += datetime.timedelta(seconds=1)
+
+    # Update zone
+    zone_updater_with_priv_key._update_zone()
+
+    # Check zone did not change
+    other_ns_records = list(
+        zone_updater_with_priv_key._zone.iterate_rdatasets(dns.rdatatype.NS)
+    )
+    _assert_compare_rdatasets(ns_records, other_ns_records, only_name_identical=False)
+    other_ns_rrsigs = list(
+        zone_updater_with_priv_key._zone.iterate_rdatasets(
+            dns.rdatatype.RRSIG, dns.rdatatype.NS
+        )
+    )
+    _assert_compare_rdatasets(
+        ns_rrsigs, other_ns_rrsigs, only_name_identical=is_zone_sign_expire
+    )
+    other_soa_records = list(
+        zone_updater_with_priv_key._zone.iterate_rdatasets(dns.rdatatype.SOA)
+    )
+    _assert_compare_rdatasets(
+        soa_records, other_soa_records, only_name_identical=is_zone_sign_expire
+    )
+    other_soa_rrsigs = list(
+        zone_updater_with_priv_key._zone.iterate_rdatasets(
+            dns.rdatatype.RRSIG, dns.rdatatype.SOA
+        )
+    )
+    _assert_compare_rdatasets(
+        soa_rrsigs, other_soa_rrsigs, only_name_identical=is_zone_sign_expire
+    )
+    other_a_records = list(
+        zone_updater_with_priv_key._zone.iterate_rdatasets(dns.rdatatype.A)
+    )
+    _assert_compare_rdatasets(a_records, other_a_records, only_name_identical=False)
+    other_a_rrsigs = list(
+        zone_updater_with_priv_key._zone.iterate_rdatasets(
+            dns.rdatatype.RRSIG, dns.rdatatype.A
+        )
+    )
+    _assert_compare_rdatasets(
+        a_rrsigs, other_a_rrsigs, only_name_identical=is_zone_sign_expire
+    )
+    other_dnskey_records = list(
+        zone_updater_with_priv_key._zone.iterate_rdatasets(dns.rdatatype.DNSKEY)
+    )
+    _assert_compare_rdatasets(
+        dnskey_records, other_dnskey_records, only_name_identical=False
+    )
+    other_dnskey_rrsigs = list(
+        zone_updater_with_priv_key._zone.iterate_rdatasets(
+            dns.rdatatype.RRSIG, dns.rdatatype.DNSKEY
+        )
+    )
+    _assert_compare_rdatasets(
+        dnskey_rrsigs, other_dnskey_rrsigs, only_name_identical=is_zone_sign_expire
+    )
+    other_nsec_records = list(
+        zone_updater_with_priv_key._zone.iterate_rdatasets(dns.rdatatype.NSEC)
+    )
+    _assert_compare_rdatasets(
+        nsec_records, other_nsec_records, only_name_identical=False
+    )
+    other_nsec_rrsigs = list(
+        zone_updater_with_priv_key._zone.iterate_rdatasets(
+            dns.rdatatype.RRSIG, dns.rdatatype.NSEC
+        )
+    )
+    _assert_compare_rdatasets(
+        nsec_rrsigs, other_nsec_rrsigs, only_name_identical=is_zone_sign_expire
+    )
 
 
-@patch.object(DnsServerZoneUpdater, "_update_a_record_in_zone")
-def test_update_zone_with_stop_event(
-    mock_update_a_record_in_zone, zone_updater, zone_writer_with_changes
+@pytest.mark.parametrize(
+    "updater,with_priv_key",
+    [(_zone_updater(), False), (_zone_updater_with_priv_key(), True)],
+)
+@patch("time.time")
+@patch("indisoluble.a_healthy_dns.dns_server_zone_updater.datetime")
+@patch("indisoluble.a_healthy_dns.dns_server_zone_updater.can_create_connection")
+def test_update_zone_with_all_ips_failing(
+    mock_can_create_connection, mock_datetime, mock_time, updater, with_priv_key
 ):
-    zone_updater._zone = MagicMock()
-    zone_updater._zone.writer.return_value = zone_writer_with_changes
+    # Mock the connection check to always return False
+    mock_can_create_connection.return_value = False
 
-    mock_txn = zone_writer_with_changes.__enter__.return_value
+    # Check updater zone is not initialized
+    assert updater._zone is not None
+    assert len(updater._zone.nodes) == 0
 
-    original_a_records = list(zone_updater._a_records)
-    updated_records = [
-        original_a_records[0].updated_ips(
-            frozenset(
-                ip.updated_status(not ip.is_healthy)
-                for ip in original_a_records[0].healthy_ips
-            )
-        ),
-        *original_a_records[1:],
-    ]
-
-    def side_effect(record, _):
-        if record == original_a_records[0]:
-            zone_updater._stop_event.set()
-            return updated_records[0]
-
-        return record
-
-    mock_update_a_record_in_zone.side_effect = side_effect
-
-    zone_updater._update_zone()
-
-    assert mock_update_a_record_in_zone.call_count == 1
-    mock_update_a_record_in_zone.assert_called_once_with(
-        original_a_records[0], mock_txn
+    # Mock current time
+    mock_time.return_value = 1234567890.0
+    mock_datetime.datetime.now.return_value = (
+        updater._zone_key.rrsig_resign_time
+        if with_priv_key
+        else datetime.datetime.now()
     )
-    mock_txn.update_serial.assert_called_once()
-    assert zone_updater._a_records == set(updated_records)
+
+    # Initialize the zone
+    updater._initialize_zone()
+
+    # Check that the zone is initialized
+    ns_records = list(updater._zone.iterate_rdatasets(dns.rdatatype.NS))
+    assert len(ns_records) == 1
+    ns_rrsigs = list(
+        updater._zone.iterate_rdatasets(dns.rdatatype.RRSIG, dns.rdatatype.NS)
+    )
+    assert len(ns_rrsigs) == (1 if with_priv_key else 0)
+    soa_records = list(updater._zone.iterate_rdatasets(dns.rdatatype.SOA))
+    assert len(soa_records) == 1
+    soa_rrsigs = list(
+        updater._zone.iterate_rdatasets(dns.rdatatype.RRSIG, dns.rdatatype.SOA)
+    )
+    assert len(soa_rrsigs) == (1 if with_priv_key else 0)
+    a_records = list(updater._zone.iterate_rdatasets(dns.rdatatype.A))
+    healthy_subdomains = _subdomains_with_at_least_one_healthy_ip()
+    assert len(a_records) == len(healthy_subdomains)
+    assert all([name in healthy_subdomains for name, _ in a_records])
+    a_rrsigs = list(
+        updater._zone.iterate_rdatasets(dns.rdatatype.RRSIG, dns.rdatatype.A)
+    )
+    assert len(a_rrsigs) == (len(a_records) if with_priv_key else 0)
+    dnskey_records = list(updater._zone.iterate_rdatasets(dns.rdatatype.DNSKEY))
+    assert len(dnskey_records) == (1 if with_priv_key else 0)
+    dnskey_rrsigs = list(
+        updater._zone.iterate_rdatasets(dns.rdatatype.RRSIG, dns.rdatatype.DNSKEY)
+    )
+    assert len(dnskey_rrsigs) == (1 if with_priv_key else 0)
+    nsec_records = list(updater._zone.iterate_rdatasets(dns.rdatatype.NSEC))
+    assert len(nsec_records) > 0 if with_priv_key else len(nsec_records) == 0
+    nsec_rrsigs = list(
+        updater._zone.iterate_rdatasets(dns.rdatatype.RRSIG, dns.rdatatype.NSEC)
+    )
+    assert len(nsec_rrsigs) == (len(nsec_records) if with_priv_key else 0)
+
+    # Set mock time to a future value to ensure a new soa serial
+    # would be calculated if neceesary
+    mock_time.return_value += 1.0
+
+    # Mock current time so the zone sign is not expired
+    mock_datetime.datetime.now.return_value += datetime.timedelta(seconds=1)
+
+    # Update zone
+    updater._update_zone()
+
+    # Check only NS and SOA records are present
+    other_ns_records = list(updater._zone.iterate_rdatasets(dns.rdatatype.NS))
+    _assert_compare_rdatasets(ns_records, other_ns_records, only_name_identical=False)
+    other_ns_rrsigs = list(
+        updater._zone.iterate_rdatasets(dns.rdatatype.RRSIG, dns.rdatatype.NS)
+    )
+    _assert_compare_rdatasets(
+        ns_rrsigs, other_ns_rrsigs, only_name_identical=with_priv_key
+    )
+    other_soa_records = list(updater._zone.iterate_rdatasets(dns.rdatatype.SOA))
+    _assert_compare_rdatasets(soa_records, other_soa_records, only_name_identical=True)
+    other_soa_rrsigs = list(
+        updater._zone.iterate_rdatasets(dns.rdatatype.RRSIG, dns.rdatatype.SOA)
+    )
+    _assert_compare_rdatasets(
+        soa_rrsigs, other_soa_rrsigs, only_name_identical=with_priv_key
+    )
+    other_a_records = list(updater._zone.iterate_rdatasets(dns.rdatatype.A))
+    assert len(other_a_records) == 0
+    other_a_rrsigs = list(
+        updater._zone.iterate_rdatasets(dns.rdatatype.RRSIG, dns.rdatatype.A)
+    )
+    assert len(other_a_rrsigs) == 0
+    other_dnskey_records = list(updater._zone.iterate_rdatasets(dns.rdatatype.DNSKEY))
+    _assert_compare_rdatasets(
+        dnskey_records, other_dnskey_records, only_name_identical=False
+    )
+    other_dnskey_rrsigs = list(
+        updater._zone.iterate_rdatasets(dns.rdatatype.RRSIG, dns.rdatatype.DNSKEY)
+    )
+    _assert_compare_rdatasets(
+        dnskey_rrsigs, other_dnskey_rrsigs, only_name_identical=with_priv_key
+    )
+    other_nsec_records = list(updater._zone.iterate_rdatasets(dns.rdatatype.NSEC))
+    assert len(other_nsec_records) == 0
+    other_nsec_rrsigs = list(
+        updater._zone.iterate_rdatasets(dns.rdatatype.RRSIG, dns.rdatatype.NSEC)
+    )
+    assert len(other_nsec_rrsigs) == 0
 
 
 @patch("indisoluble.a_healthy_dns.dns_server_zone_updater.can_create_connection")
-def test_update_a_record_in_zone(mock_can_create_connection, zone_updater):
-    a_record = _make_a_record(
-        dns.name.from_text(
-            SUBDOMAIN_1_HEALTHY_1_UNHEALTHY.name, dns.name.from_text(DOMAIN)
-        ),
-        SUBDOMAIN_1_HEALTHY_1_UNHEALTHY.ips,
-    )
-
-    # Configure can_create_connection to return opposite health statuses
-    updated_statuses = {
-        healthy_ip.ip: healthy_ip.updated_status(not healthy_ip.is_healthy)
-        for healthy_ip in a_record.healthy_ips
-    }
-    mock_can_create_connection.side_effect = lambda ip, _, __: updated_statuses[
-        ip
-    ].is_healthy
-
-    mock_txn = MagicMock()
-    result = zone_updater._update_a_record_in_zone(a_record, mock_txn)
-
-    assert result.healthy_ips != a_record.healthy_ips
-    assert result.healthy_ips == frozenset(updated_statuses.values())
-
-    assert mock_can_create_connection.call_count == len(a_record.healthy_ips)
-    mock_can_create_connection.assert_has_calls(
-        [
-            call(
-                healthy_ip.ip, healthy_ip.health_port, zone_updater._connection_timeout
-            )
-            for healthy_ip in a_record.healthy_ips
-        ],
-        any_order=True,
-    )
-
-    updated_healthy_ips = [ip for ip in updated_statuses.values() if ip.is_healthy]
-    assert len(updated_healthy_ips) == 1
-    mock_txn.replace.assert_called_once_with(
-        a_record.subdomain,
-        dns.rdataset.from_text(
-            dns.rdataclass.IN,
-            dns.rdatatype.A,
-            a_record.ttl_a,
-            updated_healthy_ips[0].ip,
-        ),
-    )
-
-
-@patch("indisoluble.a_healthy_dns.dns_server_zone_updater.can_create_connection")
-def test_delete_a_record_in_zone(mock_can_create_connection, zone_updater):
-    a_record = _make_a_record(
-        dns.name.from_text(SUBDOMAIN_2_HEALTHY.name, dns.name.from_text(DOMAIN)),
-        SUBDOMAIN_2_HEALTHY.ips,
-    )
-
-    # Configure can_create_connection to return opposite health statuses
-    updated_statuses = {
-        healthy_ip.ip: healthy_ip.updated_status(not healthy_ip.is_healthy)
-        for healthy_ip in a_record.healthy_ips
-    }
-    mock_can_create_connection.side_effect = lambda ip, _, __: updated_statuses[
-        ip
-    ].is_healthy
-
-    mock_txn = MagicMock()
-    result = zone_updater._update_a_record_in_zone(a_record, mock_txn)
-
-    assert result.healthy_ips != a_record.healthy_ips
-    assert result.healthy_ips == frozenset(updated_statuses.values())
-
-    assert mock_can_create_connection.call_count == len(a_record.healthy_ips)
-    mock_can_create_connection.assert_has_calls(
-        [
-            call(
-                healthy_ip.ip, healthy_ip.health_port, zone_updater._connection_timeout
-            )
-            for healthy_ip in a_record.healthy_ips
-        ],
-        any_order=True,
-    )
-
-    mock_txn.delete.assert_called_once_with(a_record.subdomain)
-
-
-@patch("indisoluble.a_healthy_dns.dns_server_zone_updater.can_create_connection")
-def test_update_a_record_in_zone_no_changes(mock_can_create_connection, zone_updater):
-    a_record = _make_a_record(
-        dns.name.from_text(
-            SUBDOMAIN_1_HEALTHY_1_UNHEALTHY.name, dns.name.from_text(DOMAIN)
-        ),
-        SUBDOMAIN_1_HEALTHY_1_UNHEALTHY.ips,
-    )
-
-    # Configure can_create_connection to return the same health statuses
-    mock_can_create_connection.side_effect = lambda ip, _, __: next(
-        healthy_ip for healthy_ip in a_record.healthy_ips if healthy_ip.ip == ip
-    ).is_healthy
-
-    mock_txn = MagicMock()
-    result = zone_updater._update_a_record_in_zone(a_record, mock_txn)
-
-    assert result is a_record
-
-    assert mock_can_create_connection.call_count == len(a_record.healthy_ips)
-    mock_can_create_connection.assert_has_calls(
-        [
-            call(
-                healthy_ip.ip, healthy_ip.health_port, zone_updater._connection_timeout
-            )
-            for healthy_ip in a_record.healthy_ips
-        ],
-        any_order=True,
-    )
-
-    mock_txn.replace.assert_not_called()
-    mock_txn.delete.assert_not_called()
-
-
-@patch("indisoluble.a_healthy_dns.dns_server_zone_updater.can_create_connection")
-def test_update_a_record_in_zone_with_stop_event(
-    mock_can_create_connection, zone_updater
-):
+def test_refresh_a_record_with_stop_event(mock_can_create_connection, zone_updater):
     a_record = _make_a_record(
         dns.name.from_text(
             SUBDOMAIN_1_HEALTHY_1_UNHEALTHY.name, dns.name.from_text(DOMAIN)
@@ -407,12 +609,25 @@ def test_update_a_record_in_zone_with_stop_event(
 
     mock_can_create_connection.side_effect = side_effect
 
-    mock_txn = MagicMock()
-    result = zone_updater._update_a_record_in_zone(a_record, mock_txn)
+    result = zone_updater._refresh_a_record(a_record)
 
     assert result is a_record
-
+    assert len(a_record.healthy_ips) > 1
     assert mock_can_create_connection.call_count == 1
 
-    mock_txn.replace.assert_not_called()
-    mock_txn.delete.assert_not_called()
+
+@patch.object(DnsServerZoneUpdater, "_refresh_a_record")
+def test_refresh_a_recs_with_stop_event(mock_refresh_a_record, zone_updater):
+    def side_effect(record):
+        zone_updater._stop_event.set()
+        return record.updated_ips(
+            frozenset(ip.updated_status(not ip.is_healthy) for ip in record.healthy_ips)
+        )
+
+    mock_refresh_a_record.side_effect = side_effect
+
+    result = zone_updater._refresh_a_recs()
+
+    assert result is False
+    assert len(zone_updater._a_recs) > 1
+    assert mock_refresh_a_record.call_count == 1

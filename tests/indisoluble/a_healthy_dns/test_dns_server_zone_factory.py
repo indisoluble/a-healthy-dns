@@ -2,13 +2,13 @@
 
 import json
 
+import dns.dnssectypes
 import dns.name
-import dns.rdatatype
 import pytest
 
 import indisoluble.a_healthy_dns.dns_server_zone_factory as dszf
 
-from unittest.mock import patch
+from dns.dnssecalgs.rsa import PrivateRSASHA256
 
 from indisoluble.a_healthy_dns.healthy_ip import HealthyIp
 
@@ -52,22 +52,48 @@ def args():
     }
 
 
-@patch("time.time")
-def test_make_zone_success(mock_time, args):
-    mock_time.return_value = 1234567890
+@pytest.fixture
+def args_with_dnssec(args):
+    args[dszf.ARG_DNSSEC_PRIVATE_KEY_PEM] = PrivateRSASHA256.generate(
+        key_size=2048
+    ).to_pem()
 
+    return args
+
+
+def test_make_zone_success(args):
     ext_zone = dszf.make_zone(args)
-
     assert ext_zone is not None
-    assert isinstance(ext_zone, dszf.ExtendedZone)
+
+    # Check private key
+    assert ext_zone.ext_priv_key is None
 
     # Check zone origin
     assert ext_zone.zone.origin == dns.name.from_text("dev.example.com.")
 
-    assert len(ext_zone.a_records) == 4
+    # Check NS records
+    assert ext_zone.ns_rec.ttl == 86400
+    assert len(ext_zone.ns_rec) == 2
+    ns_names = sorted([str(rdata.target) for rdata in ext_zone.ns_rec])
+    assert ns_names == ["ns1.example.com.", "ns2.example.com."]
+
+    # Check SOA record
+    assert ext_zone.soa_rec.ttl == 301
+
+    soa_rdata = ext_zone.soa_rec[0]
+    assert str(soa_rdata.mname) == "ns1.example.com."
+    assert str(soa_rdata.rname) == "hostmaster.dev.example.com."
+    assert soa_rdata.serial == 0
+    assert soa_rdata.refresh == 7200
+    assert soa_rdata.retry == 3600
+    assert soa_rdata.expire == 1209600
+    assert soa_rdata.minimum == 601
+
+    # Check A records
+    assert len(ext_zone.a_recs) == 4
 
     healthy_ips_by_subdomain = {}
-    for record in ext_zone.a_records:
+    for record in ext_zone.a_recs:
         healthy_ips_by_subdomain[record.subdomain] = (record.ttl_a, record.healthy_ips)
 
     # Check www subdomain
@@ -102,28 +128,19 @@ def test_make_zone_success(mock_time, args):
         [HealthyIp("102.18.1.1", 8083, False), HealthyIp("192.168.0.20", 8083, False)]
     )
 
-    with ext_zone.zone.reader() as txn:
-        # Check SOA record
-        soa_rdataset = txn.get("dev.example.com.", dns.rdatatype.SOA)
-        assert soa_rdataset is not None
-        assert soa_rdataset.ttl == 301
 
-        soa_rdata = soa_rdataset[0]
-        assert str(soa_rdata.mname) == "ns1.example.com."
-        assert str(soa_rdata.rname) == "hostmaster.dev.example.com."
-        assert soa_rdata.serial == 1234567890
-        assert soa_rdata.refresh == 7200
-        assert soa_rdata.retry == 3600
-        assert soa_rdata.expire == 1209600
-        assert soa_rdata.minimum == 601
+def test_make_zone_success_with_dnssec(args_with_dnssec):
+    ext_zone = dszf.make_zone(args_with_dnssec)
+    assert ext_zone is not None
 
-        # Check NS records
-        ns_rdataset = txn.get("dev.example.com.", dns.rdatatype.NS)
-        assert ns_rdataset is not None
-        assert ns_rdataset.ttl == 86400
-        assert len(ns_rdataset) == 2
-        ns_names = sorted([str(rdata.target) for rdata in ns_rdataset])
-        assert ns_names == ["ns1.example.com.", "ns2.example.com."]
+    # Check private key
+    assert ext_zone.ext_priv_key is not None
+    assert ext_zone.ext_priv_key.private_key is not None
+    assert isinstance(ext_zone.ext_priv_key.private_key, PrivateRSASHA256)
+    assert ext_zone.ext_priv_key.dnskey is not None
+    assert ext_zone.ext_priv_key.dnskey.algorithm == dns.dnssectypes.Algorithm.RSASHA256
+    assert ext_zone.ext_priv_key.dnskey_ttl == 86400
+    assert ext_zone.ext_priv_key.rrsig_lifetime == 1209600
 
 
 def test_make_zone_invalid_hosted_zone(args):
@@ -381,5 +398,29 @@ def test_make_zone_invalid_port_range(args):
     )  # Port > 65535 (invalid)
 
     ext_zone = dszf.make_zone(args)
+
+    assert ext_zone is None
+
+
+def test_make_zone_invalid_dnskey_ttl(args_with_dnssec):
+    args_with_dnssec[dszf.ARG_DNSSEC_TTL_DNSKEY] = -86400  # Negative TTL
+
+    ext_zone = dszf.make_zone(args_with_dnssec)
+
+    assert ext_zone is None
+
+
+def test_make_zone_invalid_rrsig_lifetime(args_with_dnssec):
+    args_with_dnssec[dszf.ARG_DNSSEC_LIFETIME] = -1209600  # Negative lifetime
+
+    ext_zone = dszf.make_zone(args_with_dnssec)
+
+    assert ext_zone is None
+
+
+def test_make_zone_invalid_dnssec_algorithm(args_with_dnssec):
+    args_with_dnssec[dszf.ARG_DNSSEC_ALGORITHM] = "INVALID_ALG"  # Invalid algorithm
+
+    ext_zone = dszf.make_zone(args_with_dnssec)
 
     assert ext_zone is None
