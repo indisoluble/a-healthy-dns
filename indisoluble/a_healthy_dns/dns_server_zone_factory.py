@@ -38,22 +38,22 @@ class ExtendedZone(NamedTuple):
     ext_priv_key: Optional[ExtendedPrivateKey]
 
 
-ARG_DNSSEC_ALGORITHM = "dnssec_alg"
-ARG_DNSSEC_LIFETIME = "dnssec_lifetime"
-ARG_DNSSEC_PRIVATE_KEY_PEM = "dnssec_priv_key_pem"
-ARG_DNSSEC_TTL_DNSKEY = "dnssec_ttl_dnskey"
-ARG_HOSTED_ZONE = "hosted_zone"
+ARG_DNSSEC_ALGORITHM = "priv_key_alg"
+ARG_DNSSEC_LIFETIME = "lifetime"
+ARG_DNSSEC_PRIVATE_KEY_PEM = "priv_key_pem"
+ARG_DNSSEC_TTL_DNSKEY = "dnskey_ttl"
+ARG_HOSTED_ZONE = "zone"
 ARG_NAME_SERVERS = "name_servers"
-ARG_SOA_EXPIRE = "soa_expire"
-ARG_SOA_MIN_TTL = "soa_min_ttl"
-ARG_SOA_REFRESH = "soa_refresh"
-ARG_SOA_RETRY = "soa_retry"
+ARG_SOA_EXPIRE = "expire"
+ARG_SOA_MIN_TTL = "min_ttl"
+ARG_SOA_REFRESH = "refresh"
+ARG_SOA_RETRY = "retry"
 ARG_SUBDOMAIN_HEALTH_PORT = "health_port"
 ARG_SUBDOMAIN_IP_LIST = "ips"
-ARG_TTL_A = "ttl_a"
-ARG_TTL_NS = "ttl_ns"
-ARG_TTL_SOA = "ttl_soa"
-ARG_ZONE_RESOLUTIONS = "zone_resolutions"
+ARG_TTL_A = "a_ttl"
+ARG_TTL_NS = "ns_ttl"
+ARG_TTL_SOA = "soa_ttl"
+ARG_ZONE_RESOLUTIONS = "resolutions"
 
 
 def _make_origin_name(args: Dict[str, Any]) -> Optional[dns.name.Name]:

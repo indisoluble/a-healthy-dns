@@ -18,9 +18,34 @@ from .dns_server_zone_updater import (
 )
 
 
-_ARG_DNSSEC_PRIVATE_KEY_PATH = "dnssec_priv_key_path"
+_ARG_DNSSEC_PRIVATE_KEY_PATH = "priv_key_path"
 _ARG_LOG_LEVEL = "log_level"
 _ARG_PORT = "port"
+_GRP_A_RECORDS = "Address (A) records"
+_GRP_CONNECTIVITY_TESTS = "Connectivity tests"
+_GRP_GENERAL = "General"
+_GRP_DNSSEC_PARAMS = "DNS Security Extensions (DNSSEC) parameters"
+_GRP_NS_RECORDS = "Name Server (NS) records"
+_GRP_SOA_RECORDS = "Start of Authority (SOA) records"
+_GRP_ZONE_RESOLUTIONS = "Zone resolutions"
+_NAME_DNSKEY_TTL = "dnskey-ttl"
+_NAME_DNSSEC_LIFETIME = "dnssec-lifetime"
+_NAME_HOSTED_ZONE = "hosted-zone"
+_NAME_LOG_LEVEL = "log-level"
+_NAME_NAME_SERVERS = "ns"
+_NAME_NS_TTL = "ns-ttl"
+_NAME_PORT = "port"
+_NAME_PRIV_KEY_ALG = "priv-key-alg"
+_NAME_PRIV_KEY_PATH = "priv-key-path"
+_NAME_SOA_EXPIRE = "soa-expire"
+_NAME_SOA_MIN_TTL = "soa-min-ttl"
+_NAME_SOA_REFRESH = "soa-refresh"
+_NAME_SOA_RETRY = "soa-retry"
+_NAME_SOA_TTL = "soa-ttl"
+_NAME_TEST_INTERVAL = "test-interval"
+_NAME_TEST_TIMEOUT = "test-timeout"
+_NAME_TTL_A = "a-ttl"
+_NAME_ZONE_RESOLUTIONS = "zone-resolutions"
 _VAL_CONNECTION_TIMEOUT = 2
 _VAL_DNSSEC_ALGORITHM = dns.dnssec.algorithm_to_text(
     dns.dnssectypes.Algorithm.RSASHA256
@@ -38,105 +63,184 @@ _VAL_TTL_NS = 86400  # 24 hours
 
 
 def _make_arg_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="DNS server")
-    parser.add_argument(
-        "-z",
-        "--hosted-zone",
-        type=str,
-        required=True,
-        dest=dszf.ARG_HOSTED_ZONE,
-        help="Hosted zone name",
+    epilog = f"""
+Parameter details
+=================
+
+{_GRP_GENERAL}
+{len(_GRP_GENERAL) * '-'}
+--{_NAME_PORT}: Port on which the DNS server will listen for incoming DNS requests.
+--{_NAME_LOG_LEVEL}: Controls verbosity of log output (debug, info, warning, error, critical).
+
+{_GRP_ZONE_RESOLUTIONS}
+{len(_GRP_ZONE_RESOLUTIONS) * '-'}
+--{_NAME_HOSTED_ZONE}: The domain name for which this DNS server is authoritative.
+--{_NAME_ZONE_RESOLUTIONS}: JSON configuration defining subdomains, their IP addresses, and health check ports.
+
+Examples:
+    --{_NAME_HOSTED_ZONE} example.com
+    --{_NAME_ZONE_RESOLUTIONS} '{{"www":{{"ips":["192.168.1.100","192.168.1.101"],"health_port":8080}},"api":{{"ips":["192.168.1.102"],"health_port":8000}}}}'
+
+{_GRP_CONNECTIVITY_TESTS}
+{len(_GRP_CONNECTIVITY_TESTS) * '-'}
+--{_NAME_TEST_INTERVAL}: How often to check if IPs are healthy (in seconds).
+--{_NAME_TEST_TIMEOUT}: Maximum time to wait for a health check response (in seconds).
+
+{_GRP_A_RECORDS}
+{len(_GRP_A_RECORDS) * '-'}
+--{_NAME_TTL_A}: Time-to-live for A records (in seconds). Controls how long DNS resolvers cache the IP addresses.
+
+{_GRP_NS_RECORDS}
+{len(_GRP_NS_RECORDS) * '-'}
+--{_NAME_NAME_SERVERS}: Name servers responsible for this zone (JSON array).
+--{_NAME_NS_TTL}: Time-to-live for NS records (in seconds). Controls how long DNS resolvers cache the IP addresses.
+
+Examples:
+    --{_NAME_NAME_SERVERS} '["ns1.example.com", "ns2.example.com"]'
+
+{_GRP_SOA_RECORDS}
+{len(_GRP_SOA_RECORDS) * '-'}
+--{_NAME_SOA_TTL}: Time-to-live for SOA record (in seconds). Controls how long DNS resolvers cache the IP addresses.
+--{_NAME_SOA_REFRESH}: Time interval secondary servers wait before requesting zone updates (in seconds).
+--{_NAME_SOA_RETRY}: Time interval to wait before retrying failed zone transfers (in seconds).
+--{_NAME_SOA_EXPIRE}: Time after which secondary servers should stop answering queries if primary is unreachable (in seconds).
+--{_NAME_SOA_MIN_TTL}: How long a resolver should cache negative responses (NXDOMAIN) (in seconds).
+
+{_GRP_DNSSEC_PARAMS}
+{len(_GRP_DNSSEC_PARAMS) * '-'}
+--{_NAME_PRIV_KEY_PATH}: Path to the DNSSEC private key file for zone signing.
+--{_NAME_PRIV_KEY_ALG}: Algorithm used for DNSSEC signing.
+--{_NAME_DNSKEY_TTL}: Time-to-live for DNSKEY records (in seconds). Controls how long DNS resolvers cache the IP addresses.
+--{_NAME_DNSSEC_LIFETIME}: How long DNSSEC signatures are valid (in seconds).
+
+Example usage
+=============
+a_healthy_dns \\
+    --{_NAME_HOSTED_ZONE} example.com \\
+    --{_NAME_ZONE_RESOLUTIONS} '{{"www":{{"ips":["192.168.1.100"],"health_port":8080}}}}' \\
+    --{_NAME_NAME_SERVERS} '["ns1.example.com"]' \\
+    --{_NAME_PORT} 53053
+"""
+    parser = argparse.ArgumentParser(
+        description="A Healthy DNS server",
+        epilog=epilog,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    parser.add_argument(
-        "-n",
-        "--name-servers",
-        type=str,
-        required=True,
-        dest=dszf.ARG_NAME_SERVERS,
-        help="List of name servers as JSON string (ex. [fqdn1, fqdn2, ...])",
-    )
-    parser.add_argument(
-        "-r",
-        "--zone-resolutions",
-        type=str,
-        required=True,
-        dest=dszf.ARG_ZONE_RESOLUTIONS,
-        help=(
-            f"List of subdomains with their respective IPs and health ports as JSON string "
-            f"(ex. {{sd1: {{'{dszf.ARG_SUBDOMAIN_IP_LIST}': [ip1, ip2, ...], "
-            f"'{dszf.ARG_SUBDOMAIN_HEALTH_PORT}': port}}, ...}})"
-        ),
-    )
-    parser.add_argument(
-        "-p",
-        "--port",
+    general_group = parser.add_argument_group(_GRP_GENERAL)
+    general_group.add_argument(
+        f"--{_NAME_PORT}",
         type=int,
         default=_VAL_PORT,
         dest=_ARG_PORT,
         help=f"DNS server port (default: {_VAL_PORT})",
     )
-    parser.add_argument(
-        "-a",
-        "--ttl-a",
+    general_group.add_argument(
+        f"--{_NAME_LOG_LEVEL}",
+        type=str,
+        choices=[
+            name.lower() for name in logging._levelToName.values() if name != "NOTSET"
+        ],
+        default=_VAL_LOG_LEVEL,
+        dest=_ARG_LOG_LEVEL,
+        help=f"Logging level (default: {_VAL_LOG_LEVEL})",
+    )
+    res_group = parser.add_argument_group(_GRP_ZONE_RESOLUTIONS)
+    res_group.add_argument(
+        f"--{_NAME_HOSTED_ZONE}",
+        type=str,
+        required=True,
+        dest=dszf.ARG_HOSTED_ZONE,
+        help="Hosted zone name",
+    )
+    res_group.add_argument(
+        f"--{_NAME_ZONE_RESOLUTIONS}",
+        type=str,
+        required=True,
+        dest=dszf.ARG_ZONE_RESOLUTIONS,
+        help=(
+            f"Subdomains with IPs and health ports as JSON string "
+            f"(ex. {{sd1: {{'{dszf.ARG_SUBDOMAIN_IP_LIST}': [ip1, ip2, ...], "
+            f"'{dszf.ARG_SUBDOMAIN_HEALTH_PORT}': port}}, ...}})"
+        ),
+    )
+    conn_group = parser.add_argument_group(_GRP_CONNECTIVITY_TESTS)
+    conn_group.add_argument(
+        f"--{_NAME_TEST_INTERVAL}",
+        type=int,
+        dest=ARG_TEST_INTERVAL,
+        help=f"Interval for connectivity tests (default: {_NAME_TTL_A} // {_VAL_FACTOR_TEST_INTERVAL})",
+    )
+    conn_group.add_argument(
+        f"--{_NAME_TEST_TIMEOUT}",
+        type=int,
+        default=_VAL_CONNECTION_TIMEOUT,
+        dest=ARG_CONNECTION_TIMEOUT,
+        help=f"Timeout for each connection test (default: {_VAL_CONNECTION_TIMEOUT} seconds)",
+    )
+    a_group = parser.add_argument_group(_GRP_A_RECORDS)
+    a_group.add_argument(
+        f"--{_NAME_TTL_A}",
         type=int,
         default=_VAL_TTL_A,
         dest=dszf.ARG_TTL_A,
-        help=f"TTL in seconds for A records (default: {_VAL_TTL_A})",
+        help=f"TTL for A records (default: {_VAL_TTL_A} seconds)",
     )
-    parser.add_argument(
-        "-s",
-        "--ttl-ns",
+    ns_group = parser.add_argument_group(_GRP_NS_RECORDS)
+    ns_group.add_argument(
+        f"--{_NAME_NAME_SERVERS}",
+        type=str,
+        required=True,
+        dest=dszf.ARG_NAME_SERVERS,
+        help="Name servers as JSON string (ex. [fqdn1, fqdn2, ...])",
+    )
+    ns_group.add_argument(
+        f"--{_NAME_NS_TTL}",
         type=int,
         default=_VAL_TTL_NS,
         dest=dszf.ARG_TTL_NS,
-        help=f"TTL in seconds for NS records (default: {_VAL_TTL_NS})",
+        help=f"TTL for NS records (default: {_VAL_TTL_NS} seconds)",
     )
-    parser.add_argument(
-        "-o",
-        "--ttl-soa",
+    soa_group = parser.add_argument_group(_GRP_SOA_RECORDS)
+    soa_group.add_argument(
+        f"--{_NAME_SOA_TTL}",
         type=int,
         dest=dszf.ARG_TTL_SOA,
-        help="TTL in seconds for SOA records (default: --ttl-a if not provided)",
+        help=f"TTL for SOA records (default: {_NAME_TTL_A})",
     )
-    parser.add_argument(
-        "-f",
-        "--soa-refresh",
+    soa_group.add_argument(
+        f"--{_NAME_SOA_REFRESH}",
         type=int,
         dest=dszf.ARG_SOA_REFRESH,
-        help="SOA refresh time in seconds (default: --ttl-soa if not provided)",
+        help=f"SOA refresh time (default: {_NAME_TTL_A})",
     )
-    parser.add_argument(
-        "-t",
-        "--soa-retry",
+    soa_group.add_argument(
+        f"--{_NAME_SOA_RETRY}",
         type=int,
         dest=dszf.ARG_SOA_RETRY,
-        help=f"SOA retry time in seconds (default: --ttl-soa//{_VAL_FACTOR_SOA_RETRY} if not provided)",
+        help=f"SOA retry time (default: {_NAME_TTL_A} // {_VAL_FACTOR_SOA_RETRY})",
     )
-    parser.add_argument(
-        "-e",
-        "--soa-expire",
+    soa_group.add_argument(
+        f"--{_NAME_SOA_EXPIRE}",
         type=int,
         dest=dszf.ARG_SOA_EXPIRE,
-        help=f"SOA expire time in seconds (default: --ttl-soa*{_VAL_FACTOR_SOA_EXPIRE} if not provided)",
+        help=f"SOA expire time (default: {_NAME_TTL_A} * {_VAL_FACTOR_SOA_EXPIRE})",
     )
-    parser.add_argument(
-        "-m",
-        "--soa-min-ttl",
+    soa_group.add_argument(
+        f"--{_NAME_SOA_MIN_TTL}",
         type=int,
         default=_VAL_SOA_MIN_TTL,
         dest=dszf.ARG_SOA_MIN_TTL,
-        help=f"SOA minimum TTL in seconds (default: {_VAL_SOA_MIN_TTL})",
+        help=f"SOA minimum TTL (default: {_VAL_SOA_MIN_TTL} seconds)",
     )
-    parser.add_argument(
-        "-k",
-        "--dnssec-priv-key-path",
+    dnssec_group = parser.add_argument_group(_GRP_DNSSEC_PARAMS)
+    dnssec_group.add_argument(
+        f"--{_NAME_PRIV_KEY_PATH}",
         type=str,
         dest=_ARG_DNSSEC_PRIVATE_KEY_PATH,
         help="Path to DNSSEC private key PEM file",
     )
-    parser.add_argument(
-        "-g",
-        "--dnssec-alg",
+    dnssec_group.add_argument(
+        f"--{_NAME_PRIV_KEY_ALG}",
         type=str,
         choices=[
             dns.dnssec.algorithm_to_text(alg)
@@ -145,47 +249,21 @@ def _make_arg_parser() -> argparse.ArgumentParser:
         ],
         default=_VAL_DNSSEC_ALGORITHM,
         dest=dszf.ARG_DNSSEC_ALGORITHM,
-        help=f"DNSSEC algorithm (default: {_VAL_DNSSEC_ALGORITHM})",
+        help=f"DNSSEC private key algorithm (default: {_VAL_DNSSEC_ALGORITHM})",
     )
-    parser.add_argument(
-        "-l",
-        "--dnssec-ttl-dnskey",
+    dnssec_group.add_argument(
+        f"--{_NAME_DNSKEY_TTL}",
         type=int,
         default=_VAL_DNSSEC_TTL_DNSKEY,
         dest=dszf.ARG_DNSSEC_TTL_DNSKEY,
-        help=f"TTL in seconds for DNSKEY records (default: {_VAL_DNSSEC_TTL_DNSKEY})",
+        help=f"TTL for DNSKEY records (default: {_VAL_DNSSEC_TTL_DNSKEY} seconds)",
     )
-    parser.add_argument(
-        "-d",
-        "--dnssec-lifetime",
+    dnssec_group.add_argument(
+        f"--{_NAME_DNSSEC_LIFETIME}",
         type=int,
         default=_VAL_DNSSEC_LIFETIME,
         dest=dszf.ARG_DNSSEC_LIFETIME,
-        help=f"DNSSEC lifetime in seconds (default: {_VAL_DNSSEC_LIFETIME})",
-    )
-    parser.add_argument(
-        "-i",
-        "--test-interval",
-        type=int,
-        dest=ARG_TEST_INTERVAL,
-        help=f"Interval in seconds for connectivity tests (default: --ttl-a//{_VAL_FACTOR_TEST_INTERVAL} if not provided)",
-    )
-    parser.add_argument(
-        "-c",
-        "--connection-timeout",
-        type=int,
-        default=_VAL_CONNECTION_TIMEOUT,
-        dest=ARG_CONNECTION_TIMEOUT,
-        help=f"Timeout in seconds for connectivity tests (default: {_VAL_CONNECTION_TIMEOUT})",
-    )
-    parser.add_argument(
-        "-v",
-        "--log-level",
-        type=str,
-        choices=[name.lower() for name in logging._levelToName.values()],
-        default=_VAL_LOG_LEVEL,
-        dest=_ARG_LOG_LEVEL,
-        help=f"Logging level (default: {_VAL_LOG_LEVEL})",
+        help=f"DNSSEC lifetime (default: {_VAL_DNSSEC_LIFETIME} seconds)",
     )
 
     return parser
@@ -216,7 +294,7 @@ def _derive_soa_refresh(args: Dict[str, Any]) -> int:
 def _derive_soa_retry(args: Dict[str, Any]) -> int:
     result = args[dszf.ARG_TTL_A] // _VAL_FACTOR_SOA_RETRY
     logging.info(
-        "SOA retry not provided, using A record TTL//%d as default: %d",
+        "SOA retry not provided, using A record TTL // %d as default: %d",
         _VAL_FACTOR_SOA_RETRY,
         result,
     )
@@ -227,7 +305,7 @@ def _derive_soa_retry(args: Dict[str, Any]) -> int:
 def _derive_soa_expire(args: Dict[str, Any]) -> int:
     result = args[dszf.ARG_TTL_A] * _VAL_FACTOR_SOA_EXPIRE
     logging.info(
-        "SOA expire not provided, using A record TTL*%d as default: %d",
+        "SOA expire not provided, using A record TTL * %d as default: %d",
         _VAL_FACTOR_SOA_EXPIRE,
         result,
     )
@@ -238,7 +316,7 @@ def _derive_soa_expire(args: Dict[str, Any]) -> int:
 def _derive_test_interval(args: Dict[str, Any]) -> int:
     result = args[dszf.ARG_TTL_A] // _VAL_FACTOR_TEST_INTERVAL
     logging.info(
-        "Test interval not provided, using A record TTL//%d as default: %d",
+        "Test interval not provided, using A record TTL // %d as default: %d",
         _VAL_FACTOR_TEST_INTERVAL,
         result,
     )

@@ -28,8 +28,8 @@ class ZonePrivateKey(NamedTuple):
 
 _RESIGN_EXTRA_DELTA = 5.0
 _STOP_JOIN_EXTRA_TIMEOUT = 1.0
-ARG_CONNECTION_TIMEOUT = "connection_timeout"
-ARG_TEST_INTERVAL = "test_interval"
+ARG_CONNECTION_TIMEOUT = "timeout"
+ARG_TEST_INTERVAL = "interval"
 
 
 class DnsServerZoneUpdater:
