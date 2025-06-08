@@ -2,7 +2,7 @@
 
 import dns.name
 
-from typing import FrozenSet
+from typing import FrozenSet, List
 
 from .healthy_ip import HealthyIp
 
@@ -13,30 +13,18 @@ class HealthyARecord:
         return self._subdomain
 
     @property
-    def ttl_a(self) -> int:
-        return self._ttl_a
-
-    @property
     def healthy_ips(self) -> FrozenSet[HealthyIp]:
         return self._healthy_ips
 
-    def __init__(
-        self, subdomain: dns.name.Name, ttl_a: int, healthy_ips: FrozenSet[HealthyIp]
-    ):
-        if ttl_a <= 0:
-            raise ValueError("TTL for A records must be positive")
-
+    def __init__(self, subdomain: dns.name.Name, healthy_ips: List[HealthyIp]):
         self._subdomain = subdomain
-        self._ttl_a = ttl_a
-        self._healthy_ips = healthy_ips
+        self._healthy_ips = frozenset(healthy_ips)
 
-    def updated_ips(self, updated_ips: FrozenSet[HealthyIp]) -> "HealthyARecord":
+    def updated_ips(self, updated_ips: List[HealthyIp]) -> "HealthyARecord":
         if updated_ips == self.healthy_ips:
             return self
 
-        return HealthyARecord(
-            subdomain=self.subdomain, ttl_a=self.ttl_a, healthy_ips=updated_ips
-        )
+        return HealthyARecord(subdomain=self.subdomain, healthy_ips=updated_ips)
 
     def __eq__(self, other):
         if not isinstance(other, HealthyARecord):
@@ -50,8 +38,4 @@ class HealthyARecord:
     def __repr__(self):
         ips_str = ", ".join(f"{ip}" for ip in self.healthy_ips)
 
-        return (
-            f"HealthyARecord(subdomain={self.subdomain}, "
-            f"ttl_a={self.ttl_a}, "
-            f"healthy_ips=[{ips_str}])"
-        )
+        return f"HealthyARecord(subdomain={self.subdomain}, healthy_ips=[{ips_str}])"
