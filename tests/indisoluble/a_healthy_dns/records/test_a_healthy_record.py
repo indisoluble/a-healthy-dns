@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 
 import dns.name
-import pytest
 
 from indisoluble.a_healthy_dns.records.a_healthy_record import AHealthyRecord
 from indisoluble.a_healthy_dns.records.a_healthy_ip import AHealthyIp
