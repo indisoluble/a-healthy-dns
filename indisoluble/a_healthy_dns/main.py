@@ -9,7 +9,7 @@ import dns.dnssectypes
 
 from typing import Any, Dict
 
-from .dns_server_config_factory import (
+from indisoluble.a_healthy_dns.dns_server_config_factory import (
     ARG_DNSSEC_ALGORITHM,
     ARG_DNSSEC_PRIVATE_KEY_PATH,
     ARG_HOSTED_ZONE,
@@ -19,19 +19,19 @@ from .dns_server_config_factory import (
     ARG_ZONE_RESOLUTIONS,
     make_config,
 )
-from .dns_server_udp_handler import DnsServerUdpHandler
-from .dns_server_zone_updater import DnsServerZoneUpdater
+from indisoluble.a_healthy_dns.dns_server_udp_handler import DnsServerUdpHandler
+from indisoluble.a_healthy_dns.dns_server_zone_updater import DnsServerZoneUpdater
 
 
 _ARG_CONNECTION_TIMEOUT = "timeout"
 _ARG_LOG_LEVEL = "log_level"
 _ARG_MIN_TEST_INTERVAL = "min_interval"
 _ARG_PORT = "port"
-_GRP_CONNECTIVITY_TESTS = "Connectivity tests"
-_GRP_DNSSEC_PARAMS = "DNS Security Extensions (DNSSEC) parameters"
-_GRP_GENERAL = "General"
-_GRP_NS_RECORDS = "Name Server (NS) records"
-_GRP_ZONE_RESOLUTIONS = "Zone resolutions"
+_GRP_CONNECTIVITY_TESTS = "connectivity test arguments"
+_GRP_DNSSEC_PARAMS = "dns security extensions (DNSSEC) arguments"
+_GRP_GENERAL = "general arguments"
+_GRP_NS_RECORDS = "name server (NS) arguments"
+_GRP_ZONE_RESOLUTIONS = "zone resolution arguments"
 _NAME_HOSTED_ZONE = "hosted-zone"
 _NAME_LOG_LEVEL = "log-level"
 _NAME_NAME_SERVERS = "ns"
@@ -52,8 +52,8 @@ _VAL_PORT = 53053
 
 def _make_arg_parser() -> argparse.ArgumentParser:
     epilog = f"""
-Parameter details
-=================
+Argument details
+================
 
 {_GRP_GENERAL}
 {len(_GRP_GENERAL) * '-'}
@@ -204,7 +204,7 @@ def _main(args: Dict[str, Any]):
     # Launch DNS server
     server_address = ("", args[_ARG_PORT])
     with socketserver.UDPServer(server_address, DnsServerUdpHandler) as server:
-        server.zone = ext_zone.zone
+        server.zone = zone_updater.zone
 
         logging.info("DNS server listening on port %d...", args[_ARG_PORT])
         try:

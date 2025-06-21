@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 
-from .tools.is_valid_ip import is_valid_ip
-from .tools.is_valid_port import is_valid_port
-from .tools.normalize_ip import normalize_ip
+from indisoluble.a_healthy_dns.tools.is_valid_ip import is_valid_ip
+from indisoluble.a_healthy_dns.tools.is_valid_port import is_valid_port
+from indisoluble.a_healthy_dns.tools.normalize_ip import normalize_ip
 
 
-class HealthyIp:
+class AHealthyIp:
     @property
     def ip(self) -> str:
         return self._ip
@@ -31,16 +31,16 @@ class HealthyIp:
         self._health_port = health_port
         self._is_healthy = is_healthy
 
-    def updated_status(self, is_healthy: bool) -> "HealthyIp":
+    def updated_status(self, is_healthy: bool) -> "AHealthyIp":
         if is_healthy == self._is_healthy:
             return self
 
-        return HealthyIp(
+        return AHealthyIp(
             ip=self.ip, health_port=self.health_port, is_healthy=is_healthy
         )
 
     def __eq__(self, other):
-        if not isinstance(other, HealthyIp):
+        if not isinstance(other, AHealthyIp):
             return False
 
         return (
@@ -54,7 +54,7 @@ class HealthyIp:
 
     def __repr__(self):
         return (
-            f"HealthyIp(ip='{self.ip}', "
+            f"AHealthyIp(ip='{self.ip}', "
             f"health_port={self.health_port}, "
             f"is_healthy={self.is_healthy})"
         )

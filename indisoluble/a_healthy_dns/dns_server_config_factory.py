@@ -9,9 +9,9 @@ import dns.name
 
 from typing import Any, Dict, FrozenSet, List, NamedTuple, Optional, Union
 
-from .healthy_a_record import HealthyARecord
-from .healthy_ip import HealthyIp
-from .tools.is_valid_subdomain import is_valid_subdomain
+from indisoluble.a_healthy_dns.records.a_healthy_record import AHealthyRecord
+from indisoluble.a_healthy_dns.records.a_healthy_ip import AHealthyIp
+from indisoluble.a_healthy_dns.tools.is_valid_subdomain import is_valid_subdomain
 
 
 class ExtendedPrivateKey(NamedTuple):
@@ -22,7 +22,7 @@ class ExtendedPrivateKey(NamedTuple):
 class DnsServerConfig(NamedTuple):
     origin_name: dns.name.Name
     name_servers: FrozenSet[str]
-    a_records: FrozenSet[HealthyARecord]
+    a_records: FrozenSet[AHealthyRecord]
     ext_private_key: Optional[ExtendedPrivateKey]
 
 
@@ -49,7 +49,7 @@ def _make_healthy_a_record(
     origin_name: dns.name.Name,
     subdomain: str,
     sub_config: Dict[str, Union[List[str], int]],
-) -> Optional[HealthyARecord]:
+) -> Optional[AHealthyRecord]:
     success, error = is_valid_subdomain(subdomain)
     if not success:
         logging.error(
@@ -88,21 +88,17 @@ def _make_healthy_a_record(
         return None
 
     try:
-        healthy_ips = [HealthyIp(ip, health_port, False) for ip in ip_list]
+        healthy_ips = [AHealthyIp(ip, health_port, False) for ip in ip_list]
     except ValueError as ex:
         logging.error("Invalid IP address in '%s': %s", subdomain, ex)
         return None
 
-    try:
-        return HealthyARecord(subdomain_name, healthy_ips)
-    except ValueError as ex:
-        logging.error("Invalid A record for '%s': %s", subdomain, ex)
-        return None
+    return AHealthyRecord(subdomain_name, healthy_ips)
 
 
 def _make_a_records(
     origin_name: dns.name.Name, args: Dict[str, Any]
-) -> Optional[FrozenSet[HealthyARecord]]:
+) -> Optional[FrozenSet[AHealthyRecord]]:
     try:
         raw_resolutions = json.loads(args[ARG_ZONE_RESOLUTIONS])
     except json.JSONDecodeError as ex:
@@ -156,7 +152,7 @@ def _make_name_servers(args: Dict[str, Any]) -> Optional[FrozenSet[str]]:
             logging.error("Name server '%s' is not a valid FQDN: %s", ns, error)
             return None
 
-        abs_name_servers.add(f"{ns}.")
+        abs_name_servers.append(f"{ns}.")
 
     return frozenset(abs_name_servers)
 

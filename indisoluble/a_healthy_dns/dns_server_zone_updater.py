@@ -7,48 +7,23 @@ import time
 
 import dns.dnssec
 import dns.name
-import dns.rdataclass
-import dns.rdataset
-import dns.rdatatype
 import dns.transaction
 import dns.versioned
 
-from typing import FrozenSet, Iterator, NamedTuple, Tuple
+from typing import FrozenSet, Iterator, NamedTuple
 
-from .dns_server_config_factory import DnsServerConfig, ExtendedPrivateKey
-from .healthy_a_record import HealthyARecord
-from .tools.can_create_connection import can_create_connection
-from .tools.uint32_current_time import uint32_current_time
-
-
-class RRSigLifetime(NamedTuple):
-    resign: int
-    expiration: int
-
-
-class RRSigKey(NamedTuple):
-    dnskey: Tuple[dns.dnssec.PrivateKey, dns.dnssec.DNSKEY]
-    dnskey_ttl: int
-    inception: datetime
-    expiration: datetime
-
-
-class ExtendedRRSigKey(NamedTuple):
-    key: RRSigKey
-    resign: datetime
+from indisoluble.a_healthy_dns.dns_server_config_factory import DnsServerConfig
+from indisoluble.a_healthy_dns.records.a_healthy_record import AHealthyRecord
+from indisoluble.a_healthy_dns.records.a_record import make_a_record
+from indisoluble.a_healthy_dns.records.dnssec import ExtendedRRSigKey, iter_rrsig_key
+from indisoluble.a_healthy_dns.records.ns_record import make_ns_record
+from indisoluble.a_healthy_dns.records.soa_record import iter_soa_record
+from indisoluble.a_healthy_dns.tools.can_create_connection import can_create_connection
 
 
 class RRSigAction(NamedTuple):
-    resign: datetime
+    resign: datetime.datetime
     iter: Iterator[ExtendedRRSigKey]
-
-
-class ZonePrivateKey(NamedTuple):
-    dnskey: Tuple[dns.dnssec.PrivateKey, dns.dnssec.DNSKEY]
-    dnskey_ttl: int
-    rrsig_resign_time: datetime.datetime
-    rrsig_resign_timedelta: datetime.timedelta
-    rrsig_expiration_timedelta: datetime.timedelta
 
 
 _DELTA_PER_RECORD_MANAGEMENT = 1
@@ -59,7 +34,7 @@ _STOP_JOIN_EXTRA_TIMEOUT = 1.0
 def _calculate_max_interval(
     min_interval: int,
     connection_timeout: int,
-    a_records: FrozenSet[HealthyARecord],
+    a_records: FrozenSet[AHealthyRecord],
     do_sign: bool,
 ) -> int:
     delta_per_record = _DELTA_PER_RECORD_MANAGEMENT + (
@@ -71,135 +46,6 @@ def _calculate_max_interval(
     )
 
     return max_loop_duration if max_loop_duration > min_interval else min_interval
-
-
-def _calculate_a_ttl(max_interval: int) -> int:
-    return max_interval * 2
-
-
-def _calculate_ns_ttl(max_interval: int) -> int:
-    return _calculate_a_ttl(max_interval) * 30
-
-
-def _calculate_soa_ttl(max_interval: int) -> int:
-    return _calculate_ns_ttl(max_interval)
-
-
-def _calculate_dnskey_ttl(max_interval: int) -> int:
-    return _calculate_a_ttl(max_interval) * 10
-
-
-def _calculate_soa_refresh(max_interval: int) -> int:
-    return _calculate_dnskey_ttl(max_interval)
-
-
-def _calculate_soa_retry(max_interval: int) -> int:
-    return _calculate_a_ttl(max_interval)
-
-
-def _calculate_soa_expire(max_interval: int) -> int:
-    return _calculate_soa_retry(max_interval) * 5
-
-
-def _calculate_soa_min_ttl(max_interval: int) -> int:
-    return _calculate_a_ttl(max_interval)
-
-
-def _calculate_rrsig_lifetime(max_interval: int) -> RRSigLifetime:
-    return RRSigLifetime(
-        resign=_calculate_soa_refresh(max_interval),
-        expiration=2 * _calculate_soa_refresh(max_interval)
-        + _calculate_soa_expire(max_interval)
-        + _calculate_soa_retry(max_interval),
-    )
-
-
-def _make_ns_record(
-    max_interval: int, name_servers: FrozenSet[str]
-) -> dns.rdataset.Rdataset:
-    ttl = _calculate_ns_ttl(max_interval)
-    rdataset = dns.rdataset.from_text(
-        dns.rdataclass.IN, dns.rdatatype.NS, ttl, *name_servers
-    )
-    logging.debug(
-        "Created NS record with ttl: %d, and name servers: %s", ttl, name_servers
-    )
-
-    return rdataset
-
-
-def _iter_soa_serial() -> Iterator[int]:
-    last_serial = 0
-
-    while True:
-        current_serial = uint32_current_time()
-        if current_serial == last_serial:
-            raise ValueError(
-                f"Current serial {current_serial} is the same as last serial"
-            )
-
-        last_serial = current_serial
-
-        yield current_serial
-
-
-def _iter_soa_record(
-    max_interval: int, origin_name: dns.name.Name, primary_ns: str
-) -> Iterator[dns.rdataset.Rdataset]:
-    ttl = _calculate_soa_ttl(max_interval)
-    responsible = f"hostmaster.{origin_name}"
-    serial = _iter_soa_serial()
-    refresh = str(_calculate_soa_refresh(max_interval))
-    retry = str(_calculate_soa_retry(max_interval))
-    expire = str(_calculate_soa_expire(max_interval))
-    min_ttl = str(_calculate_soa_min_ttl(max_interval))
-
-    while True:
-        admin_info = " ".join(
-            [
-                primary_ns,
-                responsible,
-                str(next(serial)),
-                refresh,
-                retry,
-                expire,
-                min_ttl,
-            ]
-        )
-        rdataset = dns.rdataset.from_text(
-            dns.rdataclass.IN, dns.rdatatype.SOA, ttl, admin_info
-        )
-        logging.debug(
-            "Created SOA record with ttl: %d, and admin info: %s", ttl, admin_info
-        )
-
-        yield rdataset
-
-
-def _iter_rrsig_key(
-    max_interval: int, ext_private_key: ExtendedPrivateKey
-) -> Iterator[ExtendedRRSigKey]:
-    key = (ext_private_key.private_key, ext_private_key.dnskey)
-    ttl = _calculate_dnskey_ttl(max_interval)
-    lifetime = _calculate_rrsig_lifetime(max_interval)
-
-    while True:
-        inception = datetime.datetime.now(datetime.timezone.utc)
-        expiration = inception + datetime.timedelta(seconds=lifetime.expiration)
-        resign = expiration + datetime.timedelta(seconds=lifetime.resign)
-        logging.debug(
-            "Created RRSIG key with inception: %s, expiration: %s, resign: %s",
-            inception,
-            expiration,
-            resign,
-        )
-
-        yield ExtendedRRSigKey(
-            key=RRSigKey(
-                dnskey=key, dnskey_ttl=ttl, inception=inception, expiration=expiration
-            ),
-            resign=resign,
-        )
 
 
 class DnsServerZoneUpdater:
@@ -216,29 +62,28 @@ class DnsServerZoneUpdater:
             raise ValueError("Connection timeout must be positive")
 
         self._min_interval = min_interval
-        self._connection_timeout = float(connection_timeout)
-
-        self._zone = dns.versioned.Zone(config.origin_name)
-
-        max_interval = _calculate_max_interval(
+        self._max_interval = _calculate_max_interval(
             min_interval,
             connection_timeout,
             config.a_records,
             config.ext_private_key is not None,
         )
-        self._ns_rec = _make_ns_record(max_interval, config.name_servers)
-        self._soa_rec = _iter_soa_record(
-            max_interval, config.origin_name, config.name_servers[0]
+        self._connection_timeout = float(connection_timeout)
+
+        self._zone = dns.versioned.Zone(config.origin_name)
+
+        self._ns_rec = make_ns_record(self._max_interval, config.name_servers)
+        self._soa_rec = iter_soa_record(
+            self._max_interval, config.origin_name, next(iter(config.name_servers))
         )
         self._rrsig_action = (
             RRSigAction(
                 resign=datetime.datetime.fromtimestamp(0, tz=datetime.timezone.utc),
-                iter=_iter_rrsig_key(max_interval, config.ext_private_key),
+                iter=iter_rrsig_key(self._max_interval, config.ext_private_key),
             )
             if config.ext_private_key
             else None
         )
-
         self._a_recs = list(config.a_records)
 
         self._stop_event = threading.Event()
@@ -254,19 +99,14 @@ class DnsServerZoneUpdater:
         logging.debug("Zone cleared")
 
     def _add_a_record_to_zone_with_transaction(
-        self, a_record: HealthyARecord, txn: dns.transaction.Transaction
+        self, a_record: AHealthyRecord, txn: dns.transaction.Transaction
     ):
-        ips = [ip.ip for ip in a_record.healthy_ips if ip.is_healthy]
-        if ips:
-            txn.add(
-                a_record.subdomain,
-                dns.rdataset.from_text(
-                    dns.rdataclass.IN, dns.rdatatype.A, a_record.ttl_a, *ips
-                ),
-            )
-            logging.debug("Added A record %s with IPs: %s", a_record.subdomain, ips)
+        dataset = make_a_record(self._max_interval, a_record)
+        if dataset:
+            txn.add(a_record.subdomain, dataset)
+            logging.debug("Added A record %s to zone", a_record.subdomain)
         else:
-            logging.debug("No healthy IPs for A record %s. Skip", a_record.subdomain)
+            logging.debug("A record %s skipped", a_record.subdomain)
 
     def _add_records_to_zone_with_transaction(self, txn: dns.transaction.Transaction):
         logging.debug("Adding records to zone...")
@@ -274,12 +114,8 @@ class DnsServerZoneUpdater:
         txn.add(dns.name.empty, self._ns_rec)
         logging.debug("Added NS record to zone")
 
-        txn.add(dns.name.empty, self._soa_rec)
-        soa_serial = int(time.time())
-        txn.update_serial(soa_serial, relative=False)
-        logging.debug(
-            "Added SOA record to zone with serial %d (epoch time)", soa_serial
-        )
+        txn.add(dns.name.empty, next(self._soa_rec))
+        logging.debug("Added SOA record to zone")
 
         for a_record in self._a_recs:
             self._add_a_record_to_zone_with_transaction(a_record, txn)
@@ -295,12 +131,7 @@ class DnsServerZoneUpdater:
             "Signing zone with inception time %s...", ext_rrsig_key.key.inception
         )
 
-        dns.dnssec.sign_zone(
-            self._zone,
-            txn=txn,
-            keys=[ext_rrsig_key.key.dnskey],
-            **ext_rrsig_key.key._asdict(),
-        )
+        dns.dnssec.sign_zone(self._zone, txn=txn, **ext_rrsig_key.key._asdict())
         logging.debug(
             "Zone signed with expiration time %s. Next signing time %s",
             ext_rrsig_key.key.expiration,
@@ -328,7 +159,7 @@ class DnsServerZoneUpdater:
         with self._zone.writer() as txn:
             self._sign_zone_with_transaction(txn)
 
-    def _refresh_a_record(self, a_record: HealthyARecord) -> HealthyARecord:
+    def _refresh_a_record(self, a_record: AHealthyRecord) -> AHealthyRecord:
         updated_ips = []
         for health_ip in a_record.healthy_ips:
             if self._stop_event.is_set():

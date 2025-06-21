@@ -4,30 +4,30 @@ import dns.name
 
 from typing import FrozenSet, List
 
-from .healthy_ip import HealthyIp
+from indisoluble.a_healthy_dns.records.a_healthy_ip import AHealthyIp
 
 
-class HealthyARecord:
+class AHealthyRecord:
     @property
     def subdomain(self) -> dns.name.Name:
         return self._subdomain
 
     @property
-    def healthy_ips(self) -> FrozenSet[HealthyIp]:
+    def healthy_ips(self) -> FrozenSet[AHealthyIp]:
         return self._healthy_ips
 
-    def __init__(self, subdomain: dns.name.Name, healthy_ips: List[HealthyIp]):
+    def __init__(self, subdomain: dns.name.Name, healthy_ips: List[AHealthyIp]):
         self._subdomain = subdomain
         self._healthy_ips = frozenset(healthy_ips)
 
-    def updated_ips(self, updated_ips: List[HealthyIp]) -> "HealthyARecord":
+    def updated_ips(self, updated_ips: List[AHealthyIp]) -> "AHealthyRecord":
         if updated_ips == self.healthy_ips:
             return self
 
-        return HealthyARecord(subdomain=self.subdomain, healthy_ips=updated_ips)
+        return AHealthyRecord(subdomain=self.subdomain, healthy_ips=updated_ips)
 
     def __eq__(self, other):
-        if not isinstance(other, HealthyARecord):
+        if not isinstance(other, AHealthyRecord):
             return False
 
         return self.subdomain == other.subdomain
@@ -38,4 +38,4 @@ class HealthyARecord:
     def __repr__(self):
         ips_str = ", ".join(f"{ip}" for ip in self.healthy_ips)
 
-        return f"HealthyARecord(subdomain={self.subdomain}, healthy_ips=[{ips_str}])"
+        return f"AHealthyRecord(subdomain={self.subdomain}, healthy_ips=[{ips_str}])"
