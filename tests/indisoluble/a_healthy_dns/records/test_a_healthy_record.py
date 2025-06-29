@@ -53,7 +53,7 @@ def test_equality_with_different_subdomain():
     assert set([record1]) != set([record2])
 
 
-def test_equality_with_non_healthy_a_record():
+def test_equality_with_non_wrong_type():
     record = AHealthyRecord(
         subdomain=dns.name.from_text("test.example.com"),
         healthy_ips=frozenset([AHealthyIp("192.168.1.1", 80, True)]),
@@ -90,7 +90,9 @@ def test_updated_ips_with_new_ips():
     updated_record = record.updated_ips(new_ips)
 
     assert updated_record is not record
+    assert updated_record == record
     assert updated_record.subdomain == record.subdomain
+    assert updated_record.healthy_ips != record.healthy_ips
     assert updated_record.healthy_ips == new_ips
 
 
