@@ -5,22 +5,11 @@ import pytest
 from indisoluble.a_healthy_dns.tools.is_valid_port import is_valid_port
 
 
-def test_valid_ports():
-    valid_ports = [
-        1,  # Minimum valid port
-        80,  # HTTP
-        443,  # HTTPS
-        8080,  # Common alternative HTTP port
-        53,  # DNS
-        22,  # SSH
-        3306,  # MySQL
-        65535,  # Maximum valid port
-    ]
-
-    for port in valid_ports:
-        result, message = is_valid_port(port)
-        assert result is True
-        assert message == ""
+@pytest.mark.parametrize("valid_port", [1, 80, 443, 8080, 53, 22, 3306, 65535])
+def test_valid_ports(valid_port):
+    result, message = is_valid_port(valid_port)
+    assert result is True
+    assert message == ""
 
 
 @pytest.mark.parametrize(
