@@ -119,6 +119,11 @@ def test_make_zone_success_with_dnssec(mock_load_key, args_with_dnssec):
         config.ext_private_key.dnskey.algorithm == dns.dnssectypes.Algorithm.RSASHA256
     )
 
+    # Check others
+    assert config.origin_name is not None
+    assert config.name_servers is not None
+    assert config.a_records is not None
+
 
 @pytest.mark.parametrize("invalid_zone", ["", "dev.example@.com"])
 def test_make_zone_invalid_hosted_zone(invalid_zone, args):
