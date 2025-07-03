@@ -20,7 +20,7 @@ def test_iter_soa_record_first_iteration(mock_iter_soa_serial):
 
     max_interval = 60
     origin_name = dns.name.from_text("example.com")
-    primary_ns = "ns1.example.com"
+    primary_ns = "ns1.example.com."
 
     soa_record_iterator = iter_soa_record(max_interval, origin_name, primary_ns)
     result = next(soa_record_iterator)
