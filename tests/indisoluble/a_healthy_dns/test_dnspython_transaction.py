@@ -1,12 +1,16 @@
 #!/usr/bin/env python3
 
+import dns.dnssec
 import dns.name
 import dns.rdataclass
 import dns.rdataset
 import dns.rdatatype
 import dns.transaction
 import dns.versioned
+import dns.zone
 import pytest
+
+from dns.dnssecalgs.rsa import PrivateRSASHA256
 
 
 @pytest.fixture
@@ -17,6 +21,23 @@ def dns_origin():
 @pytest.fixture
 def dns_versioned_zone(dns_origin):
     return dns.versioned.Zone(dns_origin, dns.rdataclass.IN)
+
+
+@pytest.fixture
+def dns_soa_record():
+    ttl = 3600
+    admin_info = (
+        "ns1.example.com. hostmaster.example.com 20250701 7200 3600 1209600 3600"
+    )
+    return dns.rdataset.from_text(dns.rdataclass.IN, dns.rdatatype.SOA, ttl, admin_info)
+
+
+@pytest.fixture
+def dns_key():
+    priv_key = PrivateRSASHA256.generate(key_size=2048)
+    dnskey = dns.dnssec.make_dnskey(priv_key.public_key(), dns.dnssec.RSASHA256)
+
+    return (priv_key, dnskey)
 
 
 def test_transaction_write_without_commit(dns_origin, dns_versioned_zone):
@@ -88,3 +109,29 @@ def test_transaction_replace_identical_record(dns_origin, dns_versioned_zone):
 
         txn.replace(subdomain2, different_a_rec2)
         assert txn.changed() is True
+
+
+def test_transaction_sign_zone_bug(dns_versioned_zone, dns_soa_record, dns_key):
+    with dns_versioned_zone.writer() as txn:
+        txn.add(dns.name.empty, dns_soa_record)
+
+        with pytest.raises(dns.zone.NoSOA) as exc_info:
+            dns.dnssec.sign_zone(
+                dns_versioned_zone,
+                txn=txn,
+                keys=[dns_key],
+                dnskey_ttl=3600,
+                inception=0,
+                expiration=3600,
+            )
+
+    with dns_versioned_zone.writer() as txn:
+        # Does not fail after previous transaction is completed
+        dns.dnssec.sign_zone(
+            dns_versioned_zone,
+            txn=txn,
+            keys=[dns_key],
+            dnskey_ttl=3600,
+            inception=0,
+            expiration=3600,
+        )
