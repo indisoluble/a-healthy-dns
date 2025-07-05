@@ -2,15 +2,15 @@
 
 import datetime
 import logging
-import threading
-import time
 
 import dns.dnssec
 import dns.name
 import dns.transaction
 import dns.versioned
 
-from typing import FrozenSet, Iterator, NamedTuple
+from enum import auto, Enum
+from functools import partial
+from typing import Callable, FrozenSet, Iterator, NamedTuple, Optional
 
 from indisoluble.a_healthy_dns.dns_server_config_factory import DnsServerConfig
 from indisoluble.a_healthy_dns.records.a_healthy_record import AHealthyRecord
@@ -21,14 +21,22 @@ from indisoluble.a_healthy_dns.records.soa_record import iter_soa_record
 from indisoluble.a_healthy_dns.tools.can_create_connection import can_create_connection
 
 
+ShouldAbortOp = Callable[[], bool]
+
+
 class RRSigAction(NamedTuple):
     resign: datetime.datetime
     iter: Iterator[ExtendedRRSigKey]
 
 
-_DELTA_PER_RECORD_MANAGEMENT = 1
+class RefreshARecordsResult(Enum):
+    NO_CHANGES = auto()
+    CHANGES = auto()
+    ABORTED = auto()
+
+
 _DELTA_PER_RECORD_SIGN = 2
-_STOP_JOIN_EXTRA_TIMEOUT = 1.0
+DELTA_PER_RECORD_MANAGEMENT = 1
 
 
 def _calculate_max_interval(
@@ -37,7 +45,7 @@ def _calculate_max_interval(
     a_records: FrozenSet[AHealthyRecord],
     do_sign: bool,
 ) -> int:
-    delta_per_record = _DELTA_PER_RECORD_MANAGEMENT + (
+    delta_per_record = DELTA_PER_RECORD_MANAGEMENT + (
         _DELTA_PER_RECORD_SIGN if do_sign else 0
     )
     max_loop_duration = sum(
@@ -61,35 +69,36 @@ class DnsServerZoneUpdater:
         if connection_timeout <= 0:
             raise ValueError("Connection timeout must be positive")
 
-        self._min_interval = min_interval
-        self._max_interval = _calculate_max_interval(
+        max_interval = _calculate_max_interval(
             min_interval,
             connection_timeout,
             config.a_records,
             config.ext_private_key is not None,
         )
-        self._connection_timeout = float(connection_timeout)
 
-        self._zone = dns.versioned.Zone(config.origin_name)
-
-        self._ns_rec = make_ns_record(self._max_interval, config.name_servers)
+        self._ns_rec = make_ns_record(max_interval, config.name_servers)
         self._soa_rec = iter_soa_record(
-            self._max_interval, config.origin_name, next(iter(config.name_servers))
+            max_interval, config.origin_name, next(iter(config.name_servers))
         )
         self._rrsig_action = (
             RRSigAction(
+                # The next signing time is set to the epoch start, so it will be signed immediately
                 resign=datetime.datetime.fromtimestamp(0, tz=datetime.timezone.utc),
-                iter=iter_rrsig_key(self._max_interval, config.ext_private_key),
+                iter=iter_rrsig_key(max_interval, config.ext_private_key),
             )
             if config.ext_private_key
             else None
         )
         self._a_recs = list(config.a_records)
+        self._make_a_record = partial(make_a_record, max_interval)
+        self._can_create_connection = partial(
+            can_create_connection, timeout=float(connection_timeout)
+        )
 
-        self._stop_event = threading.Event()
-        self._updater_thread = None
+        self._zone = dns.versioned.Zone(config.origin_name)
+        self._is_zone_recreated_at_least_once = False
 
-    def _clear_zone_with_transaction(self, txn: dns.transaction.Transaction):
+    def _clear_zone(self, txn: dns.transaction.Transaction):
         logging.debug("Clearing zone...")
 
         for name in list(txn.iterate_names()):
@@ -98,17 +107,17 @@ class DnsServerZoneUpdater:
 
         logging.debug("Zone cleared")
 
-    def _add_a_record_to_zone_with_transaction(
+    def _add_a_record_to_zone(
         self, a_record: AHealthyRecord, txn: dns.transaction.Transaction
     ):
-        dataset = make_a_record(self._max_interval, a_record)
+        dataset = self._make_a_record(a_record)
         if dataset:
             txn.add(a_record.subdomain, dataset)
             logging.debug("Added A record %s to zone", a_record.subdomain)
         else:
             logging.debug("A record %s skipped", a_record.subdomain)
 
-    def _add_records_to_zone_with_transaction(self, txn: dns.transaction.Transaction):
+    def _add_records_to_zone(self, txn: dns.transaction.Transaction):
         logging.debug("Adding records to zone...")
 
         txn.add(dns.name.empty, self._ns_rec)
@@ -118,11 +127,11 @@ class DnsServerZoneUpdater:
         logging.debug("Added SOA record to zone")
 
         for a_record in self._a_recs:
-            self._add_a_record_to_zone_with_transaction(a_record, txn)
+            self._add_a_record_to_zone(a_record, txn)
 
         logging.debug("Records added to zone")
 
-    def _sign_zone_with_transaction(self, txn: dns.transaction.Transaction):
+    def _sign_zone(self, txn: dns.transaction.Transaction):
         if not self._rrsig_action:
             return
 
@@ -142,6 +151,18 @@ class DnsServerZoneUpdater:
             resign=ext_rrsig_key.resign, iter=self._rrsig_action.iter
         )
 
+    def _recreate_zone(self):
+        with self._zone.writer() as txn:
+            self._clear_zone(txn)
+            self._add_records_to_zone(txn)
+        # Sign requires the soa record to be present in the zone.
+        # It does not work using the current transaction,
+        # which seems to be a bug in dnspython
+        with self._zone.writer() as txn:
+            self._sign_zone(txn)
+
+        self._is_zone_recreated_at_least_once = True
+
     def _is_zone_sign_near_to_expire(self) -> bool:
         return (
             datetime.datetime.now(datetime.timezone.utc) >= self._rrsig_action.resign
@@ -149,43 +170,33 @@ class DnsServerZoneUpdater:
             else False
         )
 
-    def _initialize_zone(self):
-        with self._zone.writer() as txn:
-            self._clear_zone_with_transaction(txn)
-            self._add_records_to_zone_with_transaction(txn)
-        # Sign requires the soa record to be present
-        # in the zone. It does not work using the current
-        # transaction, which seems to be a bug in dnspython
-        with self._zone.writer() as txn:
-            self._sign_zone_with_transaction(txn)
-
-    def _refresh_a_record(self, a_record: AHealthyRecord) -> AHealthyRecord:
+    def _refresh_a_record(
+        self, a_record: AHealthyRecord, should_abort: ShouldAbortOp
+    ) -> Optional[AHealthyRecord]:
         updated_ips = []
         for health_ip in a_record.healthy_ips:
-            if self._stop_event.is_set():
-                logging.debug("Abort record check. Return A record as it is")
-                return a_record
+            if should_abort():
+                logging.debug("Abort record check. Keep A record as it is")
+                return None
 
             updated_ips.append(
                 health_ip.updated_status(
-                    can_create_connection(
-                        health_ip.ip, health_ip.health_port, self._connection_timeout
-                    )
+                    self._can_create_connection(health_ip.ip, health_ip.health_port)
                 )
             )
 
         return a_record.updated_ips(updated_ips)
 
-    def _refresh_a_recs(self) -> bool:
+    def _refresh_a_recs(self, should_abort: ShouldAbortOp) -> RefreshARecordsResult:
         checked_a_recs = []
 
         are_there_any_changes = False
         for a_record in self._a_recs:
-            if self._stop_event.is_set():
-                logging.debug("Zone updater stopped")
-                return False
+            checked_record = self._refresh_a_record(a_record, should_abort)
+            if checked_record is None:
+                logging.debug("Zone updater stopped. No A record updated")
+                return RefreshARecordsResult.ABORTED
 
-            checked_record = self._refresh_a_record(a_record)
             checked_a_recs.append(checked_record)
 
             are_there_any_changes = (
@@ -195,61 +206,34 @@ class DnsServerZoneUpdater:
 
         self._a_recs = checked_a_recs
 
-        return are_there_any_changes
+        return (
+            RefreshARecordsResult.CHANGES
+            if are_there_any_changes
+            else RefreshARecordsResult.NO_CHANGES
+        )
 
-    def _update_zone(self):
-        do_update_zone = False
+    def _recreate_zone_after_refresh(self, should_abort: ShouldAbortOp):
+        refresh_result = self._refresh_a_recs(should_abort)
+        if refresh_result == RefreshARecordsResult.ABORTED:
+            logging.info("Zone updater stopped. Keep zone as it is")
+            return
 
-        if self._refresh_a_recs():
+        do_update_zone = refresh_result == RefreshARecordsResult.CHANGES
+        if do_update_zone:
             logging.info("A records changed")
-            do_update_zone = True
 
         if self._is_zone_sign_near_to_expire():
             logging.info("Zone signing is near to expire")
             do_update_zone = True
 
-        if do_update_zone:
+        if do_update_zone or not self._is_zone_recreated_at_least_once:
             logging.info("Updating zone...")
-            self._initialize_zone()
+            self._recreate_zone()
 
-    def _update_zone_loop(self):
-        while not self._stop_event.is_set():
-            start_time = time.time()
-
-            self._update_zone()
-
-            elapsed = time.time() - start_time
-            sleep_time = max(0, self._min_interval - elapsed)
-            if sleep_time > 0 and not self._stop_event.wait(sleep_time):
-                logging.debug("Completed sleep between connectivity tests")
-
-    def start(self):
-        if self._updater_thread and self._updater_thread.is_alive():
-            logging.warning("Zone Updater is already running")
-            return
-
-        logging.info("Initializing zone...")
-        self._initialize_zone()
-
-        logging.info("Starting Zone Updater...")
-        self._stop_event.clear()
-        self._updater_thread = threading.Thread(
-            target=self._update_zone_loop, name="ZoneUpdaterThread", daemon=True
-        )
-        self._updater_thread.start()
-
-    def stop(self) -> bool:
-        if not self._updater_thread or not self._updater_thread.is_alive():
-            logging.warning("Zone Updater is not running")
-            return True
-
-        logging.info("Stopping Zone Updater...")
-        self._stop_event.set()
-        self._updater_thread.join(
-            timeout=self._connection_timeout + _STOP_JOIN_EXTRA_TIMEOUT
-        )
-        if self._updater_thread.is_alive():
-            logging.warning("Zone Updater thread did not terminate gracefully")
-            return False
-
-        return True
+    def update(
+        self, *, check_ips: bool = True, should_abort: ShouldAbortOp = lambda: False
+    ):
+        if check_ips:
+            self._recreate_zone_after_refresh(should_abort)
+        else:
+            self._recreate_zone()
