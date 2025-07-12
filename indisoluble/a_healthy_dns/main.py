@@ -2,11 +2,14 @@
 
 import argparse
 import logging
+import signal
 import socketserver
+import threading
 
 import dns.dnssec
 import dns.dnssectypes
 
+from functools import partial
 from typing import Any, Dict
 
 from indisoluble.a_healthy_dns.dns_server_config_factory import (
@@ -90,7 +93,7 @@ Examples:
 
 Example usage
 =============
-a_healthy_dns \\
+%(prog)s \\
     --{_NAME_HOSTED_ZONE} example.com \\
     --{_NAME_ZONE_RESOLUTIONS} '{{"www":{{"ips":["192.168.1.100"],"health_port":8080}}}}' \\
     --{_NAME_NAME_SERVERS} '["ns1.example.com"]' \\
@@ -184,6 +187,13 @@ a_healthy_dns \\
     return parser
 
 
+def _signal_handler(server: socketserver.UDPServer, signum: int, frame: Any):
+    signal_name = signal.Signals(signum).name
+    logging.info("Received %s signal, shutting down DNS server...", signal_name)
+
+    threading.Thread(target=server.shutdown).start()
+
+
 def _main(args: Dict[str, Any]):
     # Set up logging
     numeric_level = getattr(logging, args[_ARG_LOG_LEVEL].upper())
@@ -206,13 +216,13 @@ def _main(args: Dict[str, Any]):
     # Launch DNS server
     server_address = ("", args[_ARG_PORT])
     with socketserver.UDPServer(server_address, DnsServerUdpHandler) as server:
-        server.zone = zone_updater.zone
+        partial_signal_handler = partial(_signal_handler, server)
+        for sig in (signal.SIGINT, signal.SIGTERM):
+            signal.signal(sig, partial_signal_handler)
 
         logging.info("DNS server listening on port %d...", args[_ARG_PORT])
-        try:
-            server.serve_forever()
-        except KeyboardInterrupt:
-            logging.info("Shutting down DNS server...")
+        server.zone = zone_updater.zone
+        server.serve_forever()
 
     # Stop zone updater
     zone_updater.stop()
