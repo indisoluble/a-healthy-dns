@@ -1,5 +1,11 @@
 #!/usr/bin/env python3
 
+"""UDP DNS server request handler.
+
+Handles incoming DNS queries over UDP, processes them against the configured
+zone, and returns appropriate DNS responses with authoritative answers.
+"""
+
 import logging
 import socketserver
 
@@ -51,7 +57,10 @@ def _update_response(
 
 
 class DnsServerUdpHandler(socketserver.BaseRequestHandler):
+    """UDP request handler for DNS queries with health-aware responses."""
+
     def handle(self):
+        """Handle incoming DNS query and send appropriate response."""
         data, sock = self.request
 
         try:

@@ -1,11 +1,20 @@
 #!/usr/bin/env python3
 
+"""DNS timing calculations for TTL and DNSSEC signature lifetimes.
+
+Provides functions to calculate appropriate TTL values for different DNS
+record types based on health check intervals and zone update frequency.
+"""
+
 from typing import NamedTuple
 
 
 class RRSigLifetime(NamedTuple):
+    """DNSSEC signature lifetime with resign and expiration times."""
+
     resign: int
     expiration: int
+
 
 def calculate_a_ttl(max_interval: int) -> int:
     """Calculate A record TTL as 2x test interval to ensure clients get

@@ -1,5 +1,11 @@
 #!/usr/bin/env python3
 
+"""DNS zone updater with health checking capabilities.
+
+Manages DNS zone updates based on health checks of configured IP addresses,
+handles DNSSEC signing, and maintains zone freshness with configurable intervals.
+"""
+
 import datetime
 import logging
 
@@ -25,11 +31,15 @@ ShouldAbortOp = Callable[[], bool]
 
 
 class RRSigAction(NamedTuple):
+    """DNSSEC signature action containing resign time and key iterator."""
+
     resign: datetime.datetime
     iter: Iterator[ExtendedRRSigKey]
 
 
 class RefreshARecordsResult(Enum):
+    """Result states for A record refresh operations."""
+
     NO_CHANGES = auto()
     CHANGES = auto()
     ABORTED = auto()
@@ -57,13 +67,17 @@ def _calculate_max_interval(
 
 
 class DnsServerZoneUpdater:
+    """DNS zone updater that performs health checks and updates zones accordingly."""
+
     @property
     def zone(self) -> dns.versioned.Zone:
+        """Get the current DNS zone."""
         return self._zone
 
     def __init__(
         self, min_interval: int, connection_timeout: int, config: DnsServerConfig
     ):
+        """Initialize zone updater with configuration and timing parameters."""
         if min_interval <= 0:
             raise ValueError("Minimum interval must be positive")
         if connection_timeout <= 0:
@@ -233,6 +247,7 @@ class DnsServerZoneUpdater:
     def update(
         self, *, check_ips: bool = True, should_abort: ShouldAbortOp = lambda: False
     ):
+        """Update the zone with optional health checking and abort capability."""
         if check_ips:
             self._recreate_zone_after_refresh(should_abort)
         else:

@@ -1,5 +1,11 @@
 #!/usr/bin/env python3
 
+"""DNS A record factory for creating records from healthy IP data.
+
+Creates DNS A records containing only healthy IP addresses with appropriate
+TTL values based on health check intervals.
+"""
+
 import logging
 
 import dns.rdataclass
@@ -15,6 +21,7 @@ from indisoluble.a_healthy_dns.records.time import calculate_a_ttl
 def make_a_record(
     max_interval: int, healthy_record: AHealthyRecord
 ) -> Optional[dns.rdataset.Rdataset]:
+    """Create DNS A record from healthy record containing only healthy IPs."""
     ips = [ip.ip for ip in healthy_record.healthy_ips if ip.is_healthy]
     if not ips:
         logging.debug("No healthy IPs for A record %s", healthy_record.subdomain)

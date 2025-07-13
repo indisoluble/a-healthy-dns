@@ -1,24 +1,36 @@
 #!/usr/bin/env python3
 
+"""Healthy IP address representation with health checking capabilities.
+
+Provides an IP address class that tracks health status and port information
+for use in health-aware DNS A records.
+"""
+
 from indisoluble.a_healthy_dns.tools.is_valid_ip import is_valid_ip
 from indisoluble.a_healthy_dns.tools.is_valid_port import is_valid_port
 from indisoluble.a_healthy_dns.tools.normalize_ip import normalize_ip
 
 
 class AHealthyIp:
+    """IP address with health status and port for health checking."""
+
     @property
     def ip(self) -> str:
+        """Get the normalized IP address."""
         return self._ip
 
     @property
     def health_port(self) -> int:
+        """Get the health check port number."""
         return self._health_port
 
     @property
     def is_healthy(self) -> bool:
+        """Get the current health status."""
         return self._is_healthy
 
     def __init__(self, ip: str, health_port: int, is_healthy: bool):
+        """Initialize healthy IP with validation of IP address and port."""
         success, error = is_valid_ip(ip)
         if not success:
             raise ValueError(f"Invalid IP address: {error}")
@@ -32,6 +44,7 @@ class AHealthyIp:
         self._is_healthy = is_healthy
 
     def updated_status(self, is_healthy: bool) -> "AHealthyIp":
+        """Return new instance with updated health status if changed."""
         if is_healthy == self._is_healthy:
             return self
 

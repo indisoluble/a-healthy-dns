@@ -1,5 +1,11 @@
 #!/usr/bin/env python3
 
+"""DNS SOA record factory with dynamic serial number generation.
+
+Creates DNS SOA records with time-based serial numbers and calculated timing
+parameters for zone refresh, retry, and expiration.
+"""
+
 import logging
 
 import dns.name
@@ -37,6 +43,7 @@ def _iter_soa_serial() -> Iterator[int]:
 def iter_soa_record(
     max_interval: int, origin_name: dns.name.Name, primary_ns: str
 ) -> Iterator[dns.rdataset.Rdataset]:
+    """Generate SOA records with dynamic serial numbers and timing parameters."""
     ttl = calculate_soa_ttl(max_interval)
     responsible = f"hostmaster.{origin_name}"
     serial = _iter_soa_serial()

@@ -1,5 +1,11 @@
 #!/usr/bin/env python3
 
+"""DNS server configuration factory and validation.
+
+Creates and validates DNS server configurations from command-line arguments,
+handling zone setup, DNSSEC key management, and health check parameters.
+"""
+
 import json
 import logging
 
@@ -15,11 +21,15 @@ from indisoluble.a_healthy_dns.tools.is_valid_subdomain import is_valid_subdomai
 
 
 class ExtendedPrivateKey(NamedTuple):
+    """Extended private key containing both the private key and DNSKEY record."""
+
     private_key: dns.dnssec.PrivateKey
     dnskey: dns.dnssec.DNSKEY
 
 
 class DnsServerConfig(NamedTuple):
+    """DNS server configuration containing zone data and security settings."""
+
     origin_name: dns.name.Name
     name_servers: FrozenSet[str]
     a_records: FrozenSet[AHealthyRecord]
@@ -186,6 +196,7 @@ def _make_private_key(args: Dict[str, Any]) -> Optional[ExtendedPrivateKey]:
 
 
 def make_config(args: Dict[str, Any]) -> Optional[DnsServerConfig]:
+    """Create complete DNS server configuration from command-line arguments."""
     origin_name = _make_origin_name(args)
     if not origin_name:
         return None

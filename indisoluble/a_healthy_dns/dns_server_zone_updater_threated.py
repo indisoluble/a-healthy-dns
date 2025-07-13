@@ -1,5 +1,11 @@
 #!/usr/bin/env python3
 
+"""Threaded DNS zone updater with background health checking.
+
+Provides a threaded wrapper around DnsServerZoneUpdater that continuously
+performs health checks and zone updates in the background.
+"""
+
 import logging
 import threading
 import time
@@ -14,13 +20,17 @@ from indisoluble.a_healthy_dns.dns_server_zone_updater import (
 
 
 class DnsServerZoneUpdaterThreated:
+    """Threaded DNS zone updater that runs health checks in background."""
+
     @property
     def zone(self) -> dns.versioned.Zone:
+        """Get the current DNS zone from the underlying updater."""
         return self._updater.zone
 
     def __init__(
         self, min_interval: int, connection_timeout: int, config: DnsServerConfig
     ):
+        """Initialize threaded zone updater with timing and configuration."""
         try:
             self._updater = DnsServerZoneUpdater(
                 min_interval, connection_timeout, config
@@ -46,6 +56,7 @@ class DnsServerZoneUpdaterThreated:
                 logging.debug("Completed sleep between connectivity tests")
 
     def start(self):
+        """Start the background zone updater thread."""
         if self._updater_thread and self._updater_thread.is_alive():
             logging.warning("Zone Updater is already running")
             return
@@ -61,6 +72,7 @@ class DnsServerZoneUpdaterThreated:
         self._updater_thread.start()
 
     def stop(self) -> bool:
+        """Stop the background zone updater thread and wait for completion."""
         if not self._updater_thread or not self._updater_thread.is_alive():
             logging.warning("Zone Updater is not running")
             return True
