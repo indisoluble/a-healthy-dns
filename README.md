@@ -2,6 +2,7 @@
 
 [![Work in Progress](https://img.shields.io/badge/status-work%20in%20progress-yellow.svg)](https://github.com/indisoluble/a-healthy-dns)
 [![CI](https://github.com/indisoluble/a-healthy-dns/actions/workflows/run_tests.yml/badge.svg)](https://github.com/indisoluble/a-healthy-dns/actions/workflows/run_tests.yml)
+[![codecov](https://codecov.io/gh/indisoluble/a-healthy-dns/branch/master/graph/badge.svg)](https://codecov.io/gh/indisoluble/a-healthy-dns)
 
 A health-aware DNS server that performs health checks on IP addresses and automatically updates DNS responses based on the health status of backend services.
 This ensures that DNS queries only return healthy endpoints, providing automatic failover and load balancing capabilities.
