@@ -1,5 +1,7 @@
 # A Healthy DNS
 
+[![CI](https://github.com/indisoluble/a-healthy-dns/actions/workflows/run_tests.yml/badge.svg)](https://github.com/indisoluble/a-healthy-dns/actions/workflows/run_tests.yml)
+
 A health-aware DNS server that performs health checks on IP addresses and automatically updates DNS responses based on the health status of backend services.
 This ensures that DNS queries only return healthy endpoints, providing automatic failover and load balancing capabilities.
 
