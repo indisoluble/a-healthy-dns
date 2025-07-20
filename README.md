@@ -20,7 +20,7 @@ This ensures that DNS queries only return healthy endpoints, providing automatic
 
 ### Prerequisites
 
-- Python 3.7 or higher
+- Python 3.9 or higher
 - pip package manager
 
 ### Install from Source
