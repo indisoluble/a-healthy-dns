@@ -1,0 +1,52 @@
+version: '3.8'
+
+services:
+  a-healthy-dns:
+    build: .
+    ports:
+      # Map container port to host port (host:container)
+      - "53053:53053/udp"
+    environment:
+      # Required parameters
+      DNS_HOSTED_ZONE: "example.com"
+      DNS_ZONE_RESOLUTIONS: '{"www":{"ips":["192.168.1.100","192.168.1.101"],"health_port":8080},"api":{"ips":["192.168.1.102"],"health_port":8000}}'
+      DNS_NAME_SERVERS: '["ns1.example.com", "ns2.example.com"]'
+      
+      # Optional parameters (with their default values)
+      # DNS_PORT: "53053"
+      # DNS_LOG_LEVEL: "info"
+      # DNS_TEST_MIN_INTERVAL: "30"
+      # DNS_TEST_TIMEOUT: "2"
+      # DNS_PRIV_KEY_ALG: "RSASHA256"
+      
+      # Optional DNSSEC private key path (if you have one)
+      # DNS_PRIV_KEY_PATH: "/app/keys/private.pem"
+    
+    # volumes:
+      # Mount a directory for DNSSEC keys (optional)
+      # - "./keys:/app/keys:ro"
+      
+    # Network configuration
+    networks:
+      - dns-network
+    
+    # Security options
+    security_opt:
+      - no-new-privileges:true
+    
+    # Resource limits (uncomment and adjust based on your requirements)
+    # deploy:
+    #   resources:
+    #     limits:
+    #       memory: 256M      # Adjust based on zone size and query volume
+    #       cpus: '0.5'       # Adjust based on DNSSEC usage and load
+    #     reservations:
+    #       memory: 128M
+    #       cpus: '0.25'
+    
+    # Restart policy
+    restart: unless-stopped
+
+networks:
+  dns-network:
+    driver: bridge

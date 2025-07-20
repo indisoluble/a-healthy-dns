@@ -47,6 +47,20 @@ The following dependencies will be automatically installed:
 - `cryptography>=44.0.2,<45.0.0` - For DNSSEC cryptographic operations
 - `dnspython>=2.7.0,<3.0.0` - For DNS protocol handling
 
+### Using Docker (Recommended)
+
+Docker provides the easiest way to run A Healthy DNS with all dependencies included.
+
+#### Build the Docker Image
+
+```bash
+# Build the image
+docker build -t a-healthy-dns .
+
+# Build with a specific tag
+docker build -t a-healthy-dns:latest .
+```
+
 ## Usage
 
 ### Basic Usage
@@ -154,3 +168,105 @@ This configuration:
 - Monitors `api.example.com` with 2 backend servers on port 8080
 - Performs health checks every 10 seconds with 2-second timeout
 - Signs the zone with DNSSEC using the provided private key
+
+### Docker Usage
+
+#### Quick Start
+
+```bash
+docker run -d \
+  --name a-healthy-dns \
+  -p 53053:53053/udp \
+  -e DNS_HOSTED_ZONE="example.com" \
+  -e DNS_ZONE_RESOLUTIONS='{"www":{"ips":["192.168.1.100"],"health_port":8080}}' \
+  -e DNS_NAME_SERVERS='["ns1.example.com"]' \
+  a-healthy-dns
+```
+
+#### Docker Compose
+
+Copy the provided `docker-compose.example.yml` to `docker-compose.yml` and modify the environment variables as needed:
+
+```bash
+cp docker-compose.example.yml docker-compose.yml
+# Edit docker-compose.yml with your configuration
+docker-compose up -d
+```
+
+#### Docker Environment Variables
+
+**Required Parameters:**
+- `DNS_HOSTED_ZONE`: The domain name for which this DNS server is authoritative
+- `DNS_ZONE_RESOLUTIONS`: JSON configuration defining subdomains and health check ports
+- `DNS_NAME_SERVERS`: Name servers responsible for this zone (JSON array)
+
+**Optional Parameters:**
+- `DNS_PORT`: Port on which the DNS server will listen (default: 53053)
+- `DNS_LOG_LEVEL`: Logging level (default: info)
+- `DNS_TEST_MIN_INTERVAL`: Minimum interval between connectivity tests in seconds (default: 30)
+- `DNS_TEST_TIMEOUT`: Timeout for each connection test in seconds (default: 2)
+- `DNS_PRIV_KEY_PATH`: Path to DNSSEC private key PEM file
+- `DNS_PRIV_KEY_ALG`: DNSSEC private key algorithm (default: RSASHA256)
+
+#### DNSSEC with Docker
+
+```bash
+# Create a directory for DNSSEC keys
+mkdir -p ./keys
+cp your-private-key.pem ./keys/
+
+# Run with DNSSEC
+docker run -d \
+  --name a-healthy-dns \
+  -p 53053:53053/udp \
+  -v "$(pwd)/keys:/app/keys:ro" \
+  -e DNS_HOSTED_ZONE="example.com" \
+  -e DNS_ZONE_RESOLUTIONS='{"www":{"ips":["192.168.1.100"],"health_port":8080}}' \
+  -e DNS_NAME_SERVERS='["ns1.example.com"]' \
+  -e DNS_PRIV_KEY_PATH="/app/keys/your-private-key.pem" \
+  a-healthy-dns
+```
+
+## Troubleshooting
+
+### Docker Troubleshooting
+
+#### Check if the service is running
+```bash
+# Test DNS resolution
+dig @localhost -p 53053 www.example.com
+
+# Check container status
+docker ps | grep a-healthy-dns
+
+# View logs
+docker logs a-healthy-dns
+docker logs -f a-healthy-dns  # Follow logs
+```
+
+#### Debug mode
+```bash
+docker run -it \
+  -e DNS_LOG_LEVEL="debug" \
+  -e DNS_HOSTED_ZONE="example.com" \
+  -e DNS_ZONE_RESOLUTIONS='{"www":{"ips":["192.168.1.100"],"health_port":8080}}' \
+  -e DNS_NAME_SERVERS='["ns1.example.com"]' \
+  a-healthy-dns
+```
+
+#### Shell access
+```bash
+# Get a shell in the running container
+docker exec -it a-healthy-dns sh
+
+# Run a new container with shell access
+docker run -it --entrypoint sh a-healthy-dns
+```
+
+### Performance Tuning
+
+For high-performance scenarios, consider:
+- Using host networking: `docker run --network host` (better performance, less isolation)
+- Setting resource limits: `docker run --memory=256m --cpus=0.5`
+- Running multiple instances behind a load balancer
+- Monitoring packet drops: `docker exec a-healthy-dns cat /proc/net/snmp | grep Udp`
