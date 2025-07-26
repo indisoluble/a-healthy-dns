@@ -1,4 +1,4 @@
-name: Version Check
+name: Test Version
 
 on:
   push:
@@ -10,7 +10,7 @@ permissions:
   contents: read
 
 jobs:
-  version-check:
+  version-test:
     runs-on: ubuntu-latest
     
     steps:
@@ -27,7 +27,7 @@ jobs:
     - name: Install packaging for version comparison
       run: pip install packaging
 
-    - name: Check if version was updated
+    - name: Test if version was updated
       run: |
         # Get current version
         CURRENT_VERSION=$(python -c "import re; content=open('setup.py').read(); print(re.search(r'version=\"([^\"]+)\"', content).group(1))")
