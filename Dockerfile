@@ -1,5 +1,5 @@
 # Multi-stage build for minimal image size
-FROM python:3.12-alpine AS builder
+FROM python:3.13-alpine AS builder
 
 # Install build dependencies
 RUN apk add --no-cache \
@@ -21,7 +21,7 @@ COPY indisoluble/ ./indisoluble/
 RUN pip install --no-cache-dir --user .
 
 # Production stage
-FROM python:3.12-alpine AS production
+FROM python:3.13-alpine AS production
 
 # Install runtime dependencies only
 RUN apk add --no-cache \
