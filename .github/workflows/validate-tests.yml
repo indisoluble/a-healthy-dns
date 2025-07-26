@@ -1,0 +1,46 @@
+name: Validate Tests
+
+on:
+  workflow_run:
+    workflows: ["Test Docker", "Test Python Code", "Test Version"]
+    types:
+      - completed
+    branches:
+      - master
+
+permissions:
+  contents: read
+
+jobs:
+  validate-tests:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Validate all required workflows passed
+      run: |
+        COMMIT_SHA="${{ github.event.workflow_run.head_sha }}"
+        echo "Validating workflows for commit: $COMMIT_SHA"
+        
+        WORKFLOWS=("Test Docker" "Test Python Code" "Test Version")
+        
+        for workflow in "${WORKFLOWS[@]}"; do
+          echo "Checking workflow: $workflow"
+          STATUS=$(gh run list --workflow="$workflow" --json conclusion,headSha --jq ".[] | select(.headSha==\"$COMMIT_SHA\") | .conclusion" | head -1)
+          
+          if [ -z "$STATUS" ]; then
+            echo "⏳ Workflow '$workflow' hasn't run yet for this commit."
+            exit 1
+          elif [ "$STATUS" != "success" ]; then
+            echo "❌ Workflow '$workflow' failed (status: $STATUS)"
+            exit 1
+          else
+            echo "✅ Workflow '$workflow' passed"
+          fi
+        done
+        
+        echo "🎉 All required workflows have passed successfully!"
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
