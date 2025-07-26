@@ -1,0 +1,53 @@
+name: Version Check
+
+on:
+  push:
+    branches: [ "master" ]
+  pull_request:
+    branches: [ "master" ]
+
+permissions:
+  contents: read
+
+jobs:
+  version-check:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # Need full history to compare versions
+
+    - name: Set up Python 3.9
+      uses: actions/setup-python@v3  
+      with:
+        python-version: "3.9"
+
+    - name: Install packaging for version comparison
+      run: pip install packaging
+
+    - name: Check if version was updated
+      run: |
+        # Get current version
+        CURRENT_VERSION=$(python -c "import re; content=open('setup.py').read(); print(re.search(r'version=\"([^\"]+)\"', content).group(1))")
+        
+        # Get previous version from the parent commit
+        PREVIOUS_VERSION=$(git show HEAD~1:setup.py | python -c "import re, sys; content=sys.stdin.read(); print(re.search(r'version=\"([^\"]+)\"', content).group(1))")
+        
+        echo "Previous version: $PREVIOUS_VERSION"
+        echo "Current version: $CURRENT_VERSION"
+        
+        # Compare versions
+        python -c "
+        from packaging import version
+        import sys
+        current = version.parse('$CURRENT_VERSION')
+        previous = version.parse('$PREVIOUS_VERSION')
+        if current <= previous:
+            print('❌ ERROR: Version must be increased when pushing to master!')
+            print('Previous: $PREVIOUS_VERSION, Current: $CURRENT_VERSION')
+            sys.exit(1)
+        else:
+            print('✅ Version increased from $PREVIOUS_VERSION to $CURRENT_VERSION')
+        "
