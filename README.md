@@ -24,10 +24,20 @@ This ensures that DNS queries only return healthy endpoints, providing automatic
 
 ### Install from Source
 
-1. Clone the repository:
+1. Get the source code:
+   
+   **Option 1.1: Clone the repository**
    ```bash
    git clone https://github.com/indisoluble/a-healthy-dns.git
    cd a-healthy-dns
+   ```
+   
+   **Option 1.2: Download from releases**
+   ```bash
+   # Download and extract the latest release
+   wget https://github.com/indisoluble/a-healthy-dns/archive/refs/tags/v0.1.9.tar.gz
+   tar -xzf v0.1.9.tar.gz
+   cd a-healthy-dns-0.1.9
    ```
 
 2. Install the package:
@@ -49,6 +59,10 @@ The following dependencies will be automatically installed:
 ### Using Docker (Recommended)
 
 Docker provides the easiest way to run A Healthy DNS with all dependencies included.
+
+#### Pre-built Image
+
+A pre-built Docker image is available on [Docker Hub](https://hub.docker.com/r/indisoluble/a-healthy-dns).
 
 #### Build the Docker Image
 
@@ -172,6 +186,18 @@ This configuration:
 
 #### Quick Start
 
+**Option 1: Using pre-built image**
+```bash
+docker run -d \
+  --name a-healthy-dns \
+  -p 53053:53053/udp \
+  -e DNS_HOSTED_ZONE="example.com" \
+  -e DNS_ZONE_RESOLUTIONS='{"www":{"ips":["192.168.1.100"],"health_port":8080}}' \
+  -e DNS_NAME_SERVERS='["ns1.example.com"]' \
+  indisoluble/a-healthy-dns
+```
+
+**Option 2: Using local image**
 ```bash
 docker run -d \
   --name a-healthy-dns \
@@ -223,7 +249,7 @@ docker run -d \
   -e DNS_ZONE_RESOLUTIONS='{"www":{"ips":["192.168.1.100"],"health_port":8080}}' \
   -e DNS_NAME_SERVERS='["ns1.example.com"]' \
   -e DNS_PRIV_KEY_PATH="/app/keys/your-private-key.pem" \
-  a-healthy-dns
+  indisoluble/a-healthy-dns
 ```
 
 ## Troubleshooting
@@ -250,7 +276,7 @@ docker run -it \
   -e DNS_HOSTED_ZONE="example.com" \
   -e DNS_ZONE_RESOLUTIONS='{"www":{"ips":["192.168.1.100"],"health_port":8080}}' \
   -e DNS_NAME_SERVERS='["ns1.example.com"]' \
-  a-healthy-dns
+  indisoluble/a-healthy-dns
 ```
 
 #### Shell access
@@ -259,7 +285,7 @@ docker run -it \
 docker exec -it a-healthy-dns sh
 
 # Run a new container with shell access
-docker run -it --entrypoint sh a-healthy-dns
+docker run -it --entrypoint sh indisoluble/a-healthy-dns
 ```
 
 ### Performance Tuning
