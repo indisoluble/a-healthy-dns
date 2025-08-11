@@ -7,6 +7,7 @@ parameters for zone refresh, retry, and expiration.
 """
 
 import logging
+import time
 
 import dns.name
 import dns.rdataclass
@@ -30,10 +31,9 @@ def _iter_soa_serial() -> Iterator[int]:
 
     while True:
         current_serial = uint32_current_time()
-        if current_serial == last_serial:
-            raise ValueError(
-                f"Current serial {current_serial} is the same as last serial"
-            )
+        while current_serial == last_serial:
+            time.sleep(1)  # Wait 1 second for timestamp to change
+            current_serial = uint32_current_time()
 
         last_serial = current_serial
 

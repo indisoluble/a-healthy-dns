@@ -63,14 +63,19 @@ def test_iter_soa_record_multiple_iterations(mock_iter_soa_serial):
         assert str(expected_serial) in str(result)
 
 
+@unittest.mock.patch("indisoluble.a_healthy_dns.records.soa_record.time.sleep")
 @unittest.mock.patch("indisoluble.a_healthy_dns.records.soa_record.uint32_current_time")
-def test_iter_soa_serial_raises_error_on_duplicate(mock_uint32_current_time):
-    mock_uint32_current_time.return_value = 1234567890
+def test_iter_soa_serial_waits_on_duplicate(mock_uint32_current_time, mock_sleep):
+    mock_uint32_current_time.side_effect = [1234567890, 1234567890, 1234567891]
 
     serial_iterator = _iter_soa_serial()
 
     first_serial = next(serial_iterator)
     assert first_serial == 1234567890
 
-    with pytest.raises(ValueError):
-        next(serial_iterator)
+    # Second call should wait once and then return the new value
+    second_serial = next(serial_iterator)
+    assert second_serial == 1234567891
+
+    # Verify that sleep was called once when duplicate was detected
+    mock_sleep.assert_called_once_with(1)
