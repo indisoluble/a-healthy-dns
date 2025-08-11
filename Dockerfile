@@ -1,14 +1,14 @@
 # Multi-stage build for minimal image size
-FROM python:alpine AS builder
+FROM python:3-slim AS builder
 
 # Install build dependencies
-RUN apk add --no-cache \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
-    musl-dev \
     libffi-dev \
-    openssl-dev \
+    libssl-dev \
     cargo \
-    rust
+    rustc \
+    && rm -rf /var/lib/apt/lists/*
 
 # Set working directory
 WORKDIR /app
@@ -21,24 +21,29 @@ COPY indisoluble/ ./indisoluble/
 RUN pip install --no-cache-dir --user .
 
 # Production stage
-FROM python:alpine AS production
+FROM python:3-slim AS production
 
 # Install runtime dependencies only
-RUN apk add --no-cache \
-    libffi \
-    openssl \
-    && rm -rf /var/cache/apk/*
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libffi8 \
+    libssl3 \
+    libcap2-bin \
+    && rm -rf /var/lib/apt/lists/*
 
 # Create non-root user for security
-RUN addgroup -g 1000 appgroup && \
-    adduser -D -u 1000 -G appgroup appuser
+RUN useradd -m -u 1000 appuser
 
 # Create directory for DNSSEC keys with proper permissions
 RUN mkdir -p /app/keys && \
-    chown -R appuser:appgroup /app
+    chown -R appuser:appuser /app
 
 # Copy installed packages from builder
-COPY --from=builder --chown=appuser:appgroup /root/.local /home/appuser/.local
+COPY --from=builder --chown=appuser:appuser /root/.local /home/appuser/.local
+
+# Grant capability to Python interpreter to bind to privileged ports
+# Find the real Python executable (not symlink) and set capabilities
+RUN PYTHON_REAL=$(readlink -f /usr/local/bin/python3) && \
+    setcap 'cap_net_bind_service=+ep' "$PYTHON_REAL"
 
 # Switch to non-root user
 USER appuser
@@ -55,7 +60,7 @@ WORKDIR /app
 ENV DNS_HOSTED_ZONE="" \
     DNS_ZONE_RESOLUTIONS="" \
     DNS_NAME_SERVERS="" \
-    DNS_PORT="53053" \
+    DNS_PORT="53" \
     DNS_LOG_LEVEL="info" \
     DNS_TEST_MIN_INTERVAL="30" \
     DNS_TEST_TIMEOUT="2" \
@@ -63,7 +68,7 @@ ENV DNS_HOSTED_ZONE="" \
     DNS_PRIV_KEY_ALG="RSASHA256"
 
 # Expose the default DNS port (static at build time)
-EXPOSE 53053/udp
+EXPOSE 53/udp
 
 # Volume for DNSSEC keys
 VOLUME ["/app/keys"]
