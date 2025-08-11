@@ -34,15 +34,24 @@ services:
     security_opt:
       - no-new-privileges:true
     
-    # Resource limits (uncomment and adjust based on your requirements)
-    # deploy:
-    #   resources:
-    #     limits:
-    #       memory: 256M      # Adjust based on zone size and query volume
-    #       cpus: '0.5'       # Adjust based on DNSSEC usage and load
-    #     reservations:
-    #       memory: 128M
-    #       cpus: '0.25'
+    # Security: Drop all capabilities and add only required ones
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+    
+    # Security: Specify user explicitly
+    user: "10000:10000"
+    
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          memory: 256M      # Adjust based on zone size and query volume
+          cpus: '0.5'       # Adjust based on DNSSEC usage and load
+        reservations:
+          memory: 128M
+          cpus: '0.25'
     
     # Restart policy
     restart: unless-stopped

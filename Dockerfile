@@ -17,7 +17,7 @@ WORKDIR /app
 COPY setup.py .
 COPY indisoluble/ ./indisoluble/
 
-# Install the application and dependencies as root
+# Install the application and dependencies
 RUN pip install --no-cache-dir --user .
 
 # Production stage
@@ -28,20 +28,22 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libffi8 \
     libssl3 \
     libcap2-bin \
+    tini \
     && rm -rf /var/lib/apt/lists/*
 
 # Create non-root user for security
-RUN useradd -m -u 1000 appuser
+RUN groupadd -r -g 10000 appuser && \
+    useradd -r -u 10000 -g appuser -s /bin/false -c "Application user" appuser
 
 # Create directory for DNSSEC keys with proper permissions
 RUN mkdir -p /app/keys && \
-    chown -R appuser:appuser /app
+    chown appuser:appuser /app/keys && \
+    chmod 700 /app/keys
 
 # Copy installed packages from builder
 COPY --from=builder --chown=appuser:appuser /root/.local /home/appuser/.local
 
 # Grant capability to Python interpreter to bind to privileged ports
-# Find the real Python executable (not symlink) and set capabilities
 RUN PYTHON_REAL=$(readlink -f /usr/local/bin/python3) && \
     setcap 'cap_net_bind_service=+ep' "$PYTHON_REAL"
 
@@ -74,7 +76,7 @@ EXPOSE 53/udp
 VOLUME ["/app/keys"]
 
 # Entry point script that converts environment variables to command line arguments
-ENTRYPOINT ["sh", "-c", "\
+ENTRYPOINT ["tini", "--", "sh", "-c", "\
     set -e; \
     if [ -z \"$DNS_HOSTED_ZONE\" ]; then \
         echo 'Error: DNS_HOSTED_ZONE environment variable is required'; \
