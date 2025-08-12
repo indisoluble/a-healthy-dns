@@ -187,17 +187,28 @@ class DnsServerZoneUpdater:
     def _refresh_a_record(
         self, a_record: AHealthyRecord, should_abort: ShouldAbortOp
     ) -> Optional[AHealthyRecord]:
+        logging.debug("Checking A record %s ...", a_record.subdomain)
+
         updated_ips = []
         for health_ip in a_record.healthy_ips:
             if should_abort():
                 logging.debug("Abort record check. Keep A record as it is")
                 return None
 
-            updated_ips.append(
-                health_ip.updated_status(
-                    self._can_create_connection(health_ip.ip, health_ip.health_port)
-                )
+            checked_ip = health_ip.updated_status(
+                self._can_create_connection(health_ip.ip, health_ip.health_port)
             )
+            logging.debug(
+                "Checked IP %s on port %s: from %s to %s",
+                checked_ip.ip,
+                checked_ip.health_port,
+                health_ip.is_healthy,
+                checked_ip.is_healthy,
+            )
+
+            updated_ips.append(checked_ip)
+
+        logging.debug("A record %s checked", a_record.subdomain)
 
         return a_record.updated_ips(updated_ips)
 
