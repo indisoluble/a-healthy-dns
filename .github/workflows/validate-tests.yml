@@ -1,8 +1,8 @@
-name: Validate Tests
+name: validate tests
 
 on:
   workflow_run:
-    workflows: ["Test Docker", "Test Python Code", "Test Version"]
+    workflows: ["test docker", "test python code", "test version"]
     types:
       - completed
     branches:
@@ -16,10 +16,10 @@ jobs:
     runs-on: ubuntu-latest
     
     steps:
-    - name: Checkout code
+    - name: checkout code
       uses: actions/checkout@v4
 
-    - name: Validate all required workflows passed
+    - name: validate all required workflows passed
       run: |
         COMMIT_SHA="${{ github.event.workflow_run.head_sha }}"
         echo "Validating workflows for commit: $COMMIT_SHA"

@@ -1,4 +1,4 @@
-name: Test Version
+name: test version
 
 on:
   push:
@@ -14,20 +14,20 @@ jobs:
     runs-on: ubuntu-latest
     
     steps:
-    - name: Checkout code
+    - name: checkout code
       uses: actions/checkout@v4
       with:
         fetch-depth: 0  # Need full history to compare versions
 
-    - name: Set up Python 3.9
+    - name: set up python 3.9
       uses: actions/setup-python@v3  
       with:
         python-version: "3.9"
 
-    - name: Install packaging for version comparison
+    - name: install packaging for version comparison
       run: pip install packaging
 
-    - name: Test if version was updated
+    - name: test if version was updated
       run: |
         # Get current version
         CURRENT_VERSION=$(python -c "import re; content=open('setup.py').read(); print(re.search(r'version=\"([^\"]+)\"', content).group(1))")

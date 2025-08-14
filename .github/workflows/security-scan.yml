@@ -1,4 +1,4 @@
-name: Security Scan
+name: security scan
 
 on:
   push:
@@ -13,27 +13,27 @@ jobs:
     runs-on: ubuntu-latest
     
     steps:
-    - name: Checkout code
+    - name: checkout code
       uses: actions/checkout@v4
 
-    - name: Build Docker image for security scan
+    - name: build docker image for security scan
       run: |
         docker build -t a-healthy-dns:security-scan .
 
-    - name: Run Trivy vulnerability scanner
+    - name: run trivy vulnerability scanner
       uses: aquasecurity/trivy-action@master
       with:
         image-ref: 'a-healthy-dns:security-scan'
         format: 'sarif'
         output: 'trivy-results.sarif'
 
-    - name: Upload Trivy scan results to GitHub Security tab
+    - name: upload trivy scan results to github security tab
       uses: github/codeql-action/upload-sarif@v3
       if: always()
       with:
         sarif_file: 'trivy-results.sarif'
 
-    - name: Cleanup security scan
+    - name: cleanup security scan
       if: always()
       run: |
         docker rmi a-healthy-dns:security-scan || true
