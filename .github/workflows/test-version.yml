@@ -19,10 +19,10 @@ jobs:
       with:
         fetch-depth: 0  # Need full history to compare versions
 
-    - name: set up python 3.9
+    - name: set up python 3.10
       uses: actions/setup-python@v3  
       with:
-        python-version: "3.9"
+        python-version: "3.10"
 
     - name: install packaging for version comparison
       run: pip install packaging

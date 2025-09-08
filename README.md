@@ -21,7 +21,7 @@ This ensures that DNS queries only return healthy endpoints, providing automatic
 
 ### Prerequisites
 
-- Python 3.9 or higher
+- Python 3.10 or higher
 - pip package manager
 
 ### Install from Source
@@ -55,8 +55,8 @@ This ensures that DNS queries only return healthy endpoints, providing automatic
 ### Dependencies
 
 The following dependencies will be automatically installed:
-- `cryptography>=44.0.2,<45.0.0` - For DNSSEC cryptographic operations
-- `dnspython>=2.7.0,<3.0.0` - For DNS protocol handling
+- `cryptography>=45.0.7,<46.0.0` - For DNSSEC cryptographic operations
+- `dnspython>=2.8.0,<3.0.0` - For DNS protocol handling
 
 ### Using Docker (Recommended)
 
