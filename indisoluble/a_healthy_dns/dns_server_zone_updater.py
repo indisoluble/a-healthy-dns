@@ -169,10 +169,6 @@ class DnsServerZoneUpdater:
         with self._zone.writer() as txn:
             self._clear_zone(txn)
             self._add_records_to_zone(txn)
-        # Sign requires soa record to be present in zone.
-        # It doesn't work with current transaction, which seems like a bug.
-        # Reported in https://github.com/rthalley/dnspython/issues/1210
-        with self._zone.writer() as txn:
             self._sign_zone(txn)
 
         self._is_zone_recreated_at_least_once = True

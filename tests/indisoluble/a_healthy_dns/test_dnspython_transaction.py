@@ -109,29 +109,3 @@ def test_transaction_replace_identical_record(dns_origin, dns_versioned_zone):
 
         txn.replace(subdomain2, different_a_rec2)
         assert txn.changed() is True
-
-
-def test_transaction_sign_zone_bug(dns_versioned_zone, dns_soa_record, dns_key):
-    with dns_versioned_zone.writer() as txn:
-        txn.add(dns.name.empty, dns_soa_record)
-
-        with pytest.raises(dns.zone.NoSOA) as exc_info:
-            dns.dnssec.sign_zone(
-                dns_versioned_zone,
-                txn=txn,
-                keys=[dns_key],
-                dnskey_ttl=3600,
-                inception=0,
-                expiration=3600,
-            )
-
-    with dns_versioned_zone.writer() as txn:
-        # Does not fail after previous transaction is completed
-        dns.dnssec.sign_zone(
-            dns_versioned_zone,
-            txn=txn,
-            keys=[dns_key],
-            dnskey_ttl=3600,
-            inception=0,
-            expiration=3600,
-        )
