@@ -1,5 +1,5 @@
 # Multi-stage build for minimal image size
-FROM dhi.io/python:3 AS builder
+FROM python:3-slim AS builder
 
 # Install build dependencies
 RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends \
@@ -23,7 +23,7 @@ COPY indisoluble/ ./indisoluble/
 RUN pip install --no-cache-dir --user .
 
 # Production stage
-FROM dhi.io/python:3 AS production
+FROM python:3-slim AS production
 
 # Install runtime dependencies only
 RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends \
