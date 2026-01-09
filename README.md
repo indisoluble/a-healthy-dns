@@ -55,7 +55,7 @@ This ensures that DNS queries only return healthy endpoints, providing automatic
 ### Dependencies
 
 The following dependencies will be automatically installed:
-- `cryptography>=45.0.7,<46.0.0` - For DNSSEC cryptographic operations
+- `cryptography>=46.0.3,<47.0.0` - For DNSSEC cryptographic operations
 - `dnspython>=2.8.0,<3.0.0` - For DNS protocol handling
 
 ### Using Docker (Recommended)
