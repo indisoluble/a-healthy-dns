@@ -18,38 +18,7 @@ import dns.rdatatype
 import dns.rrset
 import dns.versioned
 
-from typing import FrozenSet, Optional
-
-
-def _normalize_query_name(
-    query_name: dns.name.Name,
-    zone_origin: dns.name.Name,
-    alias_zones: FrozenSet[dns.name.Name],
-) -> Optional[dns.name.Name]:
-    """Normalize query name from alias zones to the primary zone.
-    
-    If the query is for an alias zone, convert it to the primary zone.
-    Returns None if the query is not for the primary zone or any alias zones.
-    """
-    # Handle relative names - they are implicitly for the primary zone
-    if not query_name.is_absolute():
-        return query_name
-    
-    # Check if query is for the primary zone
-    if query_name.is_subdomain(zone_origin):
-        return query_name
-    
-    # Check if query is for any alias zone
-    for alias_zone in alias_zones:
-        if query_name.is_subdomain(alias_zone):
-            # Extract the subdomain part and rebase it on the primary origin
-            relative_name = query_name.relativize(alias_zone)
-            if relative_name == dns.name.empty:
-                # Query is for the alias zone apex
-                return zone_origin
-            return relative_name.derelativize(zone_origin)
-    
-    return None
+from typing import FrozenSet
 
 
 def _update_response(
@@ -59,31 +28,31 @@ def _update_response(
     zone: dns.versioned.Zone,
     alias_zones: FrozenSet[dns.name.Name],
 ):
-    # Normalize the query name (handle alias zones)
-    normalized_name = _normalize_query_name(query_name, zone.origin, alias_zones)
-    if not normalized_name:
-        logging.warning(
-            "Received query for domain not in hosted or alias zones: %s", query_name
+    relative_name = query_name
+    if query_name.is_absolute():
+        zone_name = next(
+            (z for z in (zone.origin, *alias_zones) if query_name.is_subdomain(z)), None
         )
-        response.set_rcode(dns.rcode.NXDOMAIN)
-        return
+        if zone_name is None:
+            logging.warning(
+                "Received query for domain not in hosted or alias zones: %s", query_name
+            )
+            response.set_rcode(dns.rcode.NXDOMAIN)
+            return
+
+        relative_name = query_name.relativize(zone_name)
 
     with zone.reader() as txn:
-        node = None
-        if not normalized_name.is_absolute():
-            node = txn.get_node(normalized_name)
-        elif normalized_name.is_subdomain(zone.origin):
-            node = txn.get_node(normalized_name.relativize(zone.origin))
-
+        node = txn.get_node(relative_name)
         if not node:
-            logging.warning("Received query for unknown domain: %s", query_name)
+            logging.warning("Received query for unknown subdomain: %s", query_name)
             response.set_rcode(dns.rcode.NXDOMAIN)
             return
 
         rdataset = node.get_rdataset(zone.rdclass, query_type)
         if not rdataset:
             logging.debug(
-                "Domain %s exists but has no %s records",
+                "Subdomain %s exists but has no %s records",
                 query_name,
                 dns.rdatatype.to_text(query_type),
             )
@@ -118,13 +87,12 @@ class DnsServerUdpHandler(socketserver.BaseRequestHandler):
 
         if query.question:
             question = query.question[0]
-            config = getattr(self.server, "config", None)
-            if config:
-                alias_zones = config.alias_zones
-            else:
-                alias_zones = frozenset()
             _update_response(
-                response, question.name, question.rdtype, self.server.zone, alias_zones
+                response,
+                question.name,
+                question.rdtype,
+                self.server.zone,
+                self.server.alias_zones,
             )
         else:
             logging.warning("Received query without question section")

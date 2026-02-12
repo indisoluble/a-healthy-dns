@@ -7,15 +7,13 @@ import dns.message
 import dns.rcode
 import dns.rdataclass
 import dns.rdatatype
+import dns.zone
 
 import pytest
 
 from unittest.mock import MagicMock
 
-from indisoluble.a_healthy_dns.dns_server_udp_handler import (
-    _normalize_query_name,
-    _update_response,
-)
+from indisoluble.a_healthy_dns.dns_server_udp_handler import _update_response
 
 
 @pytest.fixture
@@ -62,112 +60,156 @@ def mock_rdata():
     return mock_rdata
 
 
-def test_normalize_query_name_for_primary_zone(primary_zone, alias_zones):
-    """Test that queries for the primary zone are not modified."""
-    query_name = dns.name.from_text("www.primary.com.")
-    normalized = _normalize_query_name(query_name, primary_zone, alias_zones)
-    assert normalized == query_name
-
-
-def test_normalize_query_name_for_alias_zone(primary_zone, alias_zones):
-    """Test that queries for alias zones are normalized to the primary zone."""
-    query_name = dns.name.from_text("www.alias1.com.")
-    normalized = _normalize_query_name(query_name, primary_zone, alias_zones)
-    expected = dns.name.from_text("www.primary.com.")
-    assert normalized == expected
-
-
-def test_normalize_query_name_for_second_alias_zone(primary_zone, alias_zones):
-    """Test that queries for the second alias zone are normalized correctly."""
-    query_name = dns.name.from_text("api.alias2.com.")
-    normalized = _normalize_query_name(query_name, primary_zone, alias_zones)
-    expected = dns.name.from_text("api.primary.com.")
-    assert normalized == expected
-
-
-def test_normalize_query_name_for_alias_zone_apex(primary_zone, alias_zones):
-    """Test that queries for the alias zone apex are normalized to primary apex."""
-    query_name = dns.name.from_text("alias1.com.")
-    normalized = _normalize_query_name(query_name, primary_zone, alias_zones)
-    assert normalized == primary_zone
-
-
-def test_normalize_query_name_for_unknown_zone(primary_zone, alias_zones):
-    """Test that queries for unknown zones return None."""
-    query_name = dns.name.from_text("www.unknown.com.")
-    normalized = _normalize_query_name(query_name, primary_zone, alias_zones)
-    assert normalized is None
-
-
-def test_normalize_query_name_for_relative_name(primary_zone, alias_zones):
-    """Test that relative names are passed through unchanged."""
-    query_name = dns.name.from_text("www", origin=None)
-    normalized = _normalize_query_name(query_name, primary_zone, alias_zones)
-    assert normalized == query_name
-
-
-def test_update_response_with_alias_zone_query(
-    mock_zone, mock_reader, mock_rdata, mock_rdataset, primary_zone, alias_zones
-):
-    """Test that queries for alias zones return data from the primary zone."""
-    # Setup
-    query_name = dns.name.from_text("www.alias1.com.")
-    query_type = dns.rdatatype.A
-    
-    # Mock the zone reader to return the data
+def _setup_successful_lookup(mock_zone, mock_reader, mock_rdataset, mock_rdata):
     mock_rdataset.__iter__.return_value = [mock_rdata]
-    
     mock_node = MagicMock()
     mock_node.get_rdataset.return_value = mock_rdataset
-    
     mock_reader.get_node.return_value = mock_node
     mock_zone.reader.return_value.__enter__.return_value = mock_reader
-    
-    # Create response
+    return mock_node
+
+
+def test_update_response_for_primary_zone_query_uses_relative_lookup(
+    mock_zone, mock_reader, mock_rdata, mock_rdataset, alias_zones
+):
+    query_name = dns.name.from_text("www.primary.com.")
+    query_type = dns.rdatatype.A
+
+    _setup_successful_lookup(mock_zone, mock_reader, mock_rdataset, mock_rdata)
+
     query = dns.message.make_query(query_name, query_type)
     response = dns.message.make_response(query)
-    
-    # Call function
+
     _update_response(response, query_name, query_type, mock_zone, alias_zones)
-    
-    # Assertions
+
+    mock_reader.get_node.assert_called_once_with(dns.name.from_text("www", origin=None))
     assert response.rcode() == dns.rcode.NOERROR
     assert len(response.answer) == 1
-    # The response should use the original query name (alias), not the normalized one
     assert response.answer[0].name == query_name
 
 
-def test_update_response_with_unknown_zone_query(
-    mock_zone, mock_reader, primary_zone, alias_zones
+def test_update_response_for_alias_zone_query_uses_relative_lookup(
+    mock_zone, mock_reader, mock_rdata, mock_rdataset, alias_zones
 ):
-    """Test that queries for unknown zones return NXDOMAIN."""
-    # Setup
-    query_name = dns.name.from_text("www.unknown.com.")
+    query_name = dns.name.from_text("www.alias1.com.")
     query_type = dns.rdatatype.A
-    
-    # Create response
+
+    _setup_successful_lookup(mock_zone, mock_reader, mock_rdataset, mock_rdata)
+
     query = dns.message.make_query(query_name, query_type)
     response = dns.message.make_response(query)
-    
-    # Call function
+
     _update_response(response, query_name, query_type, mock_zone, alias_zones)
-    
-    # Assertions
+
+    mock_reader.get_node.assert_called_once_with(dns.name.from_text("www", origin=None))
+    assert response.rcode() == dns.rcode.NOERROR
+    assert len(response.answer) == 1
+    assert response.answer[0].name == query_name
+
+
+def test_update_response_for_second_alias_zone_query_uses_relative_lookup(
+    mock_zone, mock_reader, mock_rdata, mock_rdataset, alias_zones
+):
+    query_name = dns.name.from_text("api.alias2.com.")
+    query_type = dns.rdatatype.A
+
+    _setup_successful_lookup(mock_zone, mock_reader, mock_rdataset, mock_rdata)
+
+    query = dns.message.make_query(query_name, query_type)
+    response = dns.message.make_response(query)
+
+    _update_response(response, query_name, query_type, mock_zone, alias_zones)
+
+    mock_reader.get_node.assert_called_once_with(dns.name.from_text("api", origin=None))
+    assert response.rcode() == dns.rcode.NOERROR
+    assert len(response.answer) == 1
+    assert response.answer[0].name == query_name
+
+
+def test_update_response_for_alias_zone_apex_uses_empty_name_lookup(
+    mock_zone, mock_reader, mock_rdata, mock_rdataset, alias_zones
+):
+    query_name = dns.name.from_text("alias1.com.")
+    query_type = dns.rdatatype.A
+
+    _setup_successful_lookup(mock_zone, mock_reader, mock_rdataset, mock_rdata)
+
+    query = dns.message.make_query(query_name, query_type)
+    response = dns.message.make_response(query)
+
+    _update_response(response, query_name, query_type, mock_zone, alias_zones)
+
+    mock_reader.get_node.assert_called_once_with(dns.name.empty)
+    assert response.rcode() == dns.rcode.NOERROR
+    assert len(response.answer) == 1
+    assert response.answer[0].name == query_name
+
+
+def test_update_response_with_unknown_zone_query_returns_nxdomain(
+    mock_zone, alias_zones
+):
+    query_name = dns.name.from_text("www.unknown.com.")
+    query_type = dns.rdatatype.A
+
+    query = dns.message.make_query(query_name, query_type)
+    response = dns.message.make_response(query)
+
+    _update_response(response, query_name, query_type, mock_zone, alias_zones)
+
+    mock_zone.reader.assert_not_called()
     assert response.rcode() == dns.rcode.NXDOMAIN
     assert len(response.answer) == 0
 
 
-def test_normalize_query_name_with_empty_alias_zones(primary_zone):
-    """Test normalization with no alias zones configured."""
+def test_update_response_with_relative_name_uses_lookup_as_is(
+    mock_zone, mock_reader, mock_rdata, mock_rdataset, alias_zones
+):
+    query_name = dns.name.from_text("www", origin=None)
+    query_type = dns.rdatatype.A
+
+    _setup_successful_lookup(mock_zone, mock_reader, mock_rdataset, mock_rdata)
+
+    query = dns.message.make_query(query_name, query_type)
+    response = dns.message.make_response(query)
+
+    _update_response(response, query_name, query_type, mock_zone, alias_zones)
+
+    mock_reader.get_node.assert_called_once_with(query_name)
+    assert response.rcode() == dns.rcode.NOERROR
+    assert len(response.answer) == 1
+    assert response.answer[0].name == query_name
+
+
+def test_update_response_with_empty_alias_zones_primary_query(
+    mock_zone, mock_reader, mock_rdata, mock_rdataset
+):
     alias_zones = frozenset()
     query_name = dns.name.from_text("www.primary.com.")
-    normalized = _normalize_query_name(query_name, primary_zone, alias_zones)
-    assert normalized == query_name
+    query_type = dns.rdatatype.A
+
+    _setup_successful_lookup(mock_zone, mock_reader, mock_rdataset, mock_rdata)
+
+    query = dns.message.make_query(query_name, query_type)
+    response = dns.message.make_response(query)
+
+    _update_response(response, query_name, query_type, mock_zone, alias_zones)
+
+    mock_reader.get_node.assert_called_once_with(dns.name.from_text("www", origin=None))
+    assert response.rcode() == dns.rcode.NOERROR
+    assert len(response.answer) == 1
 
 
-def test_normalize_query_name_with_empty_alias_zones_unknown_domain(primary_zone):
-    """Test normalization with no alias zones for unknown domain returns None."""
+def test_update_response_with_empty_alias_zones_unknown_domain_returns_nxdomain(
+    mock_zone
+):
     alias_zones = frozenset()
     query_name = dns.name.from_text("www.unknown.com.")
-    normalized = _normalize_query_name(query_name, primary_zone, alias_zones)
-    assert normalized is None
+    query_type = dns.rdatatype.A
+
+    query = dns.message.make_query(query_name, query_type)
+    response = dns.message.make_response(query)
+
+    _update_response(response, query_name, query_type, mock_zone, alias_zones)
+
+    mock_zone.reader.assert_not_called()
+    assert response.rcode() == dns.rcode.NXDOMAIN

@@ -181,9 +181,7 @@ def _make_alias_zones(args: Dict[str, Any]) -> FrozenSet[dns.name.Name]:
         return frozenset()
 
     if not isinstance(alias_zones, list):
-        logging.error(
-            "Alias zones must be a list, got %s", type(alias_zones).__name__
-        )
+        logging.error("Alias zones must be a list, got %s", type(alias_zones).__name__)
         return frozenset()
 
     valid_alias_zones = []

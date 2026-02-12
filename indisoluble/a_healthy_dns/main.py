@@ -140,7 +140,7 @@ Example usage
         dest=ARG_ALIAS_ZONES,
         help=(
             "Alias zones that resolve to the same records as the hosted zone "
-            "(ex. [\"alias1.com\", \"alias2.com\"])"
+            '(ex. ["alias1.com", "alias2.com"])'
         ),
     )
     res_group.add_argument(
@@ -235,7 +235,7 @@ def _main(args: Dict[str, Any]):
 
         logging.info("DNS server listening on port %d...", args[_ARG_PORT])
         server.zone = zone_updater.zone
-        server.config = config
+        server.alias_zones = config.alias_zones
         server.serve_forever()
 
     # Stop zone updater

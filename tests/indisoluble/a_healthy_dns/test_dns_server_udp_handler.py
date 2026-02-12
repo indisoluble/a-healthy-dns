@@ -55,6 +55,7 @@ def mock_rdataset():
 def mock_server(mock_zone):
     server = MagicMock()
     server.zone = mock_zone
+    server.alias_zones = frozenset()
     return server
 
 
@@ -207,6 +208,7 @@ def test_handle_valid_query(
     assert mock_update_response.call_args[0][1] == question.name
     assert mock_update_response.call_args[0][2] == question.rdtype
     assert mock_update_response.call_args[0][3] == mock_server.zone
+    assert mock_update_response.call_args[0][4] == mock_server.alias_zones
 
     # Check response was sent
     mock_sock = dns_request[1]
