@@ -169,7 +169,7 @@ def _make_name_servers(args: Dict[str, Any]) -> Optional[FrozenSet[str]]:
     return frozenset(abs_name_servers)
 
 
-def _make_alias_zones(args: Dict[str, Any]) -> FrozenSet[dns.name.Name]:
+def _make_alias_zones(args: Dict[str, Any]) -> Optional[FrozenSet[dns.name.Name]]:
     """Parse and validate alias zones from command-line arguments."""
     if ARG_ALIAS_ZONES not in args or not args[ARG_ALIAS_ZONES]:
         return frozenset()
@@ -178,20 +178,39 @@ def _make_alias_zones(args: Dict[str, Any]) -> FrozenSet[dns.name.Name]:
         alias_zones = json.loads(args[ARG_ALIAS_ZONES])
     except json.JSONDecodeError as ex:
         logging.error("Failed to parse alias zones: %s", ex)
-        return frozenset()
+        return None
 
     if not isinstance(alias_zones, list):
         logging.error("Alias zones must be a list, got %s", type(alias_zones).__name__)
-        return frozenset()
+        return None
 
     valid_alias_zones = []
     for zone in alias_zones:
+        if not isinstance(zone, str):
+            logging.error("Alias zone must be a string, got %s", type(zone).__name__)
+            return None
+
         success, error = is_valid_subdomain(zone)
         if not success:
-            logging.warning("Alias zone '%s' is not a valid FQDN: %s", zone, error)
-            continue
+            logging.error("Alias zone '%s' is not a valid FQDN: %s", zone, error)
+            return None
 
         alias_zone_name = dns.name.from_text(zone, origin=dns.name.root)
+        has_subdomain_conflict = any(
+            alias_zone_name != existing_zone_name
+            and (
+                alias_zone_name.is_subdomain(existing_zone_name)
+                or existing_zone_name.is_subdomain(alias_zone_name)
+            )
+            for existing_zone_name in valid_alias_zones
+        )
+        if has_subdomain_conflict:
+            logging.error(
+                "Alias zone '%s' has a subdomain relationship with another alias zone",
+                zone,
+            )
+            return None
+
         valid_alias_zones.append(alias_zone_name)
 
     if valid_alias_zones:
@@ -243,6 +262,8 @@ def make_config(args: Dict[str, Any]) -> Optional[DnsServerConfig]:
         return None
 
     alias_zones = _make_alias_zones(args)
+    if alias_zones is None:
+        return None
 
     ext_private_key = None
     if args[ARG_DNSSEC_PRIVATE_KEY_PATH]:

@@ -66,7 +66,7 @@ def test_make_config_with_empty_alias_zones():
 
 
 def test_make_config_with_invalid_alias_zone():
-    """Test that invalid alias zones are skipped with a warning."""
+    """Test that invalid alias zones fail config creation."""
     args = {
         ARG_HOSTED_ZONE: "primary.com",
         ARG_ALIAS_ZONES: '["alias1.com", "invalid@domain"]',
@@ -77,14 +77,11 @@ def test_make_config_with_invalid_alias_zone():
     
     config = make_config(args)
     
-    assert config is not None
-    # Only the valid alias zone should be included
-    assert len(config.alias_zones) == 1
-    assert dns.name.from_text("alias1.com.") in config.alias_zones
+    assert config is None
 
 
 def test_make_config_with_invalid_json_alias_zones():
-    """Test that invalid JSON for alias zones is handled gracefully."""
+    """Test that invalid JSON for alias zones fails config creation."""
     args = {
         ARG_HOSTED_ZONE: "primary.com",
         ARG_ALIAS_ZONES: 'invalid json',
@@ -95,13 +92,11 @@ def test_make_config_with_invalid_json_alias_zones():
     
     config = make_config(args)
     
-    # Config should still be created with empty alias zones
-    assert config is not None
-    assert len(config.alias_zones) == 0
+    assert config is None
 
 
 def test_make_config_with_non_list_alias_zones():
-    """Test that non-list alias zones are handled gracefully."""
+    """Test that non-list alias zones fail config creation."""
     args = {
         ARG_HOSTED_ZONE: "primary.com",
         ARG_ALIAS_ZONES: '{"zone": "alias1.com"}',
@@ -112,6 +107,49 @@ def test_make_config_with_non_list_alias_zones():
     
     config = make_config(args)
     
-    # Config should still be created with empty alias zones
-    assert config is not None
-    assert len(config.alias_zones) == 0
+    assert config is None
+
+
+def test_make_config_with_non_string_alias_zone():
+    """Test that non-string alias zone entries fail config creation."""
+    args = {
+        ARG_HOSTED_ZONE: "primary.com",
+        ARG_ALIAS_ZONES: '["alias1.com", 123]',
+        ARG_ZONE_RESOLUTIONS: '{"www": {"ips": ["192.168.1.1"], "health_port": 8080}}',
+        ARG_NAME_SERVERS: '["ns1.primary.com"]',
+        ARG_DNSSEC_PRIVATE_KEY_PATH: None,
+    }
+
+    config = make_config(args)
+
+    assert config is None
+
+
+def test_make_config_with_overlapping_alias_zones():
+    """Test that overlapping alias zones fail config creation."""
+    args = {
+        ARG_HOSTED_ZONE: "primary.com",
+        ARG_ALIAS_ZONES: '["short.com", "dev.short.com", "other.com"]',
+        ARG_ZONE_RESOLUTIONS: '{"www": {"ips": ["192.168.1.1"], "health_port": 8080}}',
+        ARG_NAME_SERVERS: '["ns1.primary.com"]',
+        ARG_DNSSEC_PRIVATE_KEY_PATH: None,
+    }
+
+    config = make_config(args)
+
+    assert config is None
+
+
+def test_make_config_with_overlapping_alias_zones_reverse_order():
+    """Test overlap detection when parent alias appears after child alias."""
+    args = {
+        ARG_HOSTED_ZONE: "primary.com",
+        ARG_ALIAS_ZONES: '["dev.short.com", "short.com", "other.com"]',
+        ARG_ZONE_RESOLUTIONS: '{"www": {"ips": ["192.168.1.1"], "health_port": 8080}}',
+        ARG_NAME_SERVERS: '["ns1.primary.com"]',
+        ARG_DNSSEC_PRIVATE_KEY_PATH: None,
+    }
+
+    config = make_config(args)
+
+    assert config is None
