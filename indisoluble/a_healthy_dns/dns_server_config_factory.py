@@ -34,8 +34,10 @@ class DnsServerConfig(NamedTuple):
     name_servers: FrozenSet[str]
     a_records: FrozenSet[AHealthyRecord]
     ext_private_key: Optional[ExtendedPrivateKey]
+    alias_zones: FrozenSet[dns.name.Name]
 
 
+ARG_ALIAS_ZONES = "alias_zones"
 ARG_DNSSEC_ALGORITHM = "priv_key_alg"
 ARG_DNSSEC_PRIVATE_KEY_PATH = "priv_key_path"
 ARG_HOSTED_ZONE = "zone"
@@ -167,6 +169,39 @@ def _make_name_servers(args: Dict[str, Any]) -> Optional[FrozenSet[str]]:
     return frozenset(abs_name_servers)
 
 
+def _make_alias_zones(args: Dict[str, Any]) -> FrozenSet[dns.name.Name]:
+    """Parse and validate alias zones from command-line arguments."""
+    if ARG_ALIAS_ZONES not in args or not args[ARG_ALIAS_ZONES]:
+        return frozenset()
+
+    try:
+        alias_zones = json.loads(args[ARG_ALIAS_ZONES])
+    except json.JSONDecodeError as ex:
+        logging.error("Failed to parse alias zones: %s", ex)
+        return frozenset()
+
+    if not isinstance(alias_zones, list):
+        logging.error(
+            "Alias zones must be a list, got %s", type(alias_zones).__name__
+        )
+        return frozenset()
+
+    valid_alias_zones = []
+    for zone in alias_zones:
+        success, error = is_valid_subdomain(zone)
+        if not success:
+            logging.warning("Alias zone '%s' is not a valid FQDN: %s", zone, error)
+            continue
+
+        alias_zone_name = dns.name.from_text(zone, origin=dns.name.root)
+        valid_alias_zones.append(alias_zone_name)
+
+    if valid_alias_zones:
+        logging.info("Configured %d alias zone(s)", len(valid_alias_zones))
+
+    return frozenset(valid_alias_zones)
+
+
 def _load_dnssec_private_key(key_path: str) -> Optional[bytes]:
     try:
         with open(key_path, "rb") as key_file:
@@ -209,6 +244,8 @@ def make_config(args: Dict[str, Any]) -> Optional[DnsServerConfig]:
     if not name_servers:
         return None
 
+    alias_zones = _make_alias_zones(args)
+
     ext_private_key = None
     if args[ARG_DNSSEC_PRIVATE_KEY_PATH]:
         ext_private_key = _make_private_key(args)
@@ -220,4 +257,5 @@ def make_config(args: Dict[str, Any]) -> Optional[DnsServerConfig]:
         name_servers=name_servers,
         a_records=a_records,
         ext_private_key=ext_private_key,
+        alias_zones=alias_zones,
     )

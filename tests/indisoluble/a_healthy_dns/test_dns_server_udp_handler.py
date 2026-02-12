@@ -92,7 +92,7 @@ def test_update_response_with_relative_name_found(
     mock_zone.reader.return_value.__enter__.return_value = mock_reader
 
     # Call function
-    _update_response(dns_response, query_name, query_type, mock_zone)
+    _update_response(dns_response, query_name, query_type, mock_zone, frozenset())
 
     # Assertions
     mock_zone.reader.assert_called_once()
@@ -125,7 +125,7 @@ def test_update_response_with_absolute_name_found(
     mock_zone.reader.return_value.__enter__.return_value = mock_reader
 
     # Call function
-    _update_response(dns_response, query_name, query_type, mock_zone)
+    _update_response(dns_response, query_name, query_type, mock_zone, frozenset())
 
     # Assertions
     mock_zone.reader.assert_called_once()
@@ -153,7 +153,7 @@ def test_update_response_domain_not_found(mock_zone, mock_reader, dns_response):
     mock_zone.reader.return_value.__enter__.return_value = mock_reader
 
     # Call function
-    _update_response(dns_response, query_name, query_type, mock_zone)
+    _update_response(dns_response, query_name, query_type, mock_zone, frozenset())
 
     # Assertions
     mock_zone.reader.assert_called_once()
@@ -178,7 +178,7 @@ def test_update_response_record_type_not_found(mock_zone, mock_reader, dns_respo
     mock_zone.reader.return_value.__enter__.return_value = mock_reader
 
     # Call function
-    _update_response(dns_response, query_name, query_type, mock_zone)
+    _update_response(dns_response, query_name, query_type, mock_zone, frozenset())
 
     # Assertions
     mock_zone.reader.assert_called_once()
