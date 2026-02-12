@@ -118,9 +118,9 @@ class DnsServerUdpHandler(socketserver.BaseRequestHandler):
 
         if query.question:
             question = query.question[0]
-            alias_zones = getattr(self.server, "config", None)
-            if alias_zones:
-                alias_zones = alias_zones.alias_zones
+            config = getattr(self.server, "config", None)
+            if config:
+                alias_zones = config.alias_zones
             else:
                 alias_zones = frozenset()
             _update_response(
