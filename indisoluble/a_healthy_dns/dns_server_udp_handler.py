@@ -56,7 +56,7 @@ def _update_response(
                 query_name,
                 dns.rdatatype.to_text(query_type),
             )
-            response.set_rcode(dns.rcode.NXDOMAIN)
+            response.set_rcode(dns.rcode.NOERROR)
             return
 
         # Use the original query name in the response, not the normalized one

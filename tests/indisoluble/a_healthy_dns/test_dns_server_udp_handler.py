@@ -187,7 +187,7 @@ def test_update_response_record_type_not_found(mock_zone, mock_reader, dns_respo
         query_name.relativize(mock_zone.origin)
     )
     mock_node.get_rdataset.assert_called_once_with(mock_zone.rdclass, query_type)
-    assert dns_response.rcode() == dns.rcode.NXDOMAIN
+    assert dns_response.rcode() == dns.rcode.NOERROR
     assert len(dns_response.answer) == 0
 
 
