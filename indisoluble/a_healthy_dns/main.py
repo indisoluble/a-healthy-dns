@@ -49,11 +49,11 @@ _NAME_PRIV_KEY_PATH = "priv-key-path"
 _NAME_TEST_MIN_INTERVAL = "test-min-interval"
 _NAME_TEST_TIMEOUT = "test-timeout"
 _NAME_ZONE_RESOLUTIONS = "zone-resolutions"
+_VAL_ALIAS_ZONES = json.dumps([])
 _VAL_CONNECTION_TIMEOUT = 2
 _VAL_DNSSEC_ALGORITHM = dns.dnssec.algorithm_to_text(
     dns.dnssectypes.Algorithm.RSASHA256
 )
-_VAL_ALIAS_ZONES = json.dumps([])
 _VAL_LOG_LEVEL = logging._levelToName[logging.INFO].lower()
 _VAL_MIN_TEST_INTERVAL = 30
 _VAL_PORT = 53053
