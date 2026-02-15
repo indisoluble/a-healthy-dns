@@ -60,8 +60,8 @@ def test_make_config_success(args):
     # Check private key
     assert config.ext_private_key is None
 
-    # Check origin name
-    assert config.origin_name == dns.name.from_text(
+    # Check zone origins
+    assert config.zone_origins.primary == dns.name.from_text(
         "dev.example.com", origin=dns.name.root
     )
 
@@ -76,28 +76,28 @@ def test_make_config_success(args):
         healthy_ips_by_subdomain[record.subdomain] = record.healthy_ips
 
     # Check www subdomain
-    www_name = dns.name.from_text("www", origin=config.origin_name)
+    www_name = dns.name.from_text("www", origin=config.zone_origins.primary)
     assert www_name in healthy_ips_by_subdomain
     assert healthy_ips_by_subdomain[www_name] == frozenset(
         [AHealthyIp("192.168.1.1", 8080, False), AHealthyIp("192.168.1.2", 8080, False)]
     )
 
     # Check api subdomain
-    api_name = dns.name.from_text("api", origin=config.origin_name)
+    api_name = dns.name.from_text("api", origin=config.zone_origins.primary)
     assert api_name in healthy_ips_by_subdomain
     assert healthy_ips_by_subdomain[api_name] == frozenset(
         [AHealthyIp("192.168.2.1", 8081, False)]
     )
 
     # Check repeated subdomain
-    repeated_name = dns.name.from_text("repeated", origin=config.origin_name)
+    repeated_name = dns.name.from_text("repeated", origin=config.zone_origins.primary)
     assert repeated_name in healthy_ips_by_subdomain
     assert healthy_ips_by_subdomain[repeated_name] == frozenset(
         [AHealthyIp("10.16.2.1", 8082, False)]
     )
 
     # Check zeros subdomain
-    zeros_name = dns.name.from_text("zeros", origin=config.origin_name)
+    zeros_name = dns.name.from_text("zeros", origin=config.zone_origins.primary)
     assert zeros_name in healthy_ips_by_subdomain
     assert healthy_ips_by_subdomain[zeros_name] == frozenset(
         [AHealthyIp("102.18.1.1", 8083, False), AHealthyIp("192.168.0.20", 8083, False)]
@@ -121,7 +121,7 @@ def test_make_zone_success_with_dnssec(mock_load_key, args_with_dnssec):
     )
 
     # Check others
-    assert config.origin_name is not None
+    assert config.zone_origins is not None
     assert config.name_servers is not None
     assert config.a_records is not None
 

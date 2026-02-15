@@ -19,6 +19,7 @@ from indisoluble.a_healthy_dns.dns_server_zone_updater_threated import (
 )
 from indisoluble.a_healthy_dns.records.a_healthy_ip import AHealthyIp
 from indisoluble.a_healthy_dns.records.a_healthy_record import AHealthyRecord
+from indisoluble.a_healthy_dns.records.zone_origins import ZoneOrigins
 
 
 @pytest.fixture
@@ -27,17 +28,21 @@ def mock_origin_name():
 
 
 @pytest.fixture
-def mock_config(mock_origin_name):
+def mock_zone_origins():
+    return ZoneOrigins("example.com", [])
+
+
+@pytest.fixture
+def mock_config(mock_origin_name, mock_zone_origins):
     subdomain = dns.name.from_text("www", origin=mock_origin_name)
     ip = AHealthyIp(ip="192.168.1.1", health_port=8080, is_healthy=True)
     a_record = AHealthyRecord(subdomain=subdomain, healthy_ips=[ip])
 
     return DnsServerConfig(
-        origin_name=mock_origin_name,
+        zone_origins=mock_zone_origins,
         name_servers=frozenset(["ns1.example.com", "ns2.example.com"]),
         a_records=frozenset([a_record]),
         ext_private_key=None,
-        alias_zones=frozenset(),
     )
 
 

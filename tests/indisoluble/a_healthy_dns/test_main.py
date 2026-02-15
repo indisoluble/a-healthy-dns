@@ -34,7 +34,7 @@ def default_args() -> Dict[str, Any]:
 @pytest.fixture
 def mock_config():
     mock = MagicMock()
-    mock.alias_zones = frozenset()
+    mock.zone_origins = MagicMock()
     return mock
 
 
@@ -73,7 +73,7 @@ def test_main_success(
     mock_udp_server.assert_called_once_with(("", default_args[_ARG_PORT]), ANY)
 
     assert mock_server_instance.zone == mock_zone_updater_instance.zone
-    assert mock_server_instance.alias_zones == mock_config.alias_zones
+    assert mock_server_instance.zone_origins == mock_config.zone_origins
     mock_server_instance.serve_forever.assert_called_once()
 
     mock_zone_updater_instance.stop.assert_called_once()

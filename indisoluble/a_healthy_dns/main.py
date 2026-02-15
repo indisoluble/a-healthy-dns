@@ -238,7 +238,7 @@ def _main(args: Dict[str, Any]):
 
         logging.info("DNS server listening on port %d...", args[_ARG_PORT])
         server.zone = zone_updater.zone
-        server.alias_zones = config.alias_zones
+        server.zone_origins = config.zone_origins
         server.serve_forever()
 
     # Stop zone updater

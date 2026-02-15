@@ -17,6 +17,7 @@ from indisoluble.a_healthy_dns.dns_server_udp_handler import (
     _update_response,
     DnsServerUdpHandler,
 )
+from indisoluble.a_healthy_dns.records.zone_origins import ZoneOrigins
 
 
 @pytest.fixture
@@ -32,6 +33,11 @@ def mock_zone(mock_reader):
     zone.rdclass = dns.rdataclass.IN
     zone.reader.return_value = mock_reader
     return zone
+
+
+@pytest.fixture
+def mock_zone_origins():
+    return ZoneOrigins("example.com", [])
 
 
 @pytest.fixture
@@ -52,10 +58,10 @@ def mock_rdataset():
 
 
 @pytest.fixture
-def mock_server(mock_zone):
+def mock_server(mock_zone, mock_zone_origins):
     server = MagicMock()
     server.zone = mock_zone
-    server.alias_zones = frozenset()
+    server.zone_origins = mock_zone_origins
     return server
 
 
@@ -76,7 +82,7 @@ def dns_client_address():
 
 
 def test_update_response_with_relative_name_found(
-    mock_zone, mock_reader, mock_rdata, mock_rdataset, dns_response
+    mock_zone, mock_reader, mock_rdata, mock_rdataset, dns_response, mock_zone_origins
 ):
     # Setup
     query_name = dns.name.from_text("test", origin=None)
@@ -93,7 +99,7 @@ def test_update_response_with_relative_name_found(
     mock_zone.reader.return_value.__enter__.return_value = mock_reader
 
     # Call function
-    _update_response(dns_response, query_name, query_type, mock_zone, frozenset())
+    _update_response(dns_response, query_name, query_type, mock_zone, mock_zone_origins)
 
     # Assertions
     mock_zone.reader.assert_called_once()
@@ -109,7 +115,7 @@ def test_update_response_with_relative_name_found(
 
 
 def test_update_response_with_absolute_name_found(
-    mock_zone, mock_reader, mock_rdata, mock_rdataset, dns_response
+    mock_zone, mock_reader, mock_rdata, mock_rdataset, dns_response, mock_zone_origins
 ):
     # Setup
     query_name = dns.name.from_text("test", mock_zone.origin)
@@ -126,7 +132,7 @@ def test_update_response_with_absolute_name_found(
     mock_zone.reader.return_value.__enter__.return_value = mock_reader
 
     # Call function
-    _update_response(dns_response, query_name, query_type, mock_zone, frozenset())
+    _update_response(dns_response, query_name, query_type, mock_zone, mock_zone_origins)
 
     # Assertions
     mock_zone.reader.assert_called_once()
@@ -143,7 +149,7 @@ def test_update_response_with_absolute_name_found(
     assert list(dns_response.answer[0]) == [mock_rdata]
 
 
-def test_update_response_domain_not_found(mock_zone, mock_reader, dns_response):
+def test_update_response_domain_not_found(mock_zone, mock_reader, dns_response, mock_zone_origins):
     # Setup
     query_name = dns.name.from_text("nonexistent", mock_zone.origin)
     query_type = dns.rdatatype.A
@@ -154,7 +160,7 @@ def test_update_response_domain_not_found(mock_zone, mock_reader, dns_response):
     mock_zone.reader.return_value.__enter__.return_value = mock_reader
 
     # Call function
-    _update_response(dns_response, query_name, query_type, mock_zone, frozenset())
+    _update_response(dns_response, query_name, query_type, mock_zone, mock_zone_origins)
 
     # Assertions
     mock_zone.reader.assert_called_once()
@@ -165,7 +171,7 @@ def test_update_response_domain_not_found(mock_zone, mock_reader, dns_response):
     assert len(dns_response.answer) == 0
 
 
-def test_update_response_record_type_not_found(mock_zone, mock_reader, dns_response):
+def test_update_response_record_type_not_found(mock_zone, mock_reader, dns_response, mock_zone_origins):
     # Setup
     query_name = dns.name.from_text("test", mock_zone.origin)
     query_type = dns.rdatatype.A
@@ -179,7 +185,7 @@ def test_update_response_record_type_not_found(mock_zone, mock_reader, dns_respo
     mock_zone.reader.return_value.__enter__.return_value = mock_reader
 
     # Call function
-    _update_response(dns_response, query_name, query_type, mock_zone, frozenset())
+    _update_response(dns_response, query_name, query_type, mock_zone, mock_zone_origins)
 
     # Assertions
     mock_zone.reader.assert_called_once()
@@ -208,7 +214,7 @@ def test_handle_valid_query(
     assert mock_update_response.call_args[0][1] == question.name
     assert mock_update_response.call_args[0][2] == question.rdtype
     assert mock_update_response.call_args[0][3] == mock_server.zone
-    assert mock_update_response.call_args[0][4] == mock_server.alias_zones
+    assert mock_update_response.call_args[0][4] == mock_server.zone_origins
 
     # Check response was sent
     mock_sock = dns_request[1]

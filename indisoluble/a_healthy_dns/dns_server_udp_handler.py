@@ -18,7 +18,7 @@ import dns.rdatatype
 import dns.rrset
 import dns.versioned
 
-from typing import FrozenSet
+from indisoluble.a_healthy_dns.records.zone_origins import ZoneOrigins
 
 
 def _update_response(
@@ -26,21 +26,15 @@ def _update_response(
     query_name: dns.name.Name,
     query_type: dns.rdatatype.RdataType,
     zone: dns.versioned.Zone,
-    alias_zones: FrozenSet[dns.name.Name],
+    zone_origins: ZoneOrigins,
 ):
-    relative_name = query_name
-    if query_name.is_absolute():
-        zone_name = next(
-            (z for z in (zone.origin, *alias_zones) if query_name.is_subdomain(z)), None
+    relative_name = zone_origins.relativize(query_name)
+    if relative_name is None:
+        logging.warning(
+            "Received query for domain not in hosted or alias zones: %s", query_name
         )
-        if zone_name is None:
-            logging.warning(
-                "Received query for domain not in hosted or alias zones: %s", query_name
-            )
-            response.set_rcode(dns.rcode.NXDOMAIN)
-            return
-
-        relative_name = query_name.relativize(zone_name)
+        response.set_rcode(dns.rcode.NXDOMAIN)
+        return
 
     with zone.reader() as txn:
         node = txn.get_node(relative_name)
@@ -92,7 +86,7 @@ class DnsServerUdpHandler(socketserver.BaseRequestHandler):
                 question.name,
                 question.rdtype,
                 self.server.zone,
-                self.server.alias_zones,
+                self.server.zone_origins,
             )
         else:
             logging.warning("Received query without question section")

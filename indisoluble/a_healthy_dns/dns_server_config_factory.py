@@ -17,6 +17,7 @@ from typing import Any, Dict, FrozenSet, List, NamedTuple, Optional, Union
 
 from indisoluble.a_healthy_dns.records.a_healthy_record import AHealthyRecord
 from indisoluble.a_healthy_dns.records.a_healthy_ip import AHealthyIp
+from indisoluble.a_healthy_dns.records.zone_origins import ZoneOrigins
 from indisoluble.a_healthy_dns.tools.is_valid_subdomain import is_valid_subdomain
 
 
@@ -30,11 +31,10 @@ class ExtendedPrivateKey(NamedTuple):
 class DnsServerConfig(NamedTuple):
     """DNS server configuration containing zone data and security settings."""
 
-    origin_name: dns.name.Name
+    zone_origins: ZoneOrigins
     name_servers: FrozenSet[str]
     a_records: FrozenSet[AHealthyRecord]
     ext_private_key: Optional[ExtendedPrivateKey]
-    alias_zones: FrozenSet[dns.name.Name]
 
 
 ARG_ALIAS_ZONES = "alias_zones"
@@ -169,6 +169,56 @@ def _make_name_servers(args: Dict[str, Any]) -> Optional[FrozenSet[str]]:
     return frozenset(abs_name_servers)
 
 
+def _make_zone_origins(args: Dict[str, Any]) -> Optional[ZoneOrigins]:
+    """Create ZoneOrigins from command-line arguments."""
+    hosted_zone = args[ARG_HOSTED_ZONE]
+    
+    try:
+        alias_zones = json.loads(args[ARG_ALIAS_ZONES])
+    except json.JSONDecodeError as ex:
+        logging.error("Failed to parse alias zones: %s", ex)
+        return None
+    
+    if not isinstance(alias_zones, list):
+        logging.error("Alias zones must be a list, got %s", type(alias_zones).__name__)
+        return None
+    
+    # Check for subdomain conflicts between alias zones
+    validated_aliases = []
+    for zone in alias_zones:
+        success, error = is_valid_subdomain(zone)
+        if not success:
+            logging.error("Alias zone '%s' is not a valid FQDN: %s", zone, error)
+            return None
+        
+        alias_zone_name = dns.name.from_text(zone, origin=dns.name.root)
+        has_subdomain_conflict = any(
+            alias_zone_name != existing_zone_name
+            and (
+                alias_zone_name.is_subdomain(existing_zone_name)
+                or existing_zone_name.is_subdomain(alias_zone_name)
+            )
+            for existing_zone_name in validated_aliases
+        )
+        if has_subdomain_conflict:
+            logging.error(
+                "Alias zone '%s' has a subdomain relationship with another alias zone",
+                zone,
+            )
+            return None
+        
+        validated_aliases.append(alias_zone_name)
+    
+    try:
+        zone_origins = ZoneOrigins(hosted_zone, alias_zones)
+        if alias_zones:
+            logging.info("Configured %d alias zone(s)", len(alias_zones))
+        return zone_origins
+    except ValueError as ex:
+        logging.error("Failed to create zone origins: %s", ex)
+        return None
+
+
 def _make_alias_zones(args: Dict[str, Any]) -> Optional[FrozenSet[dns.name.Name]]:
     try:
         alias_zones = json.loads(args[ARG_ALIAS_ZONES])
@@ -241,20 +291,16 @@ def _make_private_key(args: Dict[str, Any]) -> Optional[ExtendedPrivateKey]:
 
 def make_config(args: Dict[str, Any]) -> Optional[DnsServerConfig]:
     """Create complete DNS server configuration from command-line arguments."""
-    origin_name = _make_origin_name(args)
-    if origin_name is None:
+    zone_origins = _make_zone_origins(args)
+    if zone_origins is None:
         return None
 
-    a_records = _make_a_records(origin_name, args)
+    a_records = _make_a_records(zone_origins.primary, args)
     if a_records is None:
         return None
 
     name_servers = _make_name_servers(args)
     if name_servers is None:
-        return None
-
-    alias_zones = _make_alias_zones(args)
-    if alias_zones is None:
         return None
 
     ext_private_key = None
@@ -264,9 +310,8 @@ def make_config(args: Dict[str, Any]) -> Optional[DnsServerConfig]:
             return None
 
     return DnsServerConfig(
-        origin_name=origin_name,
+        zone_origins=zone_origins,
         name_servers=name_servers,
         a_records=a_records,
         ext_private_key=ext_private_key,
-        alias_zones=alias_zones,
     )
