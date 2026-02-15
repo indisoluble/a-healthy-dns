@@ -11,6 +11,7 @@ from indisoluble.a_healthy_dns.main import (
     _ARG_LOG_LEVEL,
     _ARG_MIN_TEST_INTERVAL,
     _ARG_PORT,
+    _make_arg_parser,
     _main,
 )
 
@@ -103,3 +104,39 @@ def test_main_with_failed_config(
 
     mock_zone_updater.assert_not_called()
     mock_udp_server.assert_not_called()
+
+
+def test_arg_parser_sets_default_alias_zones():
+    parser = _make_arg_parser()
+
+    args = parser.parse_args(
+        [
+            "--hosted-zone",
+            "example.com",
+            "--zone-resolutions",
+            '{"www":{"ips":["192.168.1.1"],"health_port":8080}}',
+            "--ns",
+            '["ns1.example.com"]',
+        ]
+    )
+
+    assert getattr(args, dscf.ARG_ALIAS_ZONES) == "[]"
+
+
+def test_arg_parser_accepts_alias_zones_argument():
+    parser = _make_arg_parser()
+
+    args = parser.parse_args(
+        [
+            "--hosted-zone",
+            "example.com",
+            "--alias-zones",
+            '["alias1.example.com"]',
+            "--zone-resolutions",
+            '{"www":{"ips":["192.168.1.1"],"health_port":8080}}',
+            "--ns",
+            '["ns1.example.com"]',
+        ]
+    )
+
+    assert getattr(args, dscf.ARG_ALIAS_ZONES) == '["alias1.example.com"]'

@@ -34,10 +34,11 @@ def test_make_config_with_alias_zones():
     assert dns.name.from_text("alias2.com.") in config.alias_zones
 
 
-def test_make_config_without_alias_zones():
-    """Test that config works without alias zones."""
+def test_make_config_with_default_alias_zones():
+    """Test that config works with default empty alias zones."""
     args = {
         ARG_HOSTED_ZONE: "primary.com",
+        ARG_ALIAS_ZONES: "[]",
         ARG_ZONE_RESOLUTIONS: '{"www": {"ips": ["192.168.1.1"], "health_port": 8080}}',
         ARG_NAME_SERVERS: '["ns1.primary.com"]',
         ARG_DNSSEC_PRIVATE_KEY_PATH: None,

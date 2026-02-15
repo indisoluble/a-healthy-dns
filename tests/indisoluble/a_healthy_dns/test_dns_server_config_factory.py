@@ -19,6 +19,7 @@ from indisoluble.a_healthy_dns.records.a_healthy_ip import AHealthyIp
 def args():
     return {
         dscf.ARG_HOSTED_ZONE: "dev.example.com",
+        dscf.ARG_ALIAS_ZONES: json.dumps([]),
         dscf.ARG_NAME_SERVERS: json.dumps(["ns1.example.com", "ns2.example.com"]),
         dscf.ARG_ZONE_RESOLUTIONS: json.dumps(
             {

@@ -170,9 +170,6 @@ def _make_name_servers(args: Dict[str, Any]) -> Optional[FrozenSet[str]]:
 
 
 def _make_alias_zones(args: Dict[str, Any]) -> Optional[FrozenSet[dns.name.Name]]:
-    if ARG_ALIAS_ZONES not in args or not args[ARG_ALIAS_ZONES]:
-        return frozenset()
-
     try:
         alias_zones = json.loads(args[ARG_ALIAS_ZONES])
     except json.JSONDecodeError as ex:

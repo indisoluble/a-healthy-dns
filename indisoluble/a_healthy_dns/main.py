@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import argparse
+import json
 import logging
 import signal
 import socketserver
@@ -52,6 +53,7 @@ _VAL_CONNECTION_TIMEOUT = 2
 _VAL_DNSSEC_ALGORITHM = dns.dnssec.algorithm_to_text(
     dns.dnssectypes.Algorithm.RSASHA256
 )
+_VAL_ALIAS_ZONES = json.dumps([])
 _VAL_LOG_LEVEL = logging._levelToName[logging.INFO].lower()
 _VAL_MIN_TEST_INTERVAL = 30
 _VAL_PORT = 53053
@@ -137,10 +139,11 @@ Example usage
     res_group.add_argument(
         f"--{_NAME_ALIAS_ZONES}",
         type=str,
+        default=_VAL_ALIAS_ZONES,
         dest=ARG_ALIAS_ZONES,
         help=(
             "Alias zones that resolve to the same records as the hosted zone "
-            '(ex. ["alias1.com", "alias2.com"])'
+            f'(ex. ["alias1.com", "alias2.com"], default: {_VAL_ALIAS_ZONES})'
         ),
     )
     res_group.add_argument(
