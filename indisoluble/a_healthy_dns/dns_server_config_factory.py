@@ -131,7 +131,7 @@ def _make_a_records(
     a_records = []
     for subdomain, sub_config in raw_resolutions.items():
         a_record = _make_healthy_a_record(origin_name, subdomain, sub_config)
-        if not a_record:
+        if a_record is None:
             logging.error("Failed to create A record for '%s'", subdomain)
             return None
 
@@ -227,7 +227,7 @@ def _load_dnssec_private_key(key_path: str) -> Optional[bytes]:
 
 def _make_private_key(args: Dict[str, Any]) -> Optional[ExtendedPrivateKey]:
     priv_key_pem = _load_dnssec_private_key(args[ARG_DNSSEC_PRIVATE_KEY_PATH])
-    if not priv_key_pem:
+    if priv_key_pem is None:
         return None
 
     try:
