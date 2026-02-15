@@ -76,6 +76,7 @@ def basic_config(
         name_servers=frozenset(name_servers),
         a_records=frozenset((a_record_all_ips_healthy, a_record_ip_unhealthy)),
         ext_private_key=None,
+        alias_zones=frozenset(),
     )
 
 
@@ -92,6 +93,7 @@ def config_with_dnssec(
         name_servers=frozenset(name_servers),
         a_records=frozenset((a_record_all_ips_healthy, a_record_ip_unhealthy)),
         ext_private_key=ext_private_key,
+        alias_zones=frozenset(),
     )
 
 
@@ -110,6 +112,7 @@ def config_with_mock_dnssec(
         name_servers=frozenset(name_servers),
         a_records=frozenset((a_record_all_ips_healthy, a_record_ip_unhealthy)),
         ext_private_key=ext_private_key,
+        alias_zones=frozenset(),
     )
 
 
@@ -319,6 +322,7 @@ def test_initialize_zone_with_no_healthy_ips(
         name_servers=frozenset(name_servers),
         a_records=frozenset([a_record_ip_unhealthy]),
         ext_private_key=None,
+        alias_zones=frozenset(),
     )
 
     updater = DnsServerZoneUpdater(min_interval=30, connection_timeout=5, config=config)

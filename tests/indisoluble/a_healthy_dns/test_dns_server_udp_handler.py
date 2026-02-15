@@ -55,6 +55,7 @@ def mock_rdataset():
 def mock_server(mock_zone):
     server = MagicMock()
     server.zone = mock_zone
+    server.alias_zones = frozenset()
     return server
 
 
@@ -92,7 +93,7 @@ def test_update_response_with_relative_name_found(
     mock_zone.reader.return_value.__enter__.return_value = mock_reader
 
     # Call function
-    _update_response(dns_response, query_name, query_type, mock_zone)
+    _update_response(dns_response, query_name, query_type, mock_zone, frozenset())
 
     # Assertions
     mock_zone.reader.assert_called_once()
@@ -125,7 +126,7 @@ def test_update_response_with_absolute_name_found(
     mock_zone.reader.return_value.__enter__.return_value = mock_reader
 
     # Call function
-    _update_response(dns_response, query_name, query_type, mock_zone)
+    _update_response(dns_response, query_name, query_type, mock_zone, frozenset())
 
     # Assertions
     mock_zone.reader.assert_called_once()
@@ -153,7 +154,7 @@ def test_update_response_domain_not_found(mock_zone, mock_reader, dns_response):
     mock_zone.reader.return_value.__enter__.return_value = mock_reader
 
     # Call function
-    _update_response(dns_response, query_name, query_type, mock_zone)
+    _update_response(dns_response, query_name, query_type, mock_zone, frozenset())
 
     # Assertions
     mock_zone.reader.assert_called_once()
@@ -178,7 +179,7 @@ def test_update_response_record_type_not_found(mock_zone, mock_reader, dns_respo
     mock_zone.reader.return_value.__enter__.return_value = mock_reader
 
     # Call function
-    _update_response(dns_response, query_name, query_type, mock_zone)
+    _update_response(dns_response, query_name, query_type, mock_zone, frozenset())
 
     # Assertions
     mock_zone.reader.assert_called_once()
@@ -186,7 +187,7 @@ def test_update_response_record_type_not_found(mock_zone, mock_reader, dns_respo
         query_name.relativize(mock_zone.origin)
     )
     mock_node.get_rdataset.assert_called_once_with(mock_zone.rdclass, query_type)
-    assert dns_response.rcode() == dns.rcode.NXDOMAIN
+    assert dns_response.rcode() == dns.rcode.NOERROR
     assert len(dns_response.answer) == 0
 
 
@@ -207,6 +208,7 @@ def test_handle_valid_query(
     assert mock_update_response.call_args[0][1] == question.name
     assert mock_update_response.call_args[0][2] == question.rdtype
     assert mock_update_response.call_args[0][3] == mock_server.zone
+    assert mock_update_response.call_args[0][4] == mock_server.alias_zones
 
     # Check response was sent
     mock_sock = dns_request[1]

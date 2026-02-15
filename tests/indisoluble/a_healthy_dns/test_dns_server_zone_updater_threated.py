@@ -37,6 +37,7 @@ def mock_config(mock_origin_name):
         name_servers=frozenset(["ns1.example.com", "ns2.example.com"]),
         a_records=frozenset([a_record]),
         ext_private_key=None,
+        alias_zones=frozenset(),
     )
 
 

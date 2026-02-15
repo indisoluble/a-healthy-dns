@@ -34,8 +34,10 @@ class DnsServerConfig(NamedTuple):
     name_servers: FrozenSet[str]
     a_records: FrozenSet[AHealthyRecord]
     ext_private_key: Optional[ExtendedPrivateKey]
+    alias_zones: FrozenSet[dns.name.Name]
 
 
+ARG_ALIAS_ZONES = "alias_zones"
 ARG_DNSSEC_ALGORITHM = "priv_key_alg"
 ARG_DNSSEC_PRIVATE_KEY_PATH = "priv_key_path"
 ARG_HOSTED_ZONE = "zone"
@@ -129,7 +131,7 @@ def _make_a_records(
     a_records = []
     for subdomain, sub_config in raw_resolutions.items():
         a_record = _make_healthy_a_record(origin_name, subdomain, sub_config)
-        if not a_record:
+        if a_record is None:
             logging.error("Failed to create A record for '%s'", subdomain)
             return None
 
@@ -167,6 +169,48 @@ def _make_name_servers(args: Dict[str, Any]) -> Optional[FrozenSet[str]]:
     return frozenset(abs_name_servers)
 
 
+def _make_alias_zones(args: Dict[str, Any]) -> Optional[FrozenSet[dns.name.Name]]:
+    try:
+        alias_zones = json.loads(args[ARG_ALIAS_ZONES])
+    except json.JSONDecodeError as ex:
+        logging.error("Failed to parse alias zones: %s", ex)
+        return None
+
+    if not isinstance(alias_zones, list):
+        logging.error("Alias zones must be a list, got %s", type(alias_zones).__name__)
+        return None
+
+    valid_alias_zones = []
+    for zone in alias_zones:
+        success, error = is_valid_subdomain(zone)
+        if not success:
+            logging.error("Alias zone '%s' is not a valid FQDN: %s", zone, error)
+            return None
+
+        alias_zone_name = dns.name.from_text(zone, origin=dns.name.root)
+        has_subdomain_conflict = any(
+            alias_zone_name != existing_zone_name
+            and (
+                alias_zone_name.is_subdomain(existing_zone_name)
+                or existing_zone_name.is_subdomain(alias_zone_name)
+            )
+            for existing_zone_name in valid_alias_zones
+        )
+        if has_subdomain_conflict:
+            logging.error(
+                "Alias zone '%s' has a subdomain relationship with another alias zone",
+                zone,
+            )
+            return None
+
+        valid_alias_zones.append(alias_zone_name)
+
+    if valid_alias_zones:
+        logging.info("Configured %d alias zone(s)", len(valid_alias_zones))
+
+    return frozenset(valid_alias_zones)
+
+
 def _load_dnssec_private_key(key_path: str) -> Optional[bytes]:
     try:
         with open(key_path, "rb") as key_file:
@@ -180,7 +224,7 @@ def _load_dnssec_private_key(key_path: str) -> Optional[bytes]:
 
 def _make_private_key(args: Dict[str, Any]) -> Optional[ExtendedPrivateKey]:
     priv_key_pem = _load_dnssec_private_key(args[ARG_DNSSEC_PRIVATE_KEY_PATH])
-    if not priv_key_pem:
+    if priv_key_pem is None:
         return None
 
     try:
@@ -198,21 +242,25 @@ def _make_private_key(args: Dict[str, Any]) -> Optional[ExtendedPrivateKey]:
 def make_config(args: Dict[str, Any]) -> Optional[DnsServerConfig]:
     """Create complete DNS server configuration from command-line arguments."""
     origin_name = _make_origin_name(args)
-    if not origin_name:
+    if origin_name is None:
         return None
 
     a_records = _make_a_records(origin_name, args)
-    if not a_records:
+    if a_records is None:
         return None
 
     name_servers = _make_name_servers(args)
-    if not name_servers:
+    if name_servers is None:
+        return None
+
+    alias_zones = _make_alias_zones(args)
+    if alias_zones is None:
         return None
 
     ext_private_key = None
     if args[ARG_DNSSEC_PRIVATE_KEY_PATH]:
         ext_private_key = _make_private_key(args)
-        if not ext_private_key:
+        if ext_private_key is None:
             return None
 
     return DnsServerConfig(
@@ -220,4 +268,5 @@ def make_config(args: Dict[str, Any]) -> Optional[DnsServerConfig]:
         name_servers=name_servers,
         a_records=a_records,
         ext_private_key=ext_private_key,
+        alias_zones=alias_zones,
     )

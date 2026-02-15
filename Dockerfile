@@ -70,6 +70,7 @@ ENV DNS_HOSTED_ZONE="" \
     DNS_LOG_LEVEL="info" \
     DNS_TEST_MIN_INTERVAL="30" \
     DNS_TEST_TIMEOUT="2" \
+    DNS_ALIAS_ZONES="" \
     DNS_PRIV_KEY_PATH="" \
     DNS_PRIV_KEY_ALG="RSASHA256"
 
@@ -101,6 +102,9 @@ ENTRYPOINT ["tini", "--", "sh", "-c", "\
     ARGS=\"$ARGS --log-level $DNS_LOG_LEVEL\"; \
     ARGS=\"$ARGS --test-min-interval $DNS_TEST_MIN_INTERVAL\"; \
     ARGS=\"$ARGS --test-timeout $DNS_TEST_TIMEOUT\"; \
+    if [ -n \"$DNS_ALIAS_ZONES\" ]; then \
+    ARGS=\"$ARGS --alias-zones $DNS_ALIAS_ZONES\"; \
+    fi; \
     if [ -n \"$DNS_PRIV_KEY_PATH\" ]; then \
     ARGS=\"$ARGS --priv-key-path $DNS_PRIV_KEY_PATH\"; \
     fi; \

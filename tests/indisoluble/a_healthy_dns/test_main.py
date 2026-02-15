@@ -11,6 +11,7 @@ from indisoluble.a_healthy_dns.main import (
     _ARG_LOG_LEVEL,
     _ARG_MIN_TEST_INTERVAL,
     _ARG_PORT,
+    _make_arg_parser,
     _main,
 )
 
@@ -33,6 +34,7 @@ def default_args() -> Dict[str, Any]:
 @pytest.fixture
 def mock_config():
     mock = MagicMock()
+    mock.alias_zones = frozenset()
     return mock
 
 
@@ -70,6 +72,8 @@ def test_main_success(
 
     mock_udp_server.assert_called_once_with(("", default_args[_ARG_PORT]), ANY)
 
+    assert mock_server_instance.zone == mock_zone_updater_instance.zone
+    assert mock_server_instance.alias_zones == mock_config.alias_zones
     mock_server_instance.serve_forever.assert_called_once()
 
     mock_zone_updater_instance.stop.assert_called_once()
@@ -100,3 +104,39 @@ def test_main_with_failed_config(
 
     mock_zone_updater.assert_not_called()
     mock_udp_server.assert_not_called()
+
+
+def test_arg_parser_sets_default_alias_zones():
+    parser = _make_arg_parser()
+
+    args = parser.parse_args(
+        [
+            "--hosted-zone",
+            "example.com",
+            "--zone-resolutions",
+            '{"www":{"ips":["192.168.1.1"],"health_port":8080}}',
+            "--ns",
+            '["ns1.example.com"]',
+        ]
+    )
+
+    assert getattr(args, dscf.ARG_ALIAS_ZONES) == "[]"
+
+
+def test_arg_parser_accepts_alias_zones_argument():
+    parser = _make_arg_parser()
+
+    args = parser.parse_args(
+        [
+            "--hosted-zone",
+            "example.com",
+            "--alias-zones",
+            '["alias1.example.com"]',
+            "--zone-resolutions",
+            '{"www":{"ips":["192.168.1.1"],"health_port":8080}}',
+            "--ns",
+            '["ns1.example.com"]',
+        ]
+    )
+
+    assert getattr(args, dscf.ARG_ALIAS_ZONES) == '["alias1.example.com"]'
