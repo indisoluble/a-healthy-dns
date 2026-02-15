@@ -245,15 +245,15 @@ def _make_private_key(args: Dict[str, Any]) -> Optional[ExtendedPrivateKey]:
 def make_config(args: Dict[str, Any]) -> Optional[DnsServerConfig]:
     """Create complete DNS server configuration from command-line arguments."""
     origin_name = _make_origin_name(args)
-    if not origin_name:
+    if origin_name is None:
         return None
 
     a_records = _make_a_records(origin_name, args)
-    if not a_records:
+    if a_records is None:
         return None
 
     name_servers = _make_name_servers(args)
-    if not name_servers:
+    if name_servers is None:
         return None
 
     alias_zones = _make_alias_zones(args)
@@ -263,7 +263,7 @@ def make_config(args: Dict[str, Any]) -> Optional[DnsServerConfig]:
     ext_private_key = None
     if args[ARG_DNSSEC_PRIVATE_KEY_PATH]:
         ext_private_key = _make_private_key(args)
-        if not ext_private_key:
+        if ext_private_key is None:
             return None
 
     return DnsServerConfig(
