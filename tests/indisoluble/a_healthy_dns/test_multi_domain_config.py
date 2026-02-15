@@ -111,7 +111,7 @@ def test_make_config_with_non_list_alias_zones():
 
 
 def test_make_config_with_non_string_alias_zone():
-    """Test that non-string alias zone entries fail config creation."""
+    """Test that non-string alias zone entries surface a type error."""
     args = {
         ARG_HOSTED_ZONE: "primary.com",
         ARG_ALIAS_ZONES: '["alias1.com", 123]',
@@ -120,9 +120,8 @@ def test_make_config_with_non_string_alias_zone():
         ARG_DNSSEC_PRIVATE_KEY_PATH: None,
     }
 
-    config = make_config(args)
-
-    assert config is None
+    with pytest.raises(AttributeError):
+        make_config(args)
 
 
 def test_make_config_with_overlapping_alias_zones():

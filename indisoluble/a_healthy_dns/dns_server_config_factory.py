@@ -170,7 +170,6 @@ def _make_name_servers(args: Dict[str, Any]) -> Optional[FrozenSet[str]]:
 
 
 def _make_alias_zones(args: Dict[str, Any]) -> Optional[FrozenSet[dns.name.Name]]:
-    """Parse and validate alias zones from command-line arguments."""
     if ARG_ALIAS_ZONES not in args or not args[ARG_ALIAS_ZONES]:
         return frozenset()
 
@@ -186,10 +185,6 @@ def _make_alias_zones(args: Dict[str, Any]) -> Optional[FrozenSet[dns.name.Name]
 
     valid_alias_zones = []
     for zone in alias_zones:
-        if not isinstance(zone, str):
-            logging.error("Alias zone must be a string, got %s", type(zone).__name__)
-            return None
-
         success, error = is_valid_subdomain(zone)
         if not success:
             logging.error("Alias zone '%s' is not a valid FQDN: %s", zone, error)
