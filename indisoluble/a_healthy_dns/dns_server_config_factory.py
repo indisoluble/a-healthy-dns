@@ -46,17 +46,6 @@ ARG_SUBDOMAIN_HEALTH_PORT = "health_port"
 ARG_SUBDOMAIN_IP_LIST = "ips"
 ARG_ZONE_RESOLUTIONS = "resolutions"
 
-
-def _make_origin_name(args: Dict[str, Any]) -> Optional[dns.name.Name]:
-    hosted_zone = args[ARG_HOSTED_ZONE]
-    success, error = is_valid_subdomain(hosted_zone)
-    if not success:
-        logging.error("Hosted zone '%s' is not a valid FQDN: %s", hosted_zone, error)
-        return None
-
-    return dns.name.from_text(hosted_zone, origin=dns.name.root)
-
-
 def _make_healthy_a_record(
     origin_name: dns.name.Name,
     subdomain: str,
