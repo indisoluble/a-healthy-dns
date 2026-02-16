@@ -46,6 +46,29 @@ ARG_SUBDOMAIN_HEALTH_PORT = "health_port"
 ARG_SUBDOMAIN_IP_LIST = "ips"
 ARG_ZONE_RESOLUTIONS = "resolutions"
 
+
+def _make_zone_origins(args: Dict[str, Any]) -> Optional[ZoneOrigins]:
+    hosted_zone = args[ARG_HOSTED_ZONE]
+
+    try:
+        alias_zones = json.loads(args[ARG_ALIAS_ZONES])
+    except json.JSONDecodeError as ex:
+        logging.error("Failed to parse alias zones: %s", ex)
+        return None
+
+    if not isinstance(alias_zones, list):
+        logging.error("Alias zones must be a list, got %s", type(alias_zones).__name__)
+        return None
+
+    try:
+        zone_origins = ZoneOrigins(hosted_zone, alias_zones)
+    except ValueError as ex:
+        logging.error("Failed to create zone origins: %s", ex)
+        return None
+
+    return zone_origins
+
+
 def _make_healthy_a_record(
     origin_name: dns.name.Name,
     subdomain: str,
@@ -156,28 +179,6 @@ def _make_name_servers(args: Dict[str, Any]) -> Optional[FrozenSet[str]]:
         abs_name_servers.append(f"{ns}.")
 
     return frozenset(abs_name_servers)
-
-
-def _make_zone_origins(args: Dict[str, Any]) -> Optional[ZoneOrigins]:
-    hosted_zone = args[ARG_HOSTED_ZONE]
-    
-    try:
-        alias_zones = json.loads(args[ARG_ALIAS_ZONES])
-    except json.JSONDecodeError as ex:
-        logging.error("Failed to parse alias zones: %s", ex)
-        return None
-    
-    if not isinstance(alias_zones, list):
-        logging.error("Alias zones must be a list, got %s", type(alias_zones).__name__)
-        return None
-    
-    try:
-        zone_origins = ZoneOrigins(hosted_zone, alias_zones)
-    except ValueError as ex:
-        logging.error("Failed to create zone origins: %s", ex)
-        return None
-    
-    return zone_origins
 
 
 def _load_dnssec_private_key(key_path: str) -> Optional[bytes]:
