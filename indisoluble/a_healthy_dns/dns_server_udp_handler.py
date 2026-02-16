@@ -53,7 +53,6 @@ def _update_response(
             response.set_rcode(dns.rcode.NOERROR)
             return
 
-        # Use the original query name in the response, not the normalized one
         rrset = dns.rrset.RRset(query_name, rdataset.rdclass, rdataset.rdtype)
         rrset.ttl = rdataset.ttl
         for rdata in rdataset:

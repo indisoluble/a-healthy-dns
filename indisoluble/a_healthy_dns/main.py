@@ -72,7 +72,7 @@ Argument details
 {_GRP_ZONE_RESOLUTIONS}
 {len(_GRP_ZONE_RESOLUTIONS) * '-'}
 --{_NAME_HOSTED_ZONE}: The domain name for which this DNS server is authoritative.
---{_NAME_ALIAS_ZONES}: Additional domain names that resolve to the same records without duplicating health checks.
+--{_NAME_ALIAS_ZONES}: Additional domain names that resolve to the same records.
 --{_NAME_ZONE_RESOLUTIONS}: JSON configuration defining subdomains, their IP addresses, and health check ports.
 
 Examples:
