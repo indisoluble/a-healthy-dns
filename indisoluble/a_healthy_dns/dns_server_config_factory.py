@@ -170,7 +170,6 @@ def _make_name_servers(args: Dict[str, Any]) -> Optional[FrozenSet[str]]:
 
 
 def _make_zone_origins(args: Dict[str, Any]) -> Optional[ZoneOrigins]:
-    """Create ZoneOrigins from command-line arguments."""
     hosted_zone = args[ARG_HOSTED_ZONE]
     
     try:
@@ -183,32 +182,6 @@ def _make_zone_origins(args: Dict[str, Any]) -> Optional[ZoneOrigins]:
         logging.error("Alias zones must be a list, got %s", type(alias_zones).__name__)
         return None
     
-    # Check for subdomain conflicts between alias zones
-    validated_aliases = []
-    for zone in alias_zones:
-        success, error = is_valid_subdomain(zone)
-        if not success:
-            logging.error("Alias zone '%s' is not a valid FQDN: %s", zone, error)
-            return None
-        
-        alias_zone_name = dns.name.from_text(zone, origin=dns.name.root)
-        has_subdomain_conflict = any(
-            alias_zone_name != existing_zone_name
-            and (
-                alias_zone_name.is_subdomain(existing_zone_name)
-                or existing_zone_name.is_subdomain(alias_zone_name)
-            )
-            for existing_zone_name in validated_aliases
-        )
-        if has_subdomain_conflict:
-            logging.error(
-                "Alias zone '%s' has a subdomain relationship with another alias zone",
-                zone,
-            )
-            return None
-        
-        validated_aliases.append(alias_zone_name)
-    
     try:
         zone_origins = ZoneOrigins(hosted_zone, alias_zones)
         if alias_zones:
@@ -217,48 +190,6 @@ def _make_zone_origins(args: Dict[str, Any]) -> Optional[ZoneOrigins]:
     except ValueError as ex:
         logging.error("Failed to create zone origins: %s", ex)
         return None
-
-
-def _make_alias_zones(args: Dict[str, Any]) -> Optional[FrozenSet[dns.name.Name]]:
-    try:
-        alias_zones = json.loads(args[ARG_ALIAS_ZONES])
-    except json.JSONDecodeError as ex:
-        logging.error("Failed to parse alias zones: %s", ex)
-        return None
-
-    if not isinstance(alias_zones, list):
-        logging.error("Alias zones must be a list, got %s", type(alias_zones).__name__)
-        return None
-
-    valid_alias_zones = []
-    for zone in alias_zones:
-        success, error = is_valid_subdomain(zone)
-        if not success:
-            logging.error("Alias zone '%s' is not a valid FQDN: %s", zone, error)
-            return None
-
-        alias_zone_name = dns.name.from_text(zone, origin=dns.name.root)
-        has_subdomain_conflict = any(
-            alias_zone_name != existing_zone_name
-            and (
-                alias_zone_name.is_subdomain(existing_zone_name)
-                or existing_zone_name.is_subdomain(alias_zone_name)
-            )
-            for existing_zone_name in valid_alias_zones
-        )
-        if has_subdomain_conflict:
-            logging.error(
-                "Alias zone '%s' has a subdomain relationship with another alias zone",
-                zone,
-            )
-            return None
-
-        valid_alias_zones.append(alias_zone_name)
-
-    if valid_alias_zones:
-        logging.info("Configured %d alias zone(s)", len(valid_alias_zones))
-
-    return frozenset(valid_alias_zones)
 
 
 def _load_dnssec_private_key(key_path: str) -> Optional[bytes]:
