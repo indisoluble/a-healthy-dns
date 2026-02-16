@@ -184,12 +184,11 @@ def _make_zone_origins(args: Dict[str, Any]) -> Optional[ZoneOrigins]:
     
     try:
         zone_origins = ZoneOrigins(hosted_zone, alias_zones)
-        if alias_zones:
-            logging.info("Configured %d alias zone(s)", len(alias_zones))
-        return zone_origins
     except ValueError as ex:
         logging.error("Failed to create zone origins: %s", ex)
         return None
+    
+    return zone_origins
 
 
 def _load_dnssec_private_key(key_path: str) -> Optional[bytes]:
