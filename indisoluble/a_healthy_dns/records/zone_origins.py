@@ -35,21 +35,6 @@ class ZoneOrigins:
             key=lambda zone: (-len(zone), zone.to_text()),
         )
 
-    def __eq__(self, other: object) -> bool:
-        """Check equality based on primary and origins."""
-        if not isinstance(other, ZoneOrigins):
-            return NotImplemented
-        return self._primary == other._primary and self._origins == other._origins
-
-    def __hash__(self) -> int:
-        """Return hash based on primary and origins."""
-        return hash((self._primary, tuple(self._origins)))
-
-    def __repr__(self) -> str:
-        """Return string representation."""
-        aliases = [origin.to_text() for origin in self._origins if origin != self._primary]
-        return f"ZoneOrigins(primary={self._primary.to_text()!r}, aliases={aliases!r})"
-
     def relativize(self, name: dns.name.Name) -> Optional[dns.name.Name]:
         """Return relative name using matching origin, or None when unmatched."""
         if not name.is_absolute():
@@ -59,3 +44,18 @@ class ZoneOrigins:
             (origin for origin in self._origins if name.is_subdomain(origin)), None
         )
         return name.relativize(zone) if zone else None
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, ZoneOrigins):
+            return False
+
+        return self._primary == other._primary and self._origins == other._origins
+
+    def __hash__(self) -> int:
+        return hash((self._primary, tuple(self._origins)))
+
+    def __repr__(self) -> str:
+        aliases = [
+            origin.to_text() for origin in self._origins if origin != self._primary
+        ]
+        return f"ZoneOrigins(primary={self._primary.to_text()!r}, aliases={aliases!r})"

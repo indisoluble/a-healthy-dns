@@ -103,10 +103,10 @@ def test_eq_returns_false_for_different_aliases():
     assert origins1 != origins2
 
 
-def test_eq_returns_not_implemented_for_non_zone_origins():
+def test_eq_returns_false_for_non_zone_origins():
     origins = ZoneOrigins("example.com", [])
 
-    assert origins.__eq__("not a ZoneOrigins") == NotImplemented
+    assert origins.__eq__("not a ZoneOrigins") is False
 
 
 def test_hash_is_consistent():
