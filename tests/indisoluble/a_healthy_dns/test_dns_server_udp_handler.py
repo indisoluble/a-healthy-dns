@@ -27,17 +27,17 @@ def mock_reader():
 
 
 @pytest.fixture
-def mock_zone(mock_reader):
-    zone = MagicMock()
-    zone.origin = dns.name.from_text("example.com.")
-    zone.rdclass = dns.rdataclass.IN
-    zone.reader.return_value = mock_reader
-    return zone
+def mock_zone_origins():
+    return ZoneOrigins("example.com", [])
 
 
 @pytest.fixture
-def mock_zone_origins():
-    return ZoneOrigins("example.com", [])
+def mock_zone(mock_reader, mock_zone_origins):
+    zone = MagicMock()
+    zone.origin = mock_zone_origins.primary
+    zone.rdclass = dns.rdataclass.IN
+    zone.reader.return_value = mock_reader
+    return zone
 
 
 @pytest.fixture

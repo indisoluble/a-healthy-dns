@@ -34,18 +34,13 @@ def _get_rrsig_rdatasets(
 
 
 @pytest.fixture
-def origin_name():
-    return dns.name.from_text("example.com", origin=dns.name.root)
-
-
-@pytest.fixture
 def zone_origins():
     return ZoneOrigins("example.com", [])
 
 
 @pytest.fixture
-def a_record_all_ips_healthy(origin_name):
-    subdomain = dns.name.from_text("www", origin=origin_name)
+def a_record_all_ips_healthy(zone_origins):
+    subdomain = dns.name.from_text("www", origin=zone_origins.primary)
     ip1 = AHealthyIp(ip="192.168.1.1", health_port=8080, is_healthy=True)
     ip2 = AHealthyIp(ip="192.168.1.2", health_port=8080, is_healthy=True)
 
@@ -53,8 +48,8 @@ def a_record_all_ips_healthy(origin_name):
 
 
 @pytest.fixture
-def a_record_ip_unhealthy(origin_name):
-    subdomain = dns.name.from_text("api", origin=origin_name)
+def a_record_ip_unhealthy(zone_origins):
+    subdomain = dns.name.from_text("api", origin=zone_origins.primary)
     ip = AHealthyIp(ip="192.168.1.3", health_port=8080, is_healthy=False)
 
     return AHealthyRecord(subdomain=subdomain, healthy_ips=[ip])

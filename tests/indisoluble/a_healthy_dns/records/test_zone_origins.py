@@ -73,3 +73,74 @@ def test_relativize_prefers_most_specific_matching_origin():
     result = origins.relativize(absolute_name)
 
     assert result == dns.name.from_text("api", origin=None)
+
+
+def test_eq_returns_true_for_identical_zone_origins():
+    origins1 = ZoneOrigins("example.com", ["alias1.com", "alias2.com"])
+    origins2 = ZoneOrigins("example.com", ["alias1.com", "alias2.com"])
+
+    assert origins1 == origins2
+
+
+def test_eq_returns_true_for_same_zones_different_order():
+    origins1 = ZoneOrigins("example.com", ["alias1.com", "alias2.com"])
+    origins2 = ZoneOrigins("example.com", ["alias2.com", "alias1.com"])
+
+    assert origins1 == origins2
+
+
+def test_eq_returns_false_for_different_primary():
+    origins1 = ZoneOrigins("example.com", [])
+    origins2 = ZoneOrigins("other.com", [])
+
+    assert origins1 != origins2
+
+
+def test_eq_returns_false_for_different_aliases():
+    origins1 = ZoneOrigins("example.com", ["alias1.com"])
+    origins2 = ZoneOrigins("example.com", ["alias2.com"])
+
+    assert origins1 != origins2
+
+
+def test_eq_returns_not_implemented_for_non_zone_origins():
+    origins = ZoneOrigins("example.com", [])
+
+    assert origins.__eq__("not a ZoneOrigins") == NotImplemented
+
+
+def test_hash_is_consistent():
+    origins1 = ZoneOrigins("example.com", ["alias1.com", "alias2.com"])
+    origins2 = ZoneOrigins("example.com", ["alias2.com", "alias1.com"])
+
+    assert hash(origins1) == hash(origins2)
+
+
+def test_hash_allows_use_in_set():
+    origins1 = ZoneOrigins("example.com", ["alias1.com"])
+    origins2 = ZoneOrigins("example.com", ["alias1.com"])
+    origins3 = ZoneOrigins("other.com", [])
+
+    zone_set = {origins1, origins2, origins3}
+
+    assert len(zone_set) == 2  # origins1 and origins2 are the same
+
+
+def test_repr_shows_primary_and_aliases():
+    origins = ZoneOrigins("example.com", ["alias1.com", "alias2.com"])
+
+    result = repr(origins)
+
+    assert "example.com." in result
+    assert "alias1.com." in result
+    assert "alias2.com." in result
+    assert result.startswith("ZoneOrigins(")
+
+
+def test_repr_shows_no_aliases_when_empty():
+    origins = ZoneOrigins("example.com", [])
+
+    result = repr(origins)
+
+    assert "example.com." in result
+    assert result == "ZoneOrigins(primary='example.com.', aliases=[])"
