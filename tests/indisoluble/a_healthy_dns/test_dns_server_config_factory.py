@@ -13,6 +13,7 @@ from unittest.mock import patch
 from dns.dnssecalgs.rsa import PrivateRSASHA256
 
 from indisoluble.a_healthy_dns.records.a_healthy_ip import AHealthyIp
+from indisoluble.a_healthy_dns.records.zone_origins import ZoneOrigins
 
 
 @pytest.fixture
@@ -61,9 +62,7 @@ def test_make_config_success(args):
     assert config.ext_private_key is None
 
     # Check zone origins
-    assert config.zone_origins.primary == dns.name.from_text(
-        "dev.example.com", origin=dns.name.root
-    )
+    assert config.zone_origins == ZoneOrigins("dev.example.com", [])
 
     # Check name servers
     assert config.name_servers == frozenset(["ns1.example.com.", "ns2.example.com."])
