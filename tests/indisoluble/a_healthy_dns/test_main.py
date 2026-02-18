@@ -11,7 +11,6 @@ from indisoluble.a_healthy_dns.main import (
     _ARG_LOG_LEVEL,
     _ARG_MIN_TEST_INTERVAL,
     _ARG_PORT,
-    _make_arg_parser,
     _main,
 )
 
