@@ -20,7 +20,7 @@ from indisoluble.a_healthy_dns.records.zone_origins import ZoneOrigins
 def args():
     return {
         dscf.ARG_HOSTED_ZONE: "dev.example.com",
-        dscf.ARG_ALIAS_ZONES: json.dumps([]),
+        dscf.ARG_ALIAS_ZONES: json.dumps(["dev.alias-one.com", "dev.alias-two.com"]),
         dscf.ARG_NAME_SERVERS: json.dumps(["ns1.example.com", "ns2.example.com"]),
         dscf.ARG_ZONE_RESOLUTIONS: json.dumps(
             {
@@ -62,7 +62,9 @@ def test_make_config_success(args):
     assert config.ext_private_key is None
 
     # Check zone origins
-    assert config.zone_origins == ZoneOrigins("dev.example.com", [])
+    assert config.zone_origins == ZoneOrigins(
+        "dev.example.com", ["dev.alias-one.com", "dev.alias-two.com"]
+    )
 
     # Check name servers
     assert config.name_servers == frozenset(["ns1.example.com.", "ns2.example.com."])
@@ -128,6 +130,20 @@ def test_make_zone_success_with_dnssec(mock_load_key, args_with_dnssec):
 @pytest.mark.parametrize("invalid_zone", ["", "dev.example@.com"])
 def test_make_zone_invalid_hosted_zone(invalid_zone, args):
     args[dscf.ARG_HOSTED_ZONE] = invalid_zone
+    assert dscf.make_config(args) is None
+
+
+@pytest.mark.parametrize(
+    "invalid_aliases",
+    [
+        "invalid json",
+        json.dumps({"alias": "dev.alias-one.com"}),
+        json.dumps([""]),
+        json.dumps(["dev.alias-one.com", "dev.alias-@.com"]),
+    ],
+)
+def test_make_zone_invalid_alias_zones(invalid_aliases, args):
+    args[dscf.ARG_ALIAS_ZONES] = invalid_aliases
     assert dscf.make_config(args) is None
 
 
