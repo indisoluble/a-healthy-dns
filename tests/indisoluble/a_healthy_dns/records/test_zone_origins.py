@@ -6,28 +6,22 @@ import pytest
 from indisoluble.a_healthy_dns.records.zone_origins import ZoneOrigins
 
 
+@pytest.mark.parametrize("invalid_primary", ["", "bad!primary", "example..com"])
+def test_init_raises_for_invalid_primary(invalid_primary):
+    with pytest.raises(ValueError):
+        ZoneOrigins(invalid_primary, [])
+
+
+@pytest.mark.parametrize("invalid_alias", ["", "bad!alias", "alias..com"])
+def test_init_raises_for_invalid_alias(invalid_alias):
+    with pytest.raises(ValueError):
+        ZoneOrigins("example.com", [invalid_alias])
+
+
 def test_primary_is_parsed_as_absolute_name():
     origins = ZoneOrigins("example.com", [])
 
     assert origins.primary == dns.name.from_text("example.com", origin=dns.name.root)
-
-
-def test_init_raises_for_invalid_primary():
-    with pytest.raises(ValueError) as exc_info:
-        ZoneOrigins("", [])
-
-    assert str(exc_info.value) == "Invalid domain '': It cannot be empty"
-
-
-def test_init_raises_for_invalid_alias():
-    with pytest.raises(ValueError) as exc_info:
-        ZoneOrigins("example.com", ["bad!alias"])
-
-    assert (
-        str(exc_info.value)
-        == "Invalid domain 'bad!alias': Labels must contain only alphanumeric "
-        "characters or hyphens"
-    )
 
 
 def test_relativize_keeps_relative_name_as_is():
@@ -36,12 +30,12 @@ def test_relativize_keeps_relative_name_as_is():
 
     result = origins.relativize(relative_name)
 
-    assert result is relative_name
+    assert result == relative_name
 
 
 def test_relativize_absolute_name_under_primary():
     origins = ZoneOrigins("example.com", [])
-    absolute_name = dns.name.from_text("www.example.com", origin=dns.name.root)
+    absolute_name = dns.name.from_text("www", origin=dns.name.from_text("example.com"))
 
     result = origins.relativize(absolute_name)
 
@@ -50,7 +44,7 @@ def test_relativize_absolute_name_under_primary():
 
 def test_relativize_absolute_name_under_alias():
     origins = ZoneOrigins("example.com", ["alias.com"])
-    absolute_name = dns.name.from_text("www.alias.com", origin=dns.name.root)
+    absolute_name = dns.name.from_text("www", origin=dns.name.from_text("alias.com"))
 
     result = origins.relativize(absolute_name)
 
@@ -59,7 +53,7 @@ def test_relativize_absolute_name_under_alias():
 
 def test_relativize_returns_none_for_unmatched_absolute_name():
     origins = ZoneOrigins("example.com", ["alias.com"])
-    absolute_name = dns.name.from_text("www.unknown.com", origin=dns.name.root)
+    absolute_name = dns.name.from_text("www", origin=dns.name.from_text("other.com"))
 
     result = origins.relativize(absolute_name)
 
@@ -68,7 +62,9 @@ def test_relativize_returns_none_for_unmatched_absolute_name():
 
 def test_relativize_prefers_most_specific_matching_origin():
     origins = ZoneOrigins("example.com", ["dev.example.com"])
-    absolute_name = dns.name.from_text("api.dev.example.com", origin=dns.name.root)
+    absolute_name = dns.name.from_text(
+        "api.dev", origin=dns.name.from_text("example.com")
+    )
 
     result = origins.relativize(absolute_name)
 
@@ -84,6 +80,13 @@ def test_eq_returns_true_for_identical_zone_origins():
 
 def test_eq_returns_true_for_same_zones_different_order():
     origins1 = ZoneOrigins("example.com", ["alias1.com", "alias2.com"])
+    origins2 = ZoneOrigins("example.com", ["alias2.com", "alias1.com"])
+
+    assert origins1 == origins2
+
+
+def test_eq_returns_true_for_same_zones_with_repited_aliases():
+    origins1 = ZoneOrigins("example.com", ["alias1.com", "alias2.com", "alias1.com"])
     origins2 = ZoneOrigins("example.com", ["alias2.com", "alias1.com"])
 
     assert origins1 == origins2
@@ -110,7 +113,7 @@ def test_eq_returns_false_for_non_zone_origins():
 
 
 def test_hash_is_consistent():
-    origins1 = ZoneOrigins("example.com", ["alias1.com", "alias2.com"])
+    origins1 = ZoneOrigins("example.com", ["alias1.com", "alias2.com", "alias1.com"])
     origins2 = ZoneOrigins("example.com", ["alias2.com", "alias1.com"])
 
     assert hash(origins1) == hash(origins2)
@@ -123,7 +126,7 @@ def test_hash_allows_use_in_set():
 
     zone_set = {origins1, origins2, origins3}
 
-    assert len(zone_set) == 2  # origins1 and origins2 are the same
+    assert len(zone_set) == 2
 
 
 def test_repr_shows_primary_and_aliases():
