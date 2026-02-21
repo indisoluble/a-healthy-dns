@@ -6,13 +6,27 @@ import pytest
 from indisoluble.a_healthy_dns.records.zone_origins import ZoneOrigins
 
 
-@pytest.mark.parametrize("invalid_primary", ["", "bad!primary", "example..com"])
+@pytest.mark.parametrize(
+    "invalid_primary", [None, 123, 1.5, [], {}, "", "bad!primary", "example..com"]
+)
 def test_init_raises_for_invalid_primary(invalid_primary):
     with pytest.raises(ValueError):
         ZoneOrigins(invalid_primary, [])
 
 
-@pytest.mark.parametrize("invalid_alias", ["", "bad!alias", "alias..com"])
+@pytest.mark.parametrize(
+    "invalid_alias",
+    [
+        None,
+        123,
+        1.5,
+        [],
+        {},
+        "",
+        "bad!alias",
+        "alias..com",
+    ],
+)
 def test_init_raises_for_invalid_alias(invalid_alias):
     with pytest.raises(ValueError):
         ZoneOrigins("example.com", [invalid_alias])

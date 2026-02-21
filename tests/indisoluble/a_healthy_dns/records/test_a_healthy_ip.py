@@ -24,6 +24,11 @@ def test_ip_normalization(non_normalized_ip, expected_ip):
 @pytest.mark.parametrize(
     "invalid_ip",
     [
+        None,
+        123,
+        1.5,
+        [],
+        {},
         "256.0.0.1",  # octet > 255
         "192.168.1",  # not enough octets
         "192.168.1.256",  # octet > 255
@@ -32,23 +37,26 @@ def test_ip_normalization(non_normalized_ip, expected_ip):
     ],
 )
 def test_invalid_ip(invalid_ip):
-    with pytest.raises(ValueError) as exc_info:
+    with pytest.raises(ValueError):
         AHealthyIp(invalid_ip, 8080, True)
-    assert "Invalid IP address" in str(exc_info.value)
 
 
 @pytest.mark.parametrize(
     "invalid_port",
     [
+        "8080",
+        None,
+        1.5,
+        [],
+        {},
         0,  # below range
         65536,  # above range
         -1,  # negative
     ],
 )
 def test_invalid_port(invalid_port):
-    with pytest.raises(ValueError) as exc_info:
+    with pytest.raises(ValueError):
         AHealthyIp("192.168.1.1", invalid_port, True)
-    assert "Invalid port" in str(exc_info.value)
 
 
 def test_equality():

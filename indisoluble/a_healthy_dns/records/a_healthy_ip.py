@@ -6,6 +6,8 @@ Provides an IP address class that tracks health status and port information
 for use in health-aware DNS A records.
 """
 
+from typing import Any
+
 from indisoluble.a_healthy_dns.tools.is_valid_ip import is_valid_ip
 from indisoluble.a_healthy_dns.tools.is_valid_port import is_valid_port
 from indisoluble.a_healthy_dns.tools.normalize_ip import normalize_ip
@@ -29,7 +31,7 @@ class AHealthyIp:
         """Get the current health status."""
         return self._is_healthy
 
-    def __init__(self, ip: str, health_port: int, is_healthy: bool):
+    def __init__(self, ip: Any, health_port: Any, is_healthy: bool):
         """Initialize healthy IP with validation of IP address and port."""
         success, error = is_valid_ip(ip)
         if not success:

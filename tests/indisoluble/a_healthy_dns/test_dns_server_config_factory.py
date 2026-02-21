@@ -151,8 +151,10 @@ def test_make_zone_invalid_alias_zones(invalid_aliases, args):
     "invalid_ns",
     [
         "invalid json",
-        json.dumps([]),
         json.dumps({"ns": "ns1.example.com"}),
+        json.dumps([]),
+        json.dumps([123]),
+        json.dumps([""]),
         json.dumps(["ns1.example@.com"]),
     ],
 )
@@ -165,8 +167,16 @@ def test_make_zone_invalid_json_name_servers(invalid_ns, args):
     "invalid_resolution",
     [
         "invalid json",
-        json.dumps({}),
         json.dumps(["192.168.1.1", 8080]),
+        json.dumps({}),
+        json.dumps(
+            {
+                "": {
+                    dscf.ARG_SUBDOMAIN_IP_LIST: ["192.168.1.1"],
+                    dscf.ARG_SUBDOMAIN_HEALTH_PORT: 8080,
+                }
+            }
+        ),
         json.dumps(
             {
                 "www@": {
@@ -176,6 +186,22 @@ def test_make_zone_invalid_json_name_servers(invalid_ns, args):
             }
         ),
         json.dumps({"www": ["192.168.1.1", 8080]}),
+        json.dumps({"www": {}}),
+        json.dumps(
+            {
+                "www": {
+                    dscf.ARG_SUBDOMAIN_HEALTH_PORT: 8080,
+                }
+            }
+        ),
+        json.dumps(
+            {
+                "www": {
+                    dscf.ARG_SUBDOMAIN_IP_LIST: None,
+                    dscf.ARG_SUBDOMAIN_HEALTH_PORT: 8080,
+                }
+            }
+        ),
         json.dumps(
             {
                 "www": {
@@ -188,6 +214,29 @@ def test_make_zone_invalid_json_name_servers(invalid_ns, args):
             {
                 "www": {
                     dscf.ARG_SUBDOMAIN_IP_LIST: [],
+                    dscf.ARG_SUBDOMAIN_HEALTH_PORT: 8080,
+                }
+            }
+        ),
+        json.dumps(
+            {
+                "www": {
+                    dscf.ARG_SUBDOMAIN_IP_LIST: ["192.168.1.1"],
+                }
+            }
+        ),
+        json.dumps(
+            {
+                "www": {
+                    dscf.ARG_SUBDOMAIN_IP_LIST: ["192.168.1.1"],
+                    dscf.ARG_SUBDOMAIN_HEALTH_PORT: None,
+                }
+            }
+        ),
+        json.dumps(
+            {
+                "www": {
+                    dscf.ARG_SUBDOMAIN_IP_LIST: [123],
                     dscf.ARG_SUBDOMAIN_HEALTH_PORT: 8080,
                 }
             }

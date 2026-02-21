@@ -13,7 +13,7 @@ import dns.dnssec
 import dns.dnssecalgs
 import dns.name
 
-from typing import Any, Dict, FrozenSet, List, NamedTuple, Optional, Union
+from typing import Any, Dict, FrozenSet, NamedTuple, Optional
 
 from indisoluble.a_healthy_dns.records.a_healthy_record import AHealthyRecord
 from indisoluble.a_healthy_dns.records.a_healthy_ip import AHealthyIp
@@ -70,9 +70,7 @@ def _make_zone_origins(args: Dict[str, Any]) -> Optional[ZoneOrigins]:
 
 
 def _make_healthy_a_record(
-    origin_name: dns.name.Name,
-    subdomain: str,
-    sub_config: Dict[str, Union[List[str], int]],
+    origin_name: dns.name.Name, subdomain: Any, sub_config: Any
 ) -> Optional[AHealthyRecord]:
     success, error = is_valid_subdomain(subdomain)
     if not success:
@@ -91,7 +89,15 @@ def _make_healthy_a_record(
         )
         return None
 
-    ip_list = sub_config[ARG_SUBDOMAIN_IP_LIST]
+    ip_list = sub_config.get(ARG_SUBDOMAIN_IP_LIST)
+    if ip_list is None:
+        logging.error(
+            "Zone resolution for '%s' must include '%s' key",
+            subdomain,
+            ARG_SUBDOMAIN_IP_LIST,
+        )
+        return None
+
     if not isinstance(ip_list, list):
         logging.error(
             "IP list for '%s' must be a list, got %s", subdomain, type(ip_list).__name__
@@ -102,19 +108,19 @@ def _make_healthy_a_record(
         logging.error("IP list for '%s' cannot be empty", subdomain)
         return None
 
-    health_port = sub_config[ARG_SUBDOMAIN_HEALTH_PORT]
-    if not isinstance(health_port, int):
+    health_port = sub_config.get(ARG_SUBDOMAIN_HEALTH_PORT)
+    if health_port is None:
         logging.error(
-            "Health port for '%s' must be an integer, got %s",
+            "Zone resolution for '%s' must include '%s' key",
             subdomain,
-            type(health_port).__name__,
+            ARG_SUBDOMAIN_HEALTH_PORT,
         )
         return None
 
     try:
         healthy_ips = [AHealthyIp(ip, health_port, False) for ip in ip_list]
     except ValueError as ex:
-        logging.error("Invalid IP address in '%s': %s", subdomain, ex)
+        logging.error("Invalid IP/port address in '%s': %s", subdomain, ex)
         return None
 
     return AHealthyRecord(subdomain_name, healthy_ips)

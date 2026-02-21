@@ -15,6 +15,11 @@ def test_valid_ports(valid_port):
 @pytest.mark.parametrize(
     "invalid_port,expected_message",
     [
+        ("80", "Port must be an integer"),
+        (None, "Port must be an integer"),
+        (8080.5, "Port must be an integer"),
+        ([], "Port must be an integer"),
+        ({}, "Port must be an integer"),
         (0, "Port must be between 1 and 65535"),
         (-1, "Port must be between 1 and 65535"),
         (65536, "Port must be between 1 and 65535"),

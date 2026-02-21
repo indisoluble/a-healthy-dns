@@ -4,12 +4,12 @@
 
 import dns.name
 
-from typing import List, Optional
+from typing import Any, List, Optional
 
 from indisoluble.a_healthy_dns.tools.is_valid_subdomain import is_valid_subdomain
 
 
-def _to_abs_name(raw_name: str) -> dns.name.Name:
+def _to_abs_name(raw_name: Any) -> dns.name.Name:
     success, error = is_valid_subdomain(raw_name)
     if not success:
         raise ValueError(f"Invalid domain '{raw_name}': {error}")
@@ -25,7 +25,7 @@ class ZoneOrigins:
         """Get the primary zone origin."""
         return self._primary
 
-    def __init__(self, primary: str, aliases: List[str]):
+    def __init__(self, primary: Any, aliases: List[Any]):
         """Initialize zone origins with a primary and alias set."""
         self._primary = _to_abs_name(primary)
 
