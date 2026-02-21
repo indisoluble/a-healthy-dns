@@ -72,46 +72,79 @@ jobs:
         # Install dig for testing
         sudo apt-get update && sudo apt-get install -y dnsutils
 
+        DNS_HOST="127.0.0.1"
+        DNS_PORT="53053"
+        BACKEND_IP="172.28.0.10"
+        EXPECTED_NS="ns1.test.example.com."
+
         wait_for_a_record() {
           local fqdn="$1"
-          for attempt in $(seq 1 20); do
-            answer="$(dig +short +time=1 +tries=1 @127.0.0.1 -p 53053 "${fqdn}" A)"
-            if printf '%s\n' "${answer}" | grep -qx "172.28.0.10"; then
-              echo "[OK] ${fqdn} resolved to 172.28.0.10"
+          local answer
+
+          for _ in $(seq 1 20); do
+            answer="$(dig +short +time=1 +tries=1 @"${DNS_HOST}" -p "${DNS_PORT}" "${fqdn}" A)"
+            printf '%s\n' "${answer}" | grep -qx "${BACKEND_IP}" && {
+              echo "[OK] A ${fqdn}"
               return 0
-            fi
+            }
             sleep 1
           done
 
-          echo "A record did not become healthy for ${fqdn}"
-          dig +nocmd +noall +comments +answer @127.0.0.1 -p 53053 "${fqdn}" A || true
+          echo "[FAIL] A ${fqdn}"
+          dig +nocmd +noall +comments +answer @"${DNS_HOST}" -p "${DNS_PORT}" "${fqdn}" A || true
           return 1
         }
 
-        # Hosted zone should resolve the healthy backend
-        wait_for_a_record "www.test.example.com"
+        assert_dns_status() {
+          local fqdn="$1"
+          local rtype="$2"
+          local expected_status="$3"
+          local output
+          local actual_status
 
-        # Alias zones must resolve to the same backend via the same relative record name
-        wait_for_a_record "www.test.other.com"
-        wait_for_a_record "www.test.another.com"
+          output="$(dig +time=1 +tries=1 +noall +comments @"${DNS_HOST}" -p "${DNS_PORT}" "${fqdn}" "${rtype}")"
+          actual_status="$(printf '%s\n' "${output}" | sed -n 's/.*status: \([A-Z]*\).*/\1/p' | head -n 1)"
 
-        # NS record should be present for hosted and alias zones
-        for zone in test.example.com test.other.com test.another.com; do
-          ns_answer="$(dig +short +time=1 +tries=1 @127.0.0.1 -p 53053 "${zone}" NS)"
-          printf '%s\n' "${ns_answer}" | grep -qx "ns1.test.example.com." || {
-            echo "Unexpected NS answer for ${zone}: ${ns_answer}"
+          if [ "${actual_status}" = "${expected_status}" ]; then
+            echo "[OK] ${rtype} ${fqdn} ${actual_status}"
+            return 0
+          fi
+
+          echo "[FAIL] ${rtype} ${fqdn} expected=${expected_status} got=${actual_status:-none}"
+          printf '%s\n' "${output}"
+          return 1
+        }
+
+        assert_ns_record() {
+          local zone="$1"
+          local ns_answer
+
+          ns_answer="$(dig +short +time=1 +tries=1 @"${DNS_HOST}" -p "${DNS_PORT}" "${zone}" NS)"
+          printf '%s\n' "${ns_answer}" | grep -qx "${EXPECTED_NS}" || {
+            echo "[FAIL] NS ${zone}"
+            printf '%s\n' "${ns_answer}"
             exit 1
           }
-          echo "[OK] ${zone} NS record is correct"
+          echo "[OK] NS ${zone}"
+        }
+
+        for fqdn in \
+          "www.test.example.com" \
+          "www.test.other.com" \
+          "www.test.another.com"; do
+          wait_for_a_record "${fqdn}"
         done
 
-        # Valid alias zone but unknown subdomain should be NXDOMAIN
-        dig +time=1 +tries=1 @127.0.0.1 -p 53053 missing.test.other.com A \
-          | grep -q "status: NXDOMAIN"
+        for zone in \
+          "test.example.com" \
+          "test.other.com" \
+          "test.another.com"; do
+          assert_ns_record "${zone}"
+        done
 
-        # Non-configured zones should remain NXDOMAIN
-        dig +time=1 +tries=1 @127.0.0.1 -p 53053 www.not-configured.example.org A \
-          | grep -q "status: NXDOMAIN"
+        assert_dns_status "www.test.other.com" "AAAA" "NOERROR"
+        assert_dns_status "missing.test.other.com" "A" "NXDOMAIN"
+        assert_dns_status "www.not-configured.example.org" "A" "NXDOMAIN"
 
     - name: test docker-compose configuration
       run: |
