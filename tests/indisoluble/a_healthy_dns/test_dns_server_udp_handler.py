@@ -118,7 +118,7 @@ def test_update_response_with_absolute_name_found(
     mock_zone, mock_reader, mock_rdata, mock_rdataset, dns_response, mock_zone_origins
 ):
     # Setup
-    query_name = dns.name.from_text("test", mock_zone.origin)
+    query_name = dns.name.from_text("test", origin=mock_zone_origins.primary)
     query_type = dns.rdatatype.A
 
     # Mock zone.reader.get_node for relative name
@@ -137,7 +137,7 @@ def test_update_response_with_absolute_name_found(
     # Assertions
     mock_zone.reader.assert_called_once()
     mock_reader.get_node.assert_called_once_with(
-        query_name.relativize(mock_zone.origin)
+        query_name.relativize(mock_zone_origins.primary)
     )
     mock_node.get_rdataset.assert_called_once_with(mock_zone.rdclass, query_type)
     assert dns_response.rcode() == dns.rcode.NOERROR
@@ -149,9 +149,27 @@ def test_update_response_with_absolute_name_found(
     assert list(dns_response.answer[0]) == [mock_rdata]
 
 
-def test_update_response_domain_not_found(mock_zone, mock_reader, dns_response, mock_zone_origins):
+def test_update_response_with_absolute_name_outside_zone_origins(
+    mock_zone, dns_response, mock_zone_origins
+):
     # Setup
-    query_name = dns.name.from_text("nonexistent", mock_zone.origin)
+    query_name = dns.name.from_text("test", origin=dns.name.from_text("other.com"))
+    query_type = dns.rdatatype.A
+
+    # Call function
+    _update_response(dns_response, query_name, query_type, mock_zone, mock_zone_origins)
+
+    # Assertions
+    mock_zone.reader.assert_not_called()
+    assert dns_response.rcode() == dns.rcode.NXDOMAIN
+    assert len(dns_response.answer) == 0
+
+
+def test_update_response_domain_not_found(
+    mock_zone, mock_reader, dns_response, mock_zone_origins
+):
+    # Setup
+    query_name = dns.name.from_text("nonexistent", origin=mock_zone_origins.primary)
     query_type = dns.rdatatype.A
 
     # Mock zone.reader.get_node to return None
@@ -165,15 +183,17 @@ def test_update_response_domain_not_found(mock_zone, mock_reader, dns_response, 
     # Assertions
     mock_zone.reader.assert_called_once()
     mock_reader.get_node.assert_called_once_with(
-        query_name.relativize(mock_zone.origin)
+        query_name.relativize(mock_zone_origins.primary)
     )
     assert dns_response.rcode() == dns.rcode.NXDOMAIN
     assert len(dns_response.answer) == 0
 
 
-def test_update_response_record_type_not_found(mock_zone, mock_reader, dns_response, mock_zone_origins):
+def test_update_response_record_type_not_found(
+    mock_zone, mock_reader, dns_response, mock_zone_origins
+):
     # Setup
-    query_name = dns.name.from_text("test", mock_zone.origin)
+    query_name = dns.name.from_text("test", origin=mock_zone_origins.primary)
     query_type = dns.rdatatype.A
 
     # Mock zone.get_node to return a node but get_rdataset returns None
@@ -190,7 +210,7 @@ def test_update_response_record_type_not_found(mock_zone, mock_reader, dns_respo
     # Assertions
     mock_zone.reader.assert_called_once()
     mock_reader.get_node.assert_called_once_with(
-        query_name.relativize(mock_zone.origin)
+        query_name.relativize(mock_zone_origins.primary)
     )
     mock_node.get_rdataset.assert_called_once_with(mock_zone.rdclass, query_type)
     assert dns_response.rcode() == dns.rcode.NOERROR
