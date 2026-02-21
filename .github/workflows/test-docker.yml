@@ -105,6 +105,10 @@ jobs:
           echo "[OK] ${zone} NS record is correct"
         done
 
+        # Valid alias zone but unknown subdomain should be NXDOMAIN
+        dig +time=1 +tries=1 @127.0.0.1 -p 53053 missing.test.other.com A \
+          | grep -q "status: NXDOMAIN"
+
         # Non-configured zones should remain NXDOMAIN
         dig +time=1 +tries=1 @127.0.0.1 -p 53053 www.not-configured.example.org A \
           | grep -q "status: NXDOMAIN"
