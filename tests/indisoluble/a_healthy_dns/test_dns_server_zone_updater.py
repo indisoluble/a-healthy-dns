@@ -19,6 +19,7 @@ from indisoluble.a_healthy_dns.dns_server_config_factory import (
 from indisoluble.a_healthy_dns.dns_server_zone_updater import DnsServerZoneUpdater
 from indisoluble.a_healthy_dns.records.a_healthy_ip import AHealthyIp
 from indisoluble.a_healthy_dns.records.a_healthy_record import AHealthyRecord
+from indisoluble.a_healthy_dns.records.zone_origins import ZoneOrigins
 
 
 def _get_rrsig_rdatasets(
@@ -33,13 +34,13 @@ def _get_rrsig_rdatasets(
 
 
 @pytest.fixture
-def origin_name():
-    return dns.name.from_text("example.com", origin=dns.name.root)
+def zone_origins():
+    return ZoneOrigins("example.com", [])
 
 
 @pytest.fixture
-def a_record_all_ips_healthy(origin_name):
-    subdomain = dns.name.from_text("www", origin=origin_name)
+def a_record_all_ips_healthy(zone_origins):
+    subdomain = dns.name.from_text("www", origin=zone_origins.primary)
     ip1 = AHealthyIp(ip="192.168.1.1", health_port=8080, is_healthy=True)
     ip2 = AHealthyIp(ip="192.168.1.2", health_port=8080, is_healthy=True)
 
@@ -47,8 +48,8 @@ def a_record_all_ips_healthy(origin_name):
 
 
 @pytest.fixture
-def a_record_ip_unhealthy(origin_name):
-    subdomain = dns.name.from_text("api", origin=origin_name)
+def a_record_ip_unhealthy(zone_origins):
+    subdomain = dns.name.from_text("api", origin=zone_origins.primary)
     ip = AHealthyIp(ip="192.168.1.3", health_port=8080, is_healthy=False)
 
     return AHealthyRecord(subdomain=subdomain, healthy_ips=[ip])
@@ -69,10 +70,10 @@ def ext_private_key():
 
 @pytest.fixture
 def basic_config(
-    origin_name, name_servers, a_record_all_ips_healthy, a_record_ip_unhealthy
+    zone_origins, name_servers, a_record_all_ips_healthy, a_record_ip_unhealthy
 ):
     return DnsServerConfig(
-        origin_name=origin_name,
+        zone_origins=zone_origins,
         name_servers=frozenset(name_servers),
         a_records=frozenset((a_record_all_ips_healthy, a_record_ip_unhealthy)),
         ext_private_key=None,
@@ -81,14 +82,14 @@ def basic_config(
 
 @pytest.fixture
 def config_with_dnssec(
-    origin_name,
+    zone_origins,
     name_servers,
     a_record_all_ips_healthy,
     a_record_ip_unhealthy,
     ext_private_key,
 ):
     return DnsServerConfig(
-        origin_name=origin_name,
+        zone_origins=zone_origins,
         name_servers=frozenset(name_servers),
         a_records=frozenset((a_record_all_ips_healthy, a_record_ip_unhealthy)),
         ext_private_key=ext_private_key,
@@ -97,7 +98,7 @@ def config_with_dnssec(
 
 @pytest.fixture
 def config_with_mock_dnssec(
-    origin_name, name_servers, a_record_all_ips_healthy, a_record_ip_unhealthy
+    zone_origins, name_servers, a_record_all_ips_healthy, a_record_ip_unhealthy
 ):
     mock_private_key = Mock(spec=dns.dnssec.PrivateKey)
     mock_dnskey = Mock(spec=dns.dnssec.DNSKEY)
@@ -106,7 +107,7 @@ def config_with_mock_dnssec(
     )
 
     return DnsServerConfig(
-        origin_name=origin_name,
+        zone_origins=zone_origins,
         name_servers=frozenset(name_servers),
         a_records=frozenset((a_record_all_ips_healthy, a_record_ip_unhealthy)),
         ext_private_key=ext_private_key,
@@ -164,10 +165,10 @@ def test_init_success_without_dnssec(
 
     assert updater is not None
     assert updater.zone is not None
-    assert updater.zone.origin == basic_config.origin_name
+    assert updater.zone.origin == basic_config.zone_origins.primary
     assert len(list(updater.zone.keys())) == 0
     mock_make_ns_record.assert_called_once_with(ANY, basic_config.name_servers)
-    mock_iter_soa_record.assert_called_once_with(ANY, basic_config.origin_name, ANY)
+    mock_iter_soa_record.assert_called_once_with(ANY, basic_config.zone_origins.primary, ANY)
     mock_iter_rrsig_key.assert_not_called()
 
 
@@ -194,14 +195,14 @@ def test_init_success_with_dnssec(
 
     assert updater is not None
     assert updater.zone is not None
-    assert updater.zone.origin == config_with_mock_dnssec.origin_name
+    assert updater.zone.origin == config_with_mock_dnssec.zone_origins.primary
     assert len(list(updater.zone.keys())) == 0
 
     mock_make_ns_record.assert_called_once_with(
         ANY, config_with_mock_dnssec.name_servers
     )
     mock_iter_soa_record.assert_called_once_with(
-        ANY, config_with_mock_dnssec.origin_name, ANY
+        ANY, config_with_mock_dnssec.zone_origins.primary, ANY
     )
     mock_iter_rrsig_key.assert_called_once_with(
         ANY, config_with_mock_dnssec.ext_private_key
@@ -312,10 +313,10 @@ def test_initialize_zone_creates_zone_with_basic_and_rrsig_records(
 
 
 def test_initialize_zone_with_no_healthy_ips(
-    origin_name, name_servers, a_record_ip_unhealthy
+    zone_origins, name_servers, a_record_ip_unhealthy
 ):
     config = DnsServerConfig(
-        origin_name=origin_name,
+        zone_origins=zone_origins,
         name_servers=frozenset(name_servers),
         a_records=frozenset([a_record_ip_unhealthy]),
         ext_private_key=None,

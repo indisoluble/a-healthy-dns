@@ -11,16 +11,17 @@ services:
       DNS_HOSTED_ZONE: "example.com"
       DNS_ZONE_RESOLUTIONS: '{"www":{"ips":["192.168.1.100","192.168.1.101"],"health_port":8080},"api":{"ips":["192.168.1.102"],"health_port":8000}}'
       DNS_NAME_SERVERS: '["ns1.example.com", "ns2.example.com"]'
-      
+
       # Optional parameters (with their default values)
       # DNS_PORT: "53053"
       # DNS_LOG_LEVEL: "info"
+      # DNS_ALIAS_ZONES: '[]'
       # DNS_TEST_MIN_INTERVAL: "30"
       # DNS_TEST_TIMEOUT: "2"
-      # DNS_PRIV_KEY_ALG: "RSASHA256"
-      
-      # Optional DNSSEC private key path (if you have one)
+
+      # Optional DNSSEC parameters (if you have one)
       # DNS_PRIV_KEY_PATH: "/app/keys/private.pem"
+      # DNS_PRIV_KEY_ALG: "RSASHA256"
     
     # volumes:
       # Mount a directory for DNSSEC keys (optional)

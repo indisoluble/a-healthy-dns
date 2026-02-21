@@ -92,7 +92,7 @@ class DnsServerZoneUpdater:
 
         self._ns_rec = make_ns_record(max_interval, config.name_servers)
         self._soa_rec = iter_soa_record(
-            max_interval, config.origin_name, next(iter(config.name_servers))
+            max_interval, config.zone_origins.primary, next(iter(config.name_servers))
         )
         self._rrsig_action = (
             RRSigAction(
@@ -109,7 +109,7 @@ class DnsServerZoneUpdater:
             can_create_connection, timeout=float(connection_timeout)
         )
 
-        self._zone = dns.versioned.Zone(config.origin_name)
+        self._zone = dns.versioned.Zone(config.zone_origins.primary)
         self._is_zone_recreated_at_least_once = False
 
     def _clear_zone(self, txn: dns.transaction.Transaction):

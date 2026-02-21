@@ -13,10 +13,11 @@ import dns.dnssec
 import dns.dnssecalgs
 import dns.name
 
-from typing import Any, Dict, FrozenSet, List, NamedTuple, Optional, Union
+from typing import Any, Dict, FrozenSet, NamedTuple, Optional
 
 from indisoluble.a_healthy_dns.records.a_healthy_record import AHealthyRecord
 from indisoluble.a_healthy_dns.records.a_healthy_ip import AHealthyIp
+from indisoluble.a_healthy_dns.records.zone_origins import ZoneOrigins
 from indisoluble.a_healthy_dns.tools.is_valid_subdomain import is_valid_subdomain
 
 
@@ -30,12 +31,13 @@ class ExtendedPrivateKey(NamedTuple):
 class DnsServerConfig(NamedTuple):
     """DNS server configuration containing zone data and security settings."""
 
-    origin_name: dns.name.Name
+    zone_origins: ZoneOrigins
     name_servers: FrozenSet[str]
     a_records: FrozenSet[AHealthyRecord]
     ext_private_key: Optional[ExtendedPrivateKey]
 
 
+ARG_ALIAS_ZONES = "alias_zones"
 ARG_DNSSEC_ALGORITHM = "priv_key_alg"
 ARG_DNSSEC_PRIVATE_KEY_PATH = "priv_key_path"
 ARG_HOSTED_ZONE = "zone"
@@ -45,20 +47,30 @@ ARG_SUBDOMAIN_IP_LIST = "ips"
 ARG_ZONE_RESOLUTIONS = "resolutions"
 
 
-def _make_origin_name(args: Dict[str, Any]) -> Optional[dns.name.Name]:
+def _make_zone_origins(args: Dict[str, Any]) -> Optional[ZoneOrigins]:
     hosted_zone = args[ARG_HOSTED_ZONE]
-    success, error = is_valid_subdomain(hosted_zone)
-    if not success:
-        logging.error("Hosted zone '%s' is not a valid FQDN: %s", hosted_zone, error)
+
+    try:
+        alias_zones = json.loads(args[ARG_ALIAS_ZONES])
+    except json.JSONDecodeError as ex:
+        logging.error("Failed to parse alias zones: %s", ex)
         return None
 
-    return dns.name.from_text(hosted_zone, origin=dns.name.root)
+    if not isinstance(alias_zones, list):
+        logging.error("Alias zones must be a list, got %s", type(alias_zones).__name__)
+        return None
+
+    try:
+        zone_origins = ZoneOrigins(hosted_zone, alias_zones)
+    except ValueError as ex:
+        logging.error("Failed to create zone origins: %s", ex)
+        return None
+
+    return zone_origins
 
 
 def _make_healthy_a_record(
-    origin_name: dns.name.Name,
-    subdomain: str,
-    sub_config: Dict[str, Union[List[str], int]],
+    origin_name: dns.name.Name, subdomain: Any, sub_config: Any
 ) -> Optional[AHealthyRecord]:
     success, error = is_valid_subdomain(subdomain)
     if not success:
@@ -77,7 +89,15 @@ def _make_healthy_a_record(
         )
         return None
 
-    ip_list = sub_config[ARG_SUBDOMAIN_IP_LIST]
+    ip_list = sub_config.get(ARG_SUBDOMAIN_IP_LIST)
+    if ip_list is None:
+        logging.error(
+            "Zone resolution for '%s' must include '%s' key",
+            subdomain,
+            ARG_SUBDOMAIN_IP_LIST,
+        )
+        return None
+
     if not isinstance(ip_list, list):
         logging.error(
             "IP list for '%s' must be a list, got %s", subdomain, type(ip_list).__name__
@@ -88,19 +108,19 @@ def _make_healthy_a_record(
         logging.error("IP list for '%s' cannot be empty", subdomain)
         return None
 
-    health_port = sub_config[ARG_SUBDOMAIN_HEALTH_PORT]
-    if not isinstance(health_port, int):
+    health_port = sub_config.get(ARG_SUBDOMAIN_HEALTH_PORT)
+    if health_port is None:
         logging.error(
-            "Health port for '%s' must be an integer, got %s",
+            "Zone resolution for '%s' must include '%s' key",
             subdomain,
-            type(health_port).__name__,
+            ARG_SUBDOMAIN_HEALTH_PORT,
         )
         return None
 
     try:
         healthy_ips = [AHealthyIp(ip, health_port, False) for ip in ip_list]
     except ValueError as ex:
-        logging.error("Invalid IP address in '%s': %s", subdomain, ex)
+        logging.error("Invalid IP/port address in '%s': %s", subdomain, ex)
         return None
 
     return AHealthyRecord(subdomain_name, healthy_ips)
@@ -129,7 +149,7 @@ def _make_a_records(
     a_records = []
     for subdomain, sub_config in raw_resolutions.items():
         a_record = _make_healthy_a_record(origin_name, subdomain, sub_config)
-        if not a_record:
+        if a_record is None:
             logging.error("Failed to create A record for '%s'", subdomain)
             return None
 
@@ -180,7 +200,7 @@ def _load_dnssec_private_key(key_path: str) -> Optional[bytes]:
 
 def _make_private_key(args: Dict[str, Any]) -> Optional[ExtendedPrivateKey]:
     priv_key_pem = _load_dnssec_private_key(args[ARG_DNSSEC_PRIVATE_KEY_PATH])
-    if not priv_key_pem:
+    if priv_key_pem is None:
         return None
 
     try:
@@ -197,26 +217,26 @@ def _make_private_key(args: Dict[str, Any]) -> Optional[ExtendedPrivateKey]:
 
 def make_config(args: Dict[str, Any]) -> Optional[DnsServerConfig]:
     """Create complete DNS server configuration from command-line arguments."""
-    origin_name = _make_origin_name(args)
-    if not origin_name:
+    zone_origins = _make_zone_origins(args)
+    if zone_origins is None:
         return None
 
-    a_records = _make_a_records(origin_name, args)
-    if not a_records:
+    a_records = _make_a_records(zone_origins.primary, args)
+    if a_records is None:
         return None
 
     name_servers = _make_name_servers(args)
-    if not name_servers:
+    if name_servers is None:
         return None
 
     ext_private_key = None
     if args[ARG_DNSSEC_PRIVATE_KEY_PATH]:
         ext_private_key = _make_private_key(args)
-        if not ext_private_key:
+        if ext_private_key is None:
             return None
 
     return DnsServerConfig(
-        origin_name=origin_name,
+        zone_origins=zone_origins,
         name_servers=name_servers,
         a_records=a_records,
         ext_private_key=ext_private_key,

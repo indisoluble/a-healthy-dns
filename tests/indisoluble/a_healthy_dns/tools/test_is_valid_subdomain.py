@@ -31,6 +31,11 @@ def test_valid_subdomains(valid_subdomain):
 @pytest.mark.parametrize(
     "invalid_subdomain,expected_message",
     [
+        (None, "It must be a string"),
+        (123, "It must be a string"),
+        (1.5, "It must be a string"),
+        ([], "It must be a string"),
+        ({}, "It must be a string"),
         ("", "It cannot be empty"),
         (
             "domain@example",

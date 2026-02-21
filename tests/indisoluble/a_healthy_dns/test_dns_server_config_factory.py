@@ -13,12 +13,14 @@ from unittest.mock import patch
 from dns.dnssecalgs.rsa import PrivateRSASHA256
 
 from indisoluble.a_healthy_dns.records.a_healthy_ip import AHealthyIp
+from indisoluble.a_healthy_dns.records.zone_origins import ZoneOrigins
 
 
 @pytest.fixture
 def args():
     return {
         dscf.ARG_HOSTED_ZONE: "dev.example.com",
+        dscf.ARG_ALIAS_ZONES: json.dumps(["dev.alias-one.com", "dev.alias-two.com"]),
         dscf.ARG_NAME_SERVERS: json.dumps(["ns1.example.com", "ns2.example.com"]),
         dscf.ARG_ZONE_RESOLUTIONS: json.dumps(
             {
@@ -59,9 +61,9 @@ def test_make_config_success(args):
     # Check private key
     assert config.ext_private_key is None
 
-    # Check origin name
-    assert config.origin_name == dns.name.from_text(
-        "dev.example.com", origin=dns.name.root
+    # Check zone origins
+    assert config.zone_origins == ZoneOrigins(
+        "dev.example.com", ["dev.alias-one.com", "dev.alias-two.com"]
     )
 
     # Check name servers
@@ -75,28 +77,28 @@ def test_make_config_success(args):
         healthy_ips_by_subdomain[record.subdomain] = record.healthy_ips
 
     # Check www subdomain
-    www_name = dns.name.from_text("www", origin=config.origin_name)
+    www_name = dns.name.from_text("www", origin=config.zone_origins.primary)
     assert www_name in healthy_ips_by_subdomain
     assert healthy_ips_by_subdomain[www_name] == frozenset(
         [AHealthyIp("192.168.1.1", 8080, False), AHealthyIp("192.168.1.2", 8080, False)]
     )
 
     # Check api subdomain
-    api_name = dns.name.from_text("api", origin=config.origin_name)
+    api_name = dns.name.from_text("api", origin=config.zone_origins.primary)
     assert api_name in healthy_ips_by_subdomain
     assert healthy_ips_by_subdomain[api_name] == frozenset(
         [AHealthyIp("192.168.2.1", 8081, False)]
     )
 
     # Check repeated subdomain
-    repeated_name = dns.name.from_text("repeated", origin=config.origin_name)
+    repeated_name = dns.name.from_text("repeated", origin=config.zone_origins.primary)
     assert repeated_name in healthy_ips_by_subdomain
     assert healthy_ips_by_subdomain[repeated_name] == frozenset(
         [AHealthyIp("10.16.2.1", 8082, False)]
     )
 
     # Check zeros subdomain
-    zeros_name = dns.name.from_text("zeros", origin=config.origin_name)
+    zeros_name = dns.name.from_text("zeros", origin=config.zone_origins.primary)
     assert zeros_name in healthy_ips_by_subdomain
     assert healthy_ips_by_subdomain[zeros_name] == frozenset(
         [AHealthyIp("102.18.1.1", 8083, False), AHealthyIp("192.168.0.20", 8083, False)]
@@ -120,7 +122,7 @@ def test_make_zone_success_with_dnssec(mock_load_key, args_with_dnssec):
     )
 
     # Check others
-    assert config.origin_name is not None
+    assert config.zone_origins is not None
     assert config.name_servers is not None
     assert config.a_records is not None
 
@@ -132,11 +134,27 @@ def test_make_zone_invalid_hosted_zone(invalid_zone, args):
 
 
 @pytest.mark.parametrize(
+    "invalid_aliases",
+    [
+        "invalid json",
+        json.dumps({"alias": "dev.alias-one.com"}),
+        json.dumps([""]),
+        json.dumps(["dev.alias-one.com", "dev.alias-@.com"]),
+    ],
+)
+def test_make_zone_invalid_alias_zones(invalid_aliases, args):
+    args[dscf.ARG_ALIAS_ZONES] = invalid_aliases
+    assert dscf.make_config(args) is None
+
+
+@pytest.mark.parametrize(
     "invalid_ns",
     [
         "invalid json",
-        json.dumps([]),
         json.dumps({"ns": "ns1.example.com"}),
+        json.dumps([]),
+        json.dumps([123]),
+        json.dumps([""]),
         json.dumps(["ns1.example@.com"]),
     ],
 )
@@ -149,8 +167,16 @@ def test_make_zone_invalid_json_name_servers(invalid_ns, args):
     "invalid_resolution",
     [
         "invalid json",
-        json.dumps({}),
         json.dumps(["192.168.1.1", 8080]),
+        json.dumps({}),
+        json.dumps(
+            {
+                "": {
+                    dscf.ARG_SUBDOMAIN_IP_LIST: ["192.168.1.1"],
+                    dscf.ARG_SUBDOMAIN_HEALTH_PORT: 8080,
+                }
+            }
+        ),
         json.dumps(
             {
                 "www@": {
@@ -160,6 +186,22 @@ def test_make_zone_invalid_json_name_servers(invalid_ns, args):
             }
         ),
         json.dumps({"www": ["192.168.1.1", 8080]}),
+        json.dumps({"www": {}}),
+        json.dumps(
+            {
+                "www": {
+                    dscf.ARG_SUBDOMAIN_HEALTH_PORT: 8080,
+                }
+            }
+        ),
+        json.dumps(
+            {
+                "www": {
+                    dscf.ARG_SUBDOMAIN_IP_LIST: None,
+                    dscf.ARG_SUBDOMAIN_HEALTH_PORT: 8080,
+                }
+            }
+        ),
         json.dumps(
             {
                 "www": {
@@ -172,6 +214,29 @@ def test_make_zone_invalid_json_name_servers(invalid_ns, args):
             {
                 "www": {
                     dscf.ARG_SUBDOMAIN_IP_LIST: [],
+                    dscf.ARG_SUBDOMAIN_HEALTH_PORT: 8080,
+                }
+            }
+        ),
+        json.dumps(
+            {
+                "www": {
+                    dscf.ARG_SUBDOMAIN_IP_LIST: ["192.168.1.1"],
+                }
+            }
+        ),
+        json.dumps(
+            {
+                "www": {
+                    dscf.ARG_SUBDOMAIN_IP_LIST: ["192.168.1.1"],
+                    dscf.ARG_SUBDOMAIN_HEALTH_PORT: None,
+                }
+            }
+        ),
+        json.dumps(
+            {
+                "www": {
+                    dscf.ARG_SUBDOMAIN_IP_LIST: [123],
                     dscf.ARG_SUBDOMAIN_HEALTH_PORT: 8080,
                 }
             }

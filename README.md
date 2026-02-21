@@ -12,6 +12,7 @@ This ensures that DNS queries only return healthy endpoints, providing automatic
 
 - **Health Checking**: Continuously monitors IP addresses via TCP connectivity tests
 - **Dynamic Updates**: Automatically updates DNS zones based on health check results
+- **Multi-Domain Support**: Serve multiple domains with the same records without duplicating health checks
 - **Configurable TTL**: TTL calculation based on health check intervals
 - **Threaded Operations**: Background health checking
 - **Multiple Records**: Support for multiple IP addresses per subdomain with individual health tracking
@@ -120,6 +121,7 @@ a-healthy-dns \
 - `--test-min-interval`: Minimum interval between connectivity tests in seconds (default: 30)
 - `--test-timeout`: Maximum time to wait for health check response in seconds (default: 2)
 - `--log-level`: Logging level (debug, info, warning, error, critical) (default: info)
+- `--alias-zones`: Additional domain names that resolve to the same records as the hosted zone (JSON array, default: [])
 
 #### DNSSEC Parameters
 
@@ -160,6 +162,23 @@ The `--zone-resolutions` parameter accepts a JSON object with the following stru
 - If all IP addresses for a subdomain are unhealthy, the subdomain returns no records (NXDOMAIN)
 - Health checks run continuously in the background at the configured interval
 - TTL values are automatically calculated based on health check intervals
+
+### Multi-Domain Support
+
+The DNS server supports serving multiple domains that resolve to the same IP addresses without duplicating health checks. This is achieved through the `--alias-zones` parameter:
+
+```bash
+a-healthy-dns \
+  --hosted-zone primary.com \
+  --alias-zones '["alias1.com", "alias2.com"]' \
+  --zone-resolutions '{"www": {"ips": ["192.168.1.100"], "health_port": 8080}}' \
+  --ns '["ns1.primary.com"]'
+```
+
+With this configuration:
+- `www.primary.com` → resolves to `192.168.1.100`
+- `www.alias1.com` → resolves to `192.168.1.100` (same IP)
+- `www.alias2.com` → resolves to `192.168.1.100` (same IP)
 
 ### Example Deployment
 
@@ -232,6 +251,7 @@ docker-compose up -d
 - `DNS_LOG_LEVEL`: Logging level (default: info)
 - `DNS_TEST_MIN_INTERVAL`: Minimum interval between connectivity tests in seconds (default: 30)
 - `DNS_TEST_TIMEOUT`: Timeout for each connection test in seconds (default: 2)
+- `DNS_ALIAS_ZONES`: Additional domain names that resolve to the same records (JSON array, default: [])
 - `DNS_PRIV_KEY_PATH`: Path to DNSSEC private key PEM file
 - `DNS_PRIV_KEY_ALG`: DNSSEC private key algorithm (default: RSASHA256)
 

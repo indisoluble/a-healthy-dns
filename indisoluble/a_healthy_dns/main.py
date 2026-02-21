@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import argparse
+import json
 import logging
 import signal
 import socketserver
@@ -13,6 +14,7 @@ from functools import partial
 from typing import Any, Dict
 
 from indisoluble.a_healthy_dns.dns_server_config_factory import (
+    ARG_ALIAS_ZONES,
     ARG_DNSSEC_ALGORITHM,
     ARG_DNSSEC_PRIVATE_KEY_PATH,
     ARG_HOSTED_ZONE,
@@ -37,6 +39,7 @@ _GRP_DNSSEC_PARAMS = "dns security extensions (DNSSEC) arguments"
 _GRP_GENERAL = "general arguments"
 _GRP_NS_RECORDS = "name server (NS) arguments"
 _GRP_ZONE_RESOLUTIONS = "zone resolution arguments"
+_NAME_ALIAS_ZONES = "alias-zones"
 _NAME_HOSTED_ZONE = "hosted-zone"
 _NAME_LOG_LEVEL = "log-level"
 _NAME_NAME_SERVERS = "ns"
@@ -46,6 +49,7 @@ _NAME_PRIV_KEY_PATH = "priv-key-path"
 _NAME_TEST_MIN_INTERVAL = "test-min-interval"
 _NAME_TEST_TIMEOUT = "test-timeout"
 _NAME_ZONE_RESOLUTIONS = "zone-resolutions"
+_VAL_ALIAS_ZONES = json.dumps([])
 _VAL_CONNECTION_TIMEOUT = 2
 _VAL_DNSSEC_ALGORITHM = dns.dnssec.algorithm_to_text(
     dns.dnssectypes.Algorithm.RSASHA256
@@ -68,10 +72,12 @@ Argument details
 {_GRP_ZONE_RESOLUTIONS}
 {len(_GRP_ZONE_RESOLUTIONS) * '-'}
 --{_NAME_HOSTED_ZONE}: The domain name for which this DNS server is authoritative.
+--{_NAME_ALIAS_ZONES}: Additional domain names that resolve to the same records.
 --{_NAME_ZONE_RESOLUTIONS}: JSON configuration defining subdomains, their IP addresses, and health check ports.
 
 Examples:
     --{_NAME_HOSTED_ZONE} example.com
+    --{_NAME_ALIAS_ZONES} '["alias1.com", "alias2.com"]'
     --{_NAME_ZONE_RESOLUTIONS} '{{"www":{{"ips":["192.168.1.100","192.168.1.101"],"health_port":8080}},"api":{{"ips":["192.168.1.102"],"health_port":8000}}}}'
 
 {_GRP_CONNECTIVITY_TESTS}
@@ -129,6 +135,16 @@ Example usage
         required=True,
         dest=ARG_HOSTED_ZONE,
         help="Hosted zone name",
+    )
+    res_group.add_argument(
+        f"--{_NAME_ALIAS_ZONES}",
+        type=str,
+        default=_VAL_ALIAS_ZONES,
+        dest=ARG_ALIAS_ZONES,
+        help=(
+            "Alias zones that resolve to the same records as the hosted zone "
+            f'(ex. ["alias1.com", "alias2.com"], default: {_VAL_ALIAS_ZONES})'
+        ),
     )
     res_group.add_argument(
         f"--{_NAME_ZONE_RESOLUTIONS}",
@@ -222,6 +238,7 @@ def _main(args: Dict[str, Any]):
 
         logging.info("DNS server listening on port %d...", args[_ARG_PORT])
         server.zone = zone_updater.zone
+        server.zone_origins = config.zone_origins
         server.serve_forever()
 
     # Stop zone updater

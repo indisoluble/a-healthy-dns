@@ -33,6 +33,7 @@ def default_args() -> Dict[str, Any]:
 @pytest.fixture
 def mock_config():
     mock = MagicMock()
+    mock.zone_origins = MagicMock()
     return mock
 
 
@@ -70,6 +71,8 @@ def test_main_success(
 
     mock_udp_server.assert_called_once_with(("", default_args[_ARG_PORT]), ANY)
 
+    assert mock_server_instance.zone == mock_zone_updater_instance.zone
+    assert mock_server_instance.zone_origins == mock_config.zone_origins
     mock_server_instance.serve_forever.assert_called_once()
 
     mock_zone_updater_instance.stop.assert_called_once()
@@ -80,12 +83,7 @@ def test_main_success(
 @patch("indisoluble.a_healthy_dns.main.DnsServerZoneUpdaterThreated")
 @patch("indisoluble.a_healthy_dns.main.socketserver.UDPServer")
 def test_main_with_failed_config(
-    mock_udp_server,
-    mock_zone_updater,
-    mock_make_config,
-    mock_logging,
-    default_args,
-    mock_config,
+    mock_udp_server, mock_zone_updater, mock_make_config, mock_logging, default_args
 ):
     # Setup mocks
     mock_make_config.return_value = None

@@ -25,6 +25,11 @@ def test_valid_ip_addresses(valid_ip):
 @pytest.mark.parametrize(
     "invalid_ip,expected_message",
     [
+        (None, "It must be a string"),
+        (123, "It must be a string"),
+        (1.5, "It must be a string"),
+        ([], "It must be a string"),
+        ({}, "It must be a string"),
         ("256.0.0.1", "Each octet must be a number between 0 and 255"),
         ("192.168.1", "IP address must have 4 octets"),
         ("192.168.1.256", "Each octet must be a number between 0 and 255"),

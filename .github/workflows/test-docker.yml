@@ -29,34 +29,122 @@ jobs:
         # Verify the image was created
         docker images a-healthy-dns:test
 
-    - name: test docker image with minimal configuration
+    - name: test docker image with alias zone configuration
       run: |
-        # Start the DNS server in the background with minimal valid config
+        # Create an isolated network for deterministic container-to-container checks
+        docker network create --subnet 172.28.0.0/24 a-healthy-dns-test-net
+
+        # Start backend service that health checks can reach
+        docker run -d \
+          --name a-healthy-dns-backend \
+          --network a-healthy-dns-test-net \
+          --ip 172.28.0.10 \
+          nginx:alpine
+
+        # Start DNS server with hosted zone plus alias zones
         docker run -d \
           --name a-healthy-dns-test \
+          --network a-healthy-dns-test-net \
           -p 53053:53053/udp \
           -e DNS_HOSTED_ZONE="test.example.com" \
-          -e DNS_ZONE_RESOLUTIONS='{"www":{"ips":["127.0.0.1"],"health_port":80}}' \
+          -e DNS_ALIAS_ZONES='["test.other.com","test.another.com"]' \
+          -e DNS_ZONE_RESOLUTIONS='{"www":{"ips":["172.28.0.10"],"health_port":80}}' \
           -e DNS_NAME_SERVERS='["ns1.test.example.com"]' \
+          -e DNS_PORT="53053" \
+          -e DNS_TEST_MIN_INTERVAL="1" \
+          -e DNS_TEST_TIMEOUT="1" \
           -e DNS_LOG_LEVEL="debug" \
           a-healthy-dns:test
 
     - name: wait for dns server to start
       run: |
         # Wait a bit for the server to fully start
-        sleep 10
+        sleep 5
         
-        # Check if container is still running
+        # Check if containers are still running
+        docker ps | grep a-healthy-dns-backend
         docker ps | grep a-healthy-dns-test
 
     - name: test dns server functionality
       run: |
+        set -euo pipefail
+
         # Install dig for testing
         sudo apt-get update && sudo apt-get install -y dnsutils
-        
-        # Test DNS query (should get a response, even if NXDOMAIN)
-        # Using timeout to avoid hanging
-        timeout 10s dig @127.0.0.1 -p 53053 www.test.example.com || echo "DNS query completed (expected behavior for test)"
+
+        DNS_HOST="127.0.0.1"
+        DNS_PORT="53053"
+        BACKEND_IP="172.28.0.10"
+        EXPECTED_NS="ns1.test.example.com."
+
+        wait_for_a_record() {
+          local fqdn="$1"
+          local answer
+
+          for _ in $(seq 1 20); do
+            answer="$(dig +short +time=1 +tries=1 @"${DNS_HOST}" -p "${DNS_PORT}" "${fqdn}" A)"
+            printf '%s\n' "${answer}" | grep -qx "${BACKEND_IP}" && {
+              echo "[OK] A ${fqdn}"
+              return 0
+            }
+            sleep 1
+          done
+
+          echo "[FAIL] A ${fqdn}"
+          dig +nocmd +noall +comments +answer @"${DNS_HOST}" -p "${DNS_PORT}" "${fqdn}" A || true
+          return 1
+        }
+
+        assert_dns_status() {
+          local fqdn="$1"
+          local rtype="$2"
+          local expected_status="$3"
+          local output
+          local actual_status
+
+          output="$(dig +time=1 +tries=1 +noall +comments @"${DNS_HOST}" -p "${DNS_PORT}" "${fqdn}" "${rtype}")"
+          actual_status="$(printf '%s\n' "${output}" | sed -n 's/.*status: \([A-Z]*\).*/\1/p' | head -n 1)"
+
+          if [ "${actual_status}" = "${expected_status}" ]; then
+            echo "[OK] ${rtype} ${fqdn} ${actual_status}"
+            return 0
+          fi
+
+          echo "[FAIL] ${rtype} ${fqdn} expected=${expected_status} got=${actual_status:-none}"
+          printf '%s\n' "${output}"
+          return 1
+        }
+
+        assert_ns_record() {
+          local zone="$1"
+          local ns_answer
+
+          ns_answer="$(dig +short +time=1 +tries=1 @"${DNS_HOST}" -p "${DNS_PORT}" "${zone}" NS)"
+          printf '%s\n' "${ns_answer}" | grep -qx "${EXPECTED_NS}" || {
+            echo "[FAIL] NS ${zone}"
+            printf '%s\n' "${ns_answer}"
+            exit 1
+          }
+          echo "[OK] NS ${zone}"
+        }
+
+        for fqdn in \
+          "www.test.example.com" \
+          "www.test.other.com" \
+          "www.test.another.com"; do
+          wait_for_a_record "${fqdn}"
+        done
+
+        for zone in \
+          "test.example.com" \
+          "test.other.com" \
+          "test.another.com"; do
+          assert_ns_record "${zone}"
+        done
+
+        assert_dns_status "www.test.other.com" "AAAA" "NOERROR"
+        assert_dns_status "missing.test.other.com" "A" "NXDOMAIN"
+        assert_dns_status "www.not-configured.example.org" "A" "NXDOMAIN"
 
     - name: test docker-compose configuration
       run: |
@@ -66,7 +154,7 @@ jobs:
           sudo apt-get install -y docker-compose
           
           # Validate the compose file syntax
-          docker-compose -f docker-compose.example.yml config > /dev/null && echo "✓ docker-compose.example.yml is valid"
+          docker-compose -f docker-compose.example.yml config > /dev/null && echo "[OK] docker-compose.example.yml is valid"
         else
           echo "docker-compose.example.yml not found"
         fi
@@ -74,9 +162,14 @@ jobs:
     - name: cleanup
       if: always()
       run: |
-        # Stop and remove test container
+        # Stop and remove test containers
+        docker stop a-healthy-dns-backend || true
         docker stop a-healthy-dns-test || true
+        docker rm a-healthy-dns-backend || true
         docker rm a-healthy-dns-test || true
+
+        # Remove test network
+        docker network rm a-healthy-dns-test-net || true
         
         # Remove test image
         docker rmi a-healthy-dns:test || true
