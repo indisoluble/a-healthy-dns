@@ -31,10 +31,10 @@ Non-negotiable rules for any AI coding agent (IDE agents, PR agents, chat agents
 ### 1.1 Required reading (when present)
 Before proposing or applying changes, consult and use `docs/` as primary inputs:
 
-- `docs/toc.md` — documentation index / navigation map.
-- `docs/projectbrief.md` — goals, non-goals, constraints, requirements.
-- `docs/systemPatterns.md` — architecture patterns and conventions.
-- `docs/projectRules.md` — language/tool specifics and QA commands.
+- `docs/table-of-content.md` — documentation index / navigation map.
+- `docs/project-brief.md` — goals, non-goals, constraints, requirements.
+- `docs/system-patterns.md` — architecture patterns and conventions.
+- `docs/project-rules.md` — language/tool specifics and QA commands.
 
 ### 1.2 Response requirement
 Every response that proposes or applies changes must include:
@@ -103,7 +103,7 @@ After step 4, follow Path A or Path B.
 6. **QA**: validate the **actual working tree** after step 5.
 7. **Apply docs changes + Docs impact** (when relevant):
    - Update/add docs under `docs/`.
-   - If adding a new doc, also update `docs/toc.md`.
+   - If adding a new doc, also update `docs/table-of-content.md`.
    - State **Docs impact** (or explicitly: **Docs impact: none**).
 8. **Applied changes summary**:
    - What actually changed.
@@ -119,7 +119,7 @@ After step 4, follow Path A or Path B.
    - Include exact file paths and enough context to apply safely.
 6. **QA**: list commands/checks to run after manual apply.
 7. **Provide docs patch/snippets + Docs impact** (when relevant):
-   - Include `docs/toc.md` updates if adding a new doc.
+   - Include `docs/table-of-content.md` updates if adding a new doc.
    - Or explicitly: **Docs impact: none**.
 8. **Manual-apply summary**:
    - Apply order and any risky steps/follow-ups.
@@ -218,7 +218,7 @@ Format:
 ## 7) Verification (QA) — always required
 
 For any non-trivial change, include a **QA** section:
-- Prefer the repo’s documented workflow in `docs/projectRules.md`.
+- Prefer the repo’s documented workflow in `docs/project-rules.md`.
 - In Path A, QA validates the applied working tree.
 - In Path B, QA lists what to run after manual apply.
 - If you cannot run commands, say so; still list what should be run.
@@ -231,7 +231,7 @@ For any non-trivial change, include a **QA** section:
 - Update docs when you change APIs, behavior, configuration, architecture patterns, or development workflow.
 - If new content does **not fit** any document in the minimum reading set:
   - Add a new focused doc under `docs/`.
-  - Update `docs/toc.md`.
+  - Update `docs/table-of-content.md`.
   - Justify why it does not belong in the existing docs.
 
 This does not bypass **No new files without reuse analysis**; it satisfies it when reuse analysis shows no existing doc is an appropriate home.
