@@ -34,19 +34,19 @@ Before proposing or applying changes, consult project documentation as primary i
 
 #### Base required reading
 - `README.md` — project entrypoint (what it is, why it exists, fastest first successful result / usage path).
-- `docs/toc.md` — documentation index and minimum/core reading registry.
-- `docs/projectbrief.md` — goals, non-goals, constraints, requirements.
-- `docs/systemPatterns.md` — architecture patterns and conventions.
-- `docs/projectRules.md` — language/tool specifics and QA commands.
+- `docs/table-of-contents.md` — documentation index and minimum/core reading registry.
+- `docs/project-brief.md` — goals, non-goals, constraints, requirements.
+- `docs/system-patterns.md` — architecture patterns and conventions.
+- `docs/project-rules.md` — language/tool specifics and QA commands.
 
 #### Extended required reading (dynamic)
 Read all items that apply to the task from:
-- the **Minimum Reading Set / Core Docs / Primary Docs** section in `docs/toc.md` (project naming may vary), and
+- the **Minimum Reading Set / Core Docs / Primary Docs** section in `docs/table-of-contents.md` (project naming may vary), and
 - documents explicitly linked from `README.md` as the primary path for setup, usage, configuration, architecture, troubleshooting, or operations.
 
-If `docs/toc.md` exists but has no minimum/core reading section:
+If `docs/table-of-contents.md` exists but has no minimum/core reading section:
 1. read the Base required reading, and
-2. use best effort to identify the most relevant docs linked from `README.md` and `docs/toc.md`.
+2. use best effort to identify the most relevant docs linked from `README.md` and `docs/table-of-contents.md`.
 
 ### 1.2 Response requirement
 
@@ -115,7 +115,7 @@ After step 4, follow Path A or Path B.
 6. **QA**: validate the **actual working tree** after step 5.
 7. **Docs changes + Docs impact**:
    - Update `README.md` and/or `docs/` when relevant.
-   - If adding a new doc, also update `docs/toc.md`.
+   - If adding a new doc, also update `docs/table-of-contents.md`.
    - State **Docs impact** (or explicitly: **Docs impact: none**).
 8. **Applied changes summary**:
    - What actually changed.
@@ -134,7 +134,7 @@ After step 4, follow Path A or Path B.
 6. **QA**: list commands/checks to run after manual apply.
 7. **Provide docs patch/snippets + Docs impact**:
    - Include `README.md` and `docs/` patches/snippets when relevant.
-   - Include `docs/toc.md` updates if adding a new doc.
+   - Include `docs/table-of-contents.md` updates if adding a new doc.
    - Or explicitly: **Docs impact: none**.
 8. **Manual-apply summary**:
    - Apply order.
@@ -234,7 +234,7 @@ Format:
 ## 7) Verification (QA) — always required
 
 For any non-trivial change, include a **QA** section:
-- Prefer the repo’s documented workflow in `docs/projectRules.md`.
+- Prefer the repo’s documented workflow in `docs/project-rules.md`.
 - In Path A, QA validates the applied working tree.
 - In Path B, QA lists what to run after manual apply.
 - If you cannot run commands, say so; still list what should be run.
@@ -274,9 +274,9 @@ When adopting or aligning a project to this AGENTS.md, documentation restructuri
 
 If new content does **not fit** any existing documentation file:
 - Add a new focused doc under `docs/`.
-- Update `docs/toc.md`.
+- Update `docs/table-of-contents.md`.
 - Justify why the content does not belong in an existing doc.
-- If the new doc is expected to influence future implementation decisions, add it to the **Minimum Reading Set / Core Docs** section in `docs/toc.md`.
+- If the new doc is expected to influence future implementation decisions, add it to the **Minimum Reading Set / Core Docs** section in `docs/table-of-contents.md`.
 
 This does not bypass **No new files without reuse analysis**; it satisfies it when reuse analysis shows no existing doc is an appropriate home.
 
@@ -294,10 +294,10 @@ When asked to align a project with this AGENTS.md, agents should establish or re
 If missing or not fit for purpose, create or refactor:
 
 - `README.md` — quick-start entrypoint
-- `docs/toc.md` — documentation index + minimum/core reading registry
-- `docs/projectbrief.md` — goals, non-goals, constraints, requirements
-- `docs/systemPatterns.md` — architecture patterns and conventions
-- `docs/projectRules.md` — language/tool specifics and QA commands
+- `docs/table-of-contents.md` — documentation index + minimum/core reading registry
+- `docs/project-brief.md` — goals, non-goals, constraints, requirements
+- `docs/system-patterns.md` — architecture patterns and conventions
+- `docs/project-rules.md` — language/tool specifics and QA commands
 
 #### Additional docs (create only when justified)
 Create additional focused docs under `docs/` when needed by project scope (e.g., setup, configuration, usage/examples, integration/reference, troubleshooting, operations, architecture overview).
@@ -307,11 +307,11 @@ If documentation already exists:
 - reuse and refactor existing docs before creating new ones,
 - split oversized documents when needed,
 - preserve useful content and links,
-- keep the final structure coherent and discoverable via `docs/toc.md`.
+- keep the final structure coherent and discoverable via `docs/table-of-contents.md`.
 
 #### Minimum reading promotion rule
 If a new or refactored doc is expected to influence future implementation decisions:
-- add it to the **Minimum Reading Set / Core Docs** section in `docs/toc.md`.
+- add it to the **Minimum Reading Set / Core Docs** section in `docs/table-of-contents.md`.
 
 ---
 
