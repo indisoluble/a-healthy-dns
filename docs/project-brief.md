@@ -1,0 +1,58 @@
+# Project Brief
+
+## What it is
+
+**A Healthy DNS** is an authoritative DNS server that performs continuous TCP health checks on configured IP addresses and automatically updates its DNS responses to reflect current backend health. Only healthy endpoints are advertised; unhealthy ones are silently withheld until they recover.
+
+## Why it exists
+
+Standard authoritative DNS servers return static records. When a backend becomes unavailable the DNS layer keeps advertising it, causing client-visible failures until a human intervenes. A Healthy DNS closes this gap by making the DNS layer itself health-aware, providing automatic failover without external orchestration tools.
+
+## Goals
+
+1. **Automatic failover** — remove unhealthy IP addresses from DNS responses without manual intervention.
+2. **Authoritative DNS** — act as a fully authoritative UDP DNS server for one or more configured zones.
+3. **Multi-domain support** — serve multiple domain aliases from a single set of health-checked records, without duplicating health check logic.
+4. **Optional DNSSEC** — sign zones on-the-fly when a private key is provided, producing RRSIG records for A, NS, and SOA records.
+5. **Configurable health checking** — allow operators to tune check interval, TCP timeout, and health port per subdomain.
+6. **Operational simplicity** — deployable as a single Python process or Docker container with environment-variable configuration.
+
+## Non-goals
+
+- **Full-featured recursive resolver** — the server does not perform recursive lookups or act as a caching resolver.
+- **Non-TCP health checks** — health is determined exclusively by TCP connectivity; ICMP ping, HTTP responses, and other protocols are out of scope.
+- **Dynamic configuration reload** — adding or removing subdomains/zones requires a restart; live config reload is not supported.
+- **Multi-server zone replication** — no AXFR/IXFR zone transfer support; each instance is self-contained.
+- **IPv6 (AAAA records)** — current implementation covers A records (IPv4) only.
+- **Geographic / weighted routing** — all healthy addresses for a subdomain are returned equally; no traffic-shaping policy engine.
+
+## Constraints
+
+| Constraint | Detail |
+|---|---|
+| Python version | ≥ 3.10 |
+| Transport | UDP only (standard DNS port or configurable alternative) |
+| DNS library | `dnspython ≥ 2.8, < 3.0` |
+| DNSSEC crypto | `cryptography ≥ 46.0.5, < 47.0` |
+| Health check protocol | TCP connectivity test (`socket.create_connection`) |
+| Record type served | A records only (plus SOA, NS, RRSIG when DNSSEC is enabled) |
+| Concurrency model | Single UDP server thread + one background zone-updater thread |
+
+## Key requirements
+
+### Functional
+
+- **R1** For each configured subdomain, maintain a list of IP addresses and their current health status.
+- **R2** Periodically test TCP connectivity to each `(ip, health_port)` pair at the configured interval.
+- **R3** Update the in-memory DNS zone immediately when an IP's health status changes.
+- **R4** Return only currently-healthy IP addresses in DNS A record responses.
+- **R5** Return `NXDOMAIN` (no records) when all IPs for a subdomain are unhealthy.
+- **R6** Support alias zones that resolve identically to the primary zone without separate health check state.
+- **R7** Compute SOA timing values (TTL, refresh, retry, expire, minimum TTL) from health check parameters, keeping them consistent with check intervals.
+- **R8** When a DNSSEC private key is provided, sign all zone records (A, NS, SOA) and include RRSIG records in responses.
+
+### Operational
+
+- **R9** Accept configuration via CLI arguments (direct invocation) and environment variables (Docker).
+- **R10** Provide structured log output at configurable verbosity levels.
+- **R11** Start up and serve DNS queries within seconds; no external database or coordination service required.
