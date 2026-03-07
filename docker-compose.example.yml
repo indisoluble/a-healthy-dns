@@ -13,7 +13,7 @@ services:
       DNS_NAME_SERVERS: '["ns1.example.com", "ns2.example.com"]'
 
       # Optional parameters (with their default values)
-      # DNS_PORT: "53053"
+      # DNS_PORT: "53"
       # DNS_LOG_LEVEL: "info"
       # DNS_ALIAS_ZONES: '[]'
       # DNS_TEST_MIN_INTERVAL: "30"
