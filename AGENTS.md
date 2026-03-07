@@ -7,9 +7,9 @@ Non-negotiable rules for any AI coding agent (IDE agents, PR agents, chat agents
 - msitarzewski/AGENT-ZERO
 
 ## Goals
-- Produce changes that are **easy to review** and **consistent** with this repository’s style.
+- Produce changes that are easy to review and consistent with this repository’s style.
 - Prevent churn (rewrites, unnecessary files) and reduce architectural drift.
-- Ensure changes are **verifiable** and **documented**.
+- Ensure changes are verifiable and documented.
 
 ---
 
@@ -18,12 +18,12 @@ Non-negotiable rules for any AI coding agent (IDE agents, PR agents, chat agents
 - **Agent**: any AI tool producing analysis, plans, patches, or file edits for this repository.
 - **Regular work**: normal feature work, fixes, refactors, or ordinary documentation updates.
 - **Documentation bootstrap mode**: a documentation workflow used when this AGENTS.md is introduced into an existing project that already has meaningful implemented code/behavior but missing, weak, oversized, or poorly structured documentation.
-- **Path A**: the tool **can** modify repository files.
-- **Path B**: the tool **cannot** modify repository files (chat-only suggestions/patches).
-- **Implementation changes**: repository changes **outside** `README.md` and `docs/` (code, config, tests, build, CI, etc.).
+- **Path A**: the tool can modify repository files.
+- **Path B**: the tool cannot modify repository files (chat-only suggestions/patches).
+- **Implementation changes**: repository changes outside `README.md` and `docs/`.
 - **Docs changes**: changes to `README.md` and/or files under `docs/`.
 - **Substantive documentation file**: the main documentation file being created or refactored in the current bootstrap cycle.  
-  - `docs/table-of-contents.md` updates used only to register/index that file do **not** count as a second substantive file.
+  Updates to `docs/table-of-contents.md` used only to register/index that file do not count as a second substantive file.
 - **Citation**:
   - `path/to/file.ext:123` (preferred), or
   - `path/to/file.ext#AnchorName` (if line numbers are unavailable; state why).
@@ -32,8 +32,7 @@ Non-negotiable rules for any AI coding agent (IDE agents, PR agents, chat agents
 
 ## 1) Docs-first (mandatory)
 
-### 1.1 Required reading (when present)
-
+### 1.1 Required reading
 Before proposing or applying changes, consult project documentation as primary inputs.
 
 #### Base required reading
@@ -43,17 +42,16 @@ Before proposing or applying changes, consult project documentation as primary i
 - `docs/system-patterns.md` — architecture patterns and conventions.
 - `docs/project-rules.md` — language/tool specifics and QA commands.
 
-#### Extended required reading (dynamic)
+#### Extended required reading
 Read all task-relevant items from:
 - the **Minimum Reading Set / Core Docs / Primary Docs** section in `docs/table-of-contents.md` (project naming may vary), and
 - documents explicitly linked from `README.md` as the primary path for setup, usage, configuration, architecture, troubleshooting, or operations.
 
 If `docs/table-of-contents.md` exists but has no minimum/core reading section:
-1. read the Base required reading, and
+1. read the base required reading, and
 2. use best effort to identify the most relevant docs linked from `README.md` and `docs/table-of-contents.md`.
 
 ### 1.2 Response requirement
-
 Every response that proposes or applies changes must include:
 
 - **Docs consulted:** citations to the specific sections used, including dynamic docs when applicable.
@@ -63,7 +61,7 @@ If any required docs are missing:
 
 ---
 
-## 2) Hard constraints (must follow)
+## 2) Hard constraints
 
 If you cannot comply, say so and explain why.
 
@@ -88,12 +86,12 @@ If you cannot comply, say so and explain why.
 
 ---
 
-## 3) Preferred style (strong defaults)
+## 3) Preferred style
 
-- Prefer **small, reversible, reviewable** changes.
-- Prefer **extending existing code** over introducing new abstractions.
-- Prefer **explicitness** over cleverness.
-- Prefer **composition** over inheritance.
+- Prefer small, reversible, reviewable changes.
+- Prefer extending existing code over introducing new abstractions.
+- Prefer explicitness over cleverness.
+- Prefer composition over inheritance.
 
 ---
 
@@ -108,12 +106,11 @@ Then choose the execution path:
 - use **Path B** if it cannot.
 
 ### 4.1 Regular work (default)
-
-Use this mode for normal feature work, fixes, refactors, and ordinary documentation changes that are **not** part of documentation bootstrap mode.
+Use this mode for normal feature work, fixes, refactors, and ordinary documentation changes that are not part of documentation bootstrap mode.
 
 #### 4.1.1 Common steps
 1. **Understanding** (1–3 bullets): task + constraints.
-2. **Docs consulted** (required): cite `README.md` / `docs/` sections used.
+2. **Docs consulted**: cite `README.md` / `docs/` sections used.
 3. **Plan** (short, numbered). Include reuse analysis if relevant.
 4. **Change intent**:
    - list files/areas to touch (with citations),
@@ -121,8 +118,8 @@ Use this mode for normal feature work, fixes, refactors, and ordinary documentat
    - cite docs that justify key decisions.
 
 #### 4.1.2 Path A — tool CAN modify repository files
-5. **Apply implementation changes** (code/config/tests/etc).
-6. **QA**: validate the **actual working tree** after step 5.
+5. **Apply implementation changes**.
+6. **QA**: validate the actual working tree after step 5.
 7. **Docs changes + Docs impact**:
    - update `README.md` and/or `docs/` when relevant,
    - if adding a new doc, also update `docs/table-of-contents.md`,
@@ -132,7 +129,7 @@ Use this mode for normal feature work, fixes, refactors, and ordinary documentat
    - any deviation from plan/change intent,
    - files touched (citations when practical).
 
-**Rule:** In Path A, do **not** generate patch/diff blocks in chat unless the user explicitly requests them.
+**Rule:** In Path A, do not generate patch/diff blocks in chat unless the user explicitly requests them.
 
 #### 4.1.3 Path B — tool CANNOT modify repository files
 5. **Provide implementation patch/snippets**:
@@ -147,22 +144,19 @@ Use this mode for normal feature work, fixes, refactors, and ordinary documentat
    - apply order,
    - risky steps / follow-ups.
 
----
-
 ### 4.2 Documentation bootstrap mode (existing projects only)
-
-Use this mode only when **all** of the following are true:
+Use this mode only when all of the following are true:
 - the project already has meaningful implemented code/behavior,
 - documentation is missing, weak, oversized, or poorly structured, and
 - the user asks to align the project with this AGENTS.md or to bootstrap/refactor project documentation.
 
-This mode is **not** the default for ordinary feature work.
+This mode is not the default for ordinary feature work.
 
-In documentation bootstrap mode, the default scope is **documentation only**.  
-Do **not** modify implementation files unless the user explicitly asks for implementation changes.
+In documentation bootstrap mode, the default scope is documentation only.  
+Do not modify implementation files unless the user explicitly asks for implementation changes.
 
 #### 4.2.1 First interaction: bootstrap plan only
-When entering documentation bootstrap mode, do **not** generate all docs in one response.
+When entering documentation bootstrap mode, do not generate all docs in one response.
 
 First produce only a **Documentation bootstrap plan**:
 - current documentation inventory,
@@ -170,24 +164,24 @@ First produce only a **Documentation bootstrap plan**:
 - proposed minimum documentation baseline,
 - additional docs likely needed (if any),
 - proposed generation/refactor order,
-- which file should be produced/refactored **next**,
+- which file should be produced/refactored next,
 - brief justification for that order.
 
 Stop after the plan and wait for user confirmation to continue.
 
-#### 4.2.2 Single-file review cycle (mandatory)
-After the bootstrap plan is accepted, each subsequent cycle must handle **exactly one substantive documentation file**.
+#### 4.2.2 Single-file review cycle
+After the bootstrap plan is accepted, each subsequent cycle must handle exactly one substantive documentation file.
 
 For each cycle:
 1. select the next target file,
-2. generate or refactor **only that file**,
+2. generate or refactor only that file,
 3. explain which sources were used (code, README, existing docs),
 4. explain why this file is being produced now,
 5. if needed, update `docs/table-of-contents.md` only to register or re-index that file,
 6. stop and ask the user to review it,
 7. wait for explicit user instruction before continuing.
 
-Do **not** generate the next substantive documentation file until the user explicitly asks to continue.
+Do not generate the next substantive documentation file until the user explicitly asks to continue.
 
 #### 4.2.3 Default document order
 Unless the user requests a different order, use this sequence:
@@ -198,24 +192,38 @@ Unless the user requests a different order, use this sequence:
 4. `docs/project-rules.md`
 5. additional focused docs, one by one, as justified by project scope
 6. `README.md`
-7. final normalization pass on `docs/table-of-contents.md` if needed
+7. final cross-document normalization pass
 
-#### 4.2.4 Bootstrap rules
+#### 4.2.4 Final cross-document normalization pass (mandatory)
+After all planned documentation files have been created or refactored, perform one final documentation-only pass across:
+- `README.md`, and
+- all relevant `docs/*.md` files.
+
+Goals of this pass:
+- ensure cross-document consistency,
+- fix contradictions,
+- trim unnecessary overlap,
+- align terminology, filenames, and references,
+- verify that `docs/table-of-contents.md` reflects the final document set and minimum/core reading set.
+
+This pass is mandatory in documentation bootstrap mode, even if no large changes are expected.
+
+#### 4.2.5 Bootstrap rules
 During documentation bootstrap:
-- create/refactor **one substantive documentation file per cycle**,
-- do **not** batch multiple new docs in one turn,
-- do **not** refactor `README.md` before the long-form target docs exist,
-- do **not** create placeholder docs unless they already contain useful content,
+- create/refactor one substantive documentation file per cycle,
+- do not batch multiple new docs in one turn,
+- do not refactor `README.md` before the long-form target docs exist,
+- do not create placeholder docs unless they already contain useful content,
 - prefer refactoring/reusing existing documentation before creating new files.
 
-#### 4.2.5 Minimum reading growth rule
+#### 4.2.6 Minimum reading growth rule
 During bootstrap, the effective minimum/core reading set grows incrementally.
 
 After a documentation file is reviewed and accepted by the user:
 - add it to the minimum/core reading set in `docs/table-of-contents.md` if it is expected to influence future implementation decisions,
 - treat it as required reading in future agent work.
 
-#### 4.2.6 Execution path inside bootstrap mode
+#### 4.2.7 Execution path inside bootstrap mode
 Within each bootstrap cycle:
 - use **Path A** if the tool can modify repository files,
 - use **Path B** if the tool cannot modify repository files.
@@ -320,7 +328,7 @@ Format:
 
 ---
 
-## 7) Verification (QA) — always required
+## 7) Verification (QA)
 
 For any non-trivial change, include a **QA** section:
 - prefer the repository’s documented workflow in `docs/project-rules.md`,
@@ -339,7 +347,6 @@ For documentation-only bootstrap cycles, QA may be limited to:
 ## 8) Documentation rules (`README.md` + `docs/` are the shared source of truth)
 
 ### 8.1 Documentation split of responsibilities
-
 - **`README.md`** is the quick-start, high-signal entrypoint:
   - keep existing badges,
   - briefly explain what the project is and why it is useful,
@@ -358,7 +365,6 @@ For documentation-only bootstrap cycles, QA may be limited to:
   - other detailed guides.
 
 ### 8.2 Documentation updates and refactors are valid changes
-
 Update or refactor documentation when you change APIs, behavior, configuration, architecture patterns, or development workflow:
 - update `README.md` if the quick-start path, positioning, or first-run experience changes,
 - update/add files in `docs/` for long-form details.
@@ -366,8 +372,7 @@ Update or refactor documentation when you change APIs, behavior, configuration, 
 When adopting or aligning a project to this AGENTS.md, documentation restructuring/refactoring is an allowed docs change, including creating the minimum baseline docs when missing.
 
 ### 8.3 Adding new docs is allowed when justified
-
-If new content does **not fit** any existing documentation file:
+If new content does not fit any existing documentation file:
 - add a new focused doc under `docs/`,
 - update `docs/table-of-contents.md`,
 - justify why the content does not belong in an existing doc,
@@ -377,7 +382,6 @@ If new content does **not fit** any existing documentation file:
 This does not bypass **No new files without reuse analysis**; it satisfies it when reuse analysis shows no existing doc is an appropriate home.
 
 ### 8.4 Documentation bootstrap and refactor
-
 This AGENTS.md may be introduced into:
 - a new/empty project, or
 - an existing project with partial, missing, oversized, or poorly structured documentation.
