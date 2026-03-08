@@ -29,6 +29,8 @@ These documents must be read before proposing or applying changes to this reposi
 ### Reference
 
 - [`docs/configuration-reference.md`](configuration-reference.md) — Full CLI and Docker environment variable reference
+- [`docs/docker.md`](docker.md) — Docker deployment guide: image details, Docker Compose, deployment patterns, container management, security hardening, and orchestration
+- [`docs/troubleshooting.md`](troubleshooting.md) — Common issues, debugging, log interpretation, and operational procedures
 
 ---
 
