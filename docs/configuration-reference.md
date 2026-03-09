@@ -32,7 +32,7 @@ These three must always be provided. The server will not start without them.
 The domain name for which this server is authoritative.
 
 ```
---hosted-zone example.com
+--hosted-zone sub.domain.com
 ```
 
 ### Zone resolutions
@@ -68,7 +68,7 @@ JSON object mapping subdomain names to their IP list and health check port.
 }
 ```
 
-- Each `<subdomain>` is relative to the hosted zone (e.g. `www` → `www.example.com`).
+- Each `<subdomain>` is relative to the hosted zone (e.g. `www` → `www.sub.domain.com`).
 - `ips` must be valid IPv4 addresses (IPv6/AAAA is not supported).
 - `health_port` is the TCP port used for health checks.
 - All IPs for a subdomain share the same health port.
@@ -83,7 +83,7 @@ JSON object mapping subdomain names to their IP list and health check port.
 JSON array of fully-qualified name server hostnames for the zone's NS record.
 
 ```json
-["ns1.example.com", "ns2.example.com"]
+["ns1.domain.com", "ns2.domain.com"]
 ```
 
 ---
@@ -140,7 +140,7 @@ Maximum seconds to wait for a TCP connection during a health check. If the conne
 JSON array of additional domain names that resolve to the same records as the hosted zone. Health checks are shared; no duplication occurs.
 
 ```json
-["alias1.com", "alias2.com"]
+["sub.domain.net", "sub.domain.org"]
 ```
 
 See [docs/system-patterns.md § 7](system-patterns.md#7-multi-domain-support-via-zoneorigins) for the implementation pattern.
@@ -200,19 +200,19 @@ Algorithm used to sign the zone. Accepted values are the DNSSEC algorithm names 
 
 ```bash
 a-healthy-dns \
-  --hosted-zone example.com \
+  --hosted-zone sub.domain.com \
   --zone-resolutions '{"www":{"ips":["192.168.1.100"],"health_port":8080}}' \
-  --ns '["ns1.example.com"]'
+  --ns '["ns1.domain.com"]'
 ```
 
 ### CLI — with DNSSEC and tuned intervals
 
 ```bash
 a-healthy-dns \
-  --hosted-zone example.com \
+  --hosted-zone sub.domain.com \
   --zone-resolutions '{"www":{"ips":["192.168.1.100","192.168.1.101"],"health_port":80},"api":{"ips":["192.168.1.200"],"health_port":8000}}' \
-  --ns '["ns1.example.com","ns2.example.com"]' \
-  --alias-zones '["www.example.net"]' \
+  --ns '["ns1.domain.com","ns2.domain.com"]' \
+  --alias-zones '["sub.domain.net"]' \
   --port 53 \
   --test-min-interval 10 \
   --test-timeout 2 \
@@ -226,9 +226,9 @@ a-healthy-dns \
 ```bash
 docker run -d \
   -p 53053:53053/udp \
-  -e DNS_HOSTED_ZONE="example.com" \
+  -e DNS_HOSTED_ZONE="sub.domain.com" \
   -e DNS_ZONE_RESOLUTIONS='{"www":{"ips":["192.168.1.100"],"health_port":8080}}' \
-  -e DNS_NAME_SERVERS='["ns1.example.com"]' \
+  -e DNS_NAME_SERVERS='["ns1.domain.com"]' \
   -e DNS_PORT="53053" \
   indisoluble/a-healthy-dns
 ```
@@ -239,9 +239,9 @@ docker run -d \
 docker run -d \
   -p 53:53/udp \
   -v "$(pwd)/keys:/app/keys:ro" \
-  -e DNS_HOSTED_ZONE="example.com" \
+  -e DNS_HOSTED_ZONE="sub.domain.com" \
   -e DNS_ZONE_RESOLUTIONS='{"www":{"ips":["192.168.1.100"],"health_port":8080}}' \
-  -e DNS_NAME_SERVERS='["ns1.example.com"]' \
+  -e DNS_NAME_SERVERS='["ns1.domain.com"]' \
   -e DNS_PRIV_KEY_PATH="/app/keys/private.pem" \
   -e DNS_PRIV_KEY_ALG="RSASHA256" \
   indisoluble/a-healthy-dns

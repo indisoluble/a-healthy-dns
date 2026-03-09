@@ -38,19 +38,19 @@ docker stats a-healthy-dns
 
 ```bash
 # Using dig (most detailed)
-dig @localhost -p 53053 www.example.com
+dig @localhost -p 53053 www.example.local
 
 # Using nslookup
-nslookup www.example.com 127.0.0.1 -port=53053
+nslookup www.example.local 127.0.0.1 -port=53053
 
 # Using host
-host www.example.com 127.0.0.1
+host www.example.local 127.0.0.1
 
 # Check SOA record
-dig @localhost -p 53053 example.com SOA
+dig @localhost -p 53053 example.local SOA
 
 # Check NS records
-dig @localhost -p 53053 example.com NS
+dig @localhost -p 53053 example.local NS
 ```
 
 ### Check Health Status (via Logs)
@@ -89,9 +89,9 @@ lsof -i UDP:53053
 # Run with debug logging to see detailed errors
 docker run -it \
   -e DNS_LOG_LEVEL="debug" \
-  -e DNS_HOSTED_ZONE="example.com" \
+  -e DNS_HOSTED_ZONE="example.local" \
   -e DNS_ZONE_RESOLUTIONS='{"www":{"ips":["192.168.1.100"],"health_port":8080}}' \
-  -e DNS_NAME_SERVERS='["ns1.example.com"]' \
+  -e DNS_NAME_SERVERS='["ns1.example.local"]' \
   indisoluble/a-healthy-dns
 ```
 
@@ -206,10 +206,10 @@ nc -zv <ip> <health_port>
 **Wrong subdomain queried:**
 ```bash
 # Check zone configuration
-dig @localhost -p 53053 example.com AXFR  # Won't work (no AXFR support)
+dig @localhost -p 53053 example.local AXFR  # Won't work (no AXFR support)
 
 # Query correct subdomain
-dig @localhost -p 53053 www.example.com  # Not apex
+dig @localhost -p 53053 www.example.local  # Not apex
 ```
 
 ### Issue: NXDOMAIN for Existing Subdomain
@@ -227,7 +227,7 @@ docker exec a-healthy-dns env | grep DNS_ZONE_RESOLUTIONS
 docker logs a-healthy-dns 2>&1 | grep "www" | tail -20
 
 # Verify all IPs for subdomain
-dig @localhost -p 53053 www.example.com +short
+dig @localhost -p 53053 www.example.local +short
 ```
 
 #### Root Causes
@@ -249,7 +249,7 @@ dig @localhost -p 53053 www.example.com +short
 **Zone mismatch:**
 ```bash
 # Query with correct zone
-dig @localhost -p 53053 www.example.com  # Not: www.wrong.com
+dig @localhost -p 53053 www.example.local  # Not: www.wrong.com
 ```
 
 ### Issue: Slow DNS Responses
@@ -262,7 +262,7 @@ dig @localhost -p 53053 www.example.com  # Not: www.wrong.com
 #### Diagnosis
 ```bash
 # Measure response time
-time dig @localhost -p 53053 www.example.com
+time dig @localhost -p 53053 www.example.local
 
 # Check CPU/memory usage
 docker stats a-healthy-dns
@@ -310,10 +310,10 @@ sudo tcpdump -i any -n port 53053 -c 100
 #### Diagnosis
 ```bash
 # Check if DNSSEC is enabled
-dig @localhost -p 53053 www.example.com +dnssec
+dig @localhost -p 53053 www.example.local +dnssec
 
 # Check for DNSKEY records
-dig @localhost -p 53053 example.com DNSKEY
+dig @localhost -p 53053 example.local DNSKEY
 
 # Check logs for signing errors
 docker logs a-healthy-dns 2>&1 | grep -i "sign\|dnssec\|rrsig"
@@ -384,11 +384,11 @@ deploy:
 #### DEBUG
 Shows detailed operational information:
 ```
-Checking A record www.example.com ...
+Checking A record www.example.local ...
 Checked IP 192.168.1.100 on port 8080: from True to False
-A record www.example.com checked
+A record www.example.local checked
 Clearing zone...
-Added A record www.example.com to zone
+Added A record www.example.local to zone
 Zone signed with expiration time 2026-03-07 12:30:45
 ```
 
@@ -410,7 +410,7 @@ Updating zone...
 Unexpected but recoverable conditions:
 ```
 Received query for domain not in hosted or alias zones: example.org
-Received query for unknown subdomain: api.example.com
+Received query for unknown subdomain: api.example.local
 Failed to parse DNS query: Truncated message
 Zone Updater is already running
 ```
@@ -434,9 +434,9 @@ Failed to load DNSSEC private key: [Errno 2] No such file or directory
 ```
 INFO - Starting Zone Updater...
 INFO - DNS server listening on port 53053...
-DEBUG - Checking A record www.example.com ...
+DEBUG - Checking A record www.example.local ...
 DEBUG - Checked IP 192.168.1.100 on port 8080: from True to True
-DEBUG - A record www.example.com checked
+DEBUG - A record www.example.local checked
 ```
 
 #### Health Status Change
@@ -445,7 +445,7 @@ DEBUG - Checked IP 192.168.1.100 on port 8080: from True to False
 INFO - A records changed
 INFO - Updating zone...
 DEBUG - Clearing zone...
-DEBUG - Added A record www.example.com to zone
+DEBUG - Added A record www.example.local to zone
 ```
 
 #### All IPs Unhealthy (No A Records)
@@ -454,7 +454,7 @@ DEBUG - Checked IP 192.168.1.100 on port 8080: from True to False
 DEBUG - Checked IP 192.168.1.101 on port 8080: from True to False
 INFO - A records changed
 INFO - Updating zone...
-DEBUG - A record www.example.com skipped
+DEBUG - A record www.example.local skipped
 ```
 Result: Queries return NXDOMAIN
 
@@ -604,7 +604,7 @@ A Healthy DNS does not provide a built-in health endpoint. To monitor health:
 ```bash
 #!/bin/bash
 # Check if DNS server is responding
-dig @localhost -p 53053 www.example.com +short +timeout=2 > /dev/null
+dig @localhost -p 53053 www.example.local +short +timeout=2 > /dev/null
 if [ $? -eq 0 ]; then
   echo "DNS server is healthy"
   exit 0

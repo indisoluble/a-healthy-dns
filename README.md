@@ -15,9 +15,9 @@ An authoritative DNS server that continuously health-checks backend IPs via TCP 
 docker run -d \
   --name a-healthy-dns \
   -p 53053:53053/udp \
-  -e DNS_HOSTED_ZONE="example.com" \
+  -e DNS_HOSTED_ZONE="example.local" \
   -e DNS_ZONE_RESOLUTIONS='{"www":{"ips":["192.168.1.100","192.168.1.101"],"health_port":8080}}' \
-  -e DNS_NAME_SERVERS='["ns1.example.com"]' \
+  -e DNS_NAME_SERVERS='["ns1.example.local"]' \
   -e DNS_PORT="53053" \
   indisoluble/a-healthy-dns
 ```
@@ -25,7 +25,7 @@ docker run -d \
 Verify it is running:
 
 ```bash
-dig @localhost -p 53053 www.example.com
+dig @localhost -p 53053 www.example.local
 docker logs a-healthy-dns
 ```
 
@@ -37,9 +37,9 @@ cd a-healthy-dns
 pip install .
 
 a-healthy-dns \
-  --hosted-zone example.com \
+  --hosted-zone example.local \
   --zone-resolutions '{"www":{"ips":["192.168.1.100","192.168.1.101"],"health_port":8080}}' \
-  --ns '["ns1.example.com"]'
+  --ns '["ns1.example.local"]'
 ```
 
 Requires Python 3.10+.

@@ -16,9 +16,9 @@ Docker is the recommended deployment method for A Healthy DNS. The official imag
 docker run -d \
   --name a-healthy-dns \
   -p 53053:53053/udp \
-  -e DNS_HOSTED_ZONE="example.com" \
+  -e DNS_HOSTED_ZONE="sub.domain.com" \
   -e DNS_ZONE_RESOLUTIONS='{"www":{"ips":["192.168.1.100"],"health_port":8080}}' \
-  -e DNS_NAME_SERVERS='["ns1.example.com"]' \
+  -e DNS_NAME_SERVERS='["ns1.domain.com"]' \
   -e DNS_PORT="53053" \
   indisoluble/a-healthy-dns
 ```
@@ -37,9 +37,9 @@ docker build -t a-healthy-dns:local .
 docker run -d \
   --name a-healthy-dns \
   -p 53053:53053/udp \
-  -e DNS_HOSTED_ZONE="example.com" \
+  -e DNS_HOSTED_ZONE="sub.domain.com" \
   -e DNS_ZONE_RESOLUTIONS='{"www":{"ips":["192.168.1.100"],"health_port":8080}}' \
-  -e DNS_NAME_SERVERS='["ns1.example.com"]' \
+  -e DNS_NAME_SERVERS='["ns1.domain.com"]' \
   -e DNS_PORT="53053" \
   a-healthy-dns:local
 ```
@@ -91,9 +91,9 @@ services:
     ports:
       - "53053:53053/udp"
     environment:
-      DNS_HOSTED_ZONE: "example.com"
+      DNS_HOSTED_ZONE: "sub.domain.com"
       DNS_ZONE_RESOLUTIONS: '{"www":{"ips":["192.168.1.100","192.168.1.101"],"health_port":8080}}'
-      DNS_NAME_SERVERS: '["ns1.example.com", "ns2.example.com"]'
+      DNS_NAME_SERVERS: '["ns1.domain.com", "ns2.domain.com"]'
       DNS_PORT: "53053"
     restart: unless-stopped
 ```
@@ -140,9 +140,9 @@ services:
     ports:
       - "53053:53053/udp"
     environment:
-      DNS_HOSTED_ZONE: "example.com"
+      DNS_HOSTED_ZONE: "sub.domain.com"
       DNS_ZONE_RESOLUTIONS: '{"www":{"ips":["192.168.1.100"],"health_port":8080}}'
-      DNS_NAME_SERVERS: '["ns1.example.com"]'
+      DNS_NAME_SERVERS: '["ns1.domain.com"]'
       DNS_PORT: "53053"
       DNS_PRIV_KEY_PATH: "/app/keys/private.pem"
       DNS_PRIV_KEY_ALG: "RSASHA256"
@@ -178,9 +178,9 @@ docker run -d \
   --memory="256m" \
   --cpus="0.5" \
   --restart=unless-stopped \
-  -e DNS_HOSTED_ZONE="example.com" \
+  -e DNS_HOSTED_ZONE="sub.domain.com" \
   -e DNS_ZONE_RESOLUTIONS='{"www":{"ips":["10.0.1.100","10.0.1.101"],"health_port":80}}' \
-  -e DNS_NAME_SERVERS='["ns1.example.com","ns2.example.com"]' \
+  -e DNS_NAME_SERVERS='["ns1.domain.com","ns2.domain.com"]' \
   -e DNS_PORT="53" \
   indisoluble/a-healthy-dns
 ```
@@ -189,27 +189,27 @@ docker run -d \
 
 **Scenario:** Multiple instances for redundancy (different servers).
 
-**Server 1 (ns1.example.com):**
+**Server 1 (ns1.domain.com):**
 ```bash
 docker run -d \
   --name a-healthy-dns-ns1 \
   -p 53:53/udp \
-  -e DNS_HOSTED_ZONE="example.com" \
+  -e DNS_HOSTED_ZONE="sub.domain.com" \
   -e DNS_ZONE_RESOLUTIONS='{"www":{"ips":["10.0.1.100","10.0.1.101"],"health_port":80}}' \
-  -e DNS_NAME_SERVERS='["ns1.example.com","ns2.example.com"]' \
+  -e DNS_NAME_SERVERS='["ns1.domain.com","ns2.domain.com"]' \
   -e DNS_PORT="53" \
   indisoluble/a-healthy-dns
 ```
 
-**Server 2 (ns2.example.com):**
+**Server 2 (ns2.domain.com):**
 ```bash
 # Same configuration on different physical/virtual server
 docker run -d \
   --name a-healthy-dns-ns2 \
   -p 53:53/udp \
-  -e DNS_HOSTED_ZONE="example.com" \
+  -e DNS_HOSTED_ZONE="sub.domain.com" \
   -e DNS_ZONE_RESOLUTIONS='{"www":{"ips":["10.0.1.100","10.0.1.101"],"health_port":80}}' \
-  -e DNS_NAME_SERVERS='["ns1.example.com","ns2.example.com"]' \
+  -e DNS_NAME_SERVERS='["ns1.domain.com","ns2.domain.com"]' \
   -e DNS_PORT="53" \
   indisoluble/a-healthy-dns
 ```
@@ -244,9 +244,9 @@ docker logs -f a-healthy-dns-dev
 docker run -d \
   --name a-healthy-dns \
   --network host \
-  -e DNS_HOSTED_ZONE="example.com" \
+  -e DNS_HOSTED_ZONE="sub.domain.com" \
   -e DNS_ZONE_RESOLUTIONS='{"www":{"ips":["192.168.1.100"],"health_port":8080}}' \
-  -e DNS_NAME_SERVERS='["ns1.example.com"]' \
+  -e DNS_NAME_SERVERS='["ns1.domain.com"]' \
   -e DNS_PORT="53" \
   indisoluble/a-healthy-dns
 ```
@@ -549,11 +549,11 @@ spec:
       protocol: UDP
     env:
     - name: DNS_HOSTED_ZONE
-      value: "example.com"
+      value: "sub.domain.com"
     - name: DNS_ZONE_RESOLUTIONS
       value: '{"www":{"ips":["192.168.1.100"],"health_port":8080}}'
     - name: DNS_NAME_SERVERS
-      value: '["ns1.example.com"]'
+      value: '["ns1.domain.com"]'
     - name: DNS_PORT
       value: "53"
     resources:
@@ -575,9 +575,9 @@ docker service create \
   --name a-healthy-dns \
   --publish 53:53/udp \
   --replicas 3 \
-  --env DNS_HOSTED_ZONE="example.com" \
+  --env DNS_HOSTED_ZONE="sub.domain.com" \
   --env DNS_ZONE_RESOLUTIONS='{"www":{"ips":["192.168.1.100"],"health_port":8080}}' \
-  --env DNS_NAME_SERVERS='["ns1.example.com"]' \
+  --env DNS_NAME_SERVERS='["ns1.domain.com"]' \
   --limit-memory 256m \
   --limit-cpu 0.5 \
   indisoluble/a-healthy-dns
