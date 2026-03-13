@@ -114,6 +114,7 @@ RFC 1035 defines the DNS wire format: the message header structure (including th
 |---|---|---|
 | Wire parsing of incoming queries | **Implemented** | `dns.message.from_wire()` is used; `DNSException` is caught |
 | QDCOUNT validation (must be exactly 1) | **Implemented** | `len(query.question) == 1` check; zero or more-than-one questions returns `dns.rcode.FORMERR` (`indisoluble/a_healthy_dns/dns_server_udp_handler.py:112-123`).  Confirmed via test that dnspython preserves all questions for QDCOUNT > 1 wire messages |
+| QCLASS / IN class validation | **Implemented** | Handler checks `question.rdclass != dns.rdataclass.IN`; non-IN queries return `dns.rcode.REFUSED` (`indisoluble/a_healthy_dns/dns_server_udp_handler.py:115-121`).  Project decision: REFUSED (server only serves IN-class data) |
 | Wire serialisation of responses | **Implemented** | `response.to_wire()` is called before sending |
 | A, SOA, NS record types in responses | **Implemented** | All three record types are populated by the zone updater |
 
@@ -123,7 +124,6 @@ RFC 1035 defines the DNS wire format: the message header structure (including th
 |---|---|---|
 | FORMERR when parse fails entirely | **Not implemented** | When `dns.message.from_wire()` raises `DNSException` the handler logs a warning and **returns without sending any response** (`indisoluble/a_healthy_dns/dns_server_udp_handler.py:73-75`).  RFC 1035 §4.1.1 expects a FORMERR response to be sent when possible |
 | NOTIMP for unsupported opcodes | **Not implemented** | The handler does not inspect `query.opcode()`.  A query with opcode IQUERY, STATUS, NOTIFY, or UPDATE is silently processed as a standard query |
-| QCLASS / IN class validation | **Not implemented** | The handler never checks `question.rdclass`.  Queries for class CHAOS, HESIOD, or ANY are answered as if they were IN-class queries |
 
 #### Uncertainties
 
@@ -209,8 +209,8 @@ RFC 2308 §5 defines the SOA minimum TTL field as the negative caching TTL; this
 3. **~~Validate QDCOUNT = 1 and return FORMERR if not.~~** *(implemented)*
    `len(query.question) == 1` check replaces the former truthy test.  Zero-question and multi-question messages both return FORMERR.  Verified: dnspython preserves all questions in `query.question` for QDCOUNT > 1 wire messages.  *See also RFC 2181 §5.1.*
 
-4. **Validate QCLASS = IN and return FORMERR (or REFUSED, project choice) if not.**
-   After parsing, check `question.rdclass != dns.rdataclass.IN`.  Returning `dns.rcode.REFUSED` is an acceptable project choice for non-IN queries since the server only serves IN-class data; FORMERR is also permitted.  *Document whichever is chosen as a project decision.*
+4. **~~Validate QCLASS = IN and return REFUSED if not.~~** *(implemented — project decision: REFUSED)*
+   `question.rdclass != dns.rdataclass.IN` check added; non-IN queries return `dns.rcode.REFUSED` (`indisoluble/a_healthy_dns/dns_server_udp_handler.py:115-121`).  REFUSED was chosen because the server exclusively serves IN-class data and has no answer to return for any other class.
 
 #### Verification work for uncertainties
 
@@ -274,7 +274,7 @@ RFC 7766 (DNS over TCP) was evaluated and excluded because Level 1 scope is UDP 
 2. ~~**SOA in authority section**~~ — **fixed**: `_build_authority_with_apex_soa()` populates `response.authority` for NXDOMAIN and NODATA responses
 3. ~~**QDCOUNT validation**~~ — **fixed**: `len(query.question) == 1` check; QDCOUNT ≠ 1 returns FORMERR
 4. **NOTIMP for unsupported opcodes** — no opcode check at all (non-conformant with RFC 1035 §4.1.1)
-5. **QCLASS / IN validation** — non-IN class queries are not rejected
+5. ~~**QCLASS / IN validation**~~ — **fixed**: `question.rdclass != dns.rdataclass.IN` check; non-IN queries return REFUSED (project decision)
 6. **FORMERR on parse failure** — currently drops the connection with no response
 
 ### Main uncertainties
@@ -282,6 +282,6 @@ RFC 7766 (DNS over TCP) was evaluated and excluded because Level 1 scope is UDP 
 - Whether dnspython's `from_wire()` internally rejects malformed messages (truncated headers, invalid labels) that would require FORMERR — *not verified; test coverage needed*
 - **Resolved:** `query.question` is confirmed to contain all questions for a QDCOUNT > 1 wire message; dnspython does not drop extra questions during parsing
 
-### Ambiguities intentionally left open
+### Ambiguities resolved
 
-- Whether non-IN class queries should be answered with REFUSED or FORMERR is a valid project choice within RFC bounds; this document marks it as such rather than prescribing one answer.
+- Non-IN class queries return REFUSED (project decision: the server exclusively serves IN-class data).

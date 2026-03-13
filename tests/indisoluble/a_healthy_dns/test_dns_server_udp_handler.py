@@ -332,3 +332,26 @@ def test_handle_query_with_invalid_question_count_returns_formerr(
     sent_data = mock_sock.sendto.call_args[0][0]
     response = dns.message.from_wire(sent_data)
     assert response.rcode() == dns.rcode.FORMERR
+
+
+@patch("indisoluble.a_healthy_dns.dns_server_udp_handler._update_response")
+def test_handle_query_with_non_in_class_returns_refused(
+    mock_update_response, dns_client_address, mock_server
+):
+    # Query for an in-zone name but with class CH instead of IN
+    query = dns.message.make_query(
+        "test.example.com.", dns.rdatatype.A, rdclass=dns.rdataclass.CH
+    )
+    mock_sock = MagicMock()
+    request = (query.to_wire(), mock_sock)
+
+    _ = DnsServerUdpHandler(request, dns_client_address, mock_server)
+
+    mock_update_response.assert_not_called()
+    mock_sock.sendto.assert_called_once()
+
+    sent_data = mock_sock.sendto.call_args[0][0]
+    response = dns.message.from_wire(sent_data)
+    assert response.rcode() == dns.rcode.REFUSED
+    assert len(response.answer) == 0
+    assert len(response.authority) == 0
