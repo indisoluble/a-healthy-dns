@@ -166,24 +166,6 @@ def test_update_response_with_absolute_name_outside_zone_origins(
     assert len(dns_response.authority) == 0
 
 
-def test_update_response_outside_zone_returns_refused_for_unrelated_domain(
-    mock_zone, mock_zone_origins
-):
-    # Acceptance: www.unrelated-domain.test. A → REFUSED, empty answer, empty authority
-    query_name = dns.name.from_text("www.unrelated-domain.test.")
-    query_type = dns.rdatatype.A
-    dns_response = dns.message.make_response(
-        dns.message.make_query(query_name, query_type)
-    )
-
-    _update_response(dns_response, query_name, query_type, mock_zone, mock_zone_origins)
-
-    mock_zone.reader.assert_not_called()
-    assert dns_response.rcode() == dns.rcode.REFUSED
-    assert len(dns_response.answer) == 0
-    assert len(dns_response.authority) == 0
-
-
 def test_update_response_domain_not_found(
     mock_zone, mock_reader, dns_response, mock_zone_origins
 ):
