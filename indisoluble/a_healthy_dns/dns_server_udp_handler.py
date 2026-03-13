@@ -112,13 +112,7 @@ class DnsServerUdpHandler(socketserver.BaseRequestHandler):
 
         if len(query.question) == 1:
             question = query.question[0]
-            if question.rdclass != dns.rdataclass.IN:
-                logging.warning(
-                    "Received query for unsupported class %s, expected IN",
-                    dns.rdataclass.to_text(question.rdclass),
-                )
-                response.set_rcode(dns.rcode.REFUSED)
-            else:
+            if question.rdclass == dns.rdataclass.IN:
                 _update_response(
                     response,
                     question.name,
@@ -126,6 +120,12 @@ class DnsServerUdpHandler(socketserver.BaseRequestHandler):
                     self.server.zone,
                     self.server.zone_origins,
                 )
+            else:
+                logging.warning(
+                    "Received query for unsupported class %s, expected IN",
+                    dns.rdataclass.to_text(question.rdclass),
+                )
+                response.set_rcode(dns.rcode.REFUSED)
         else:
             logging.warning(
                 "Received query with %d questions, expected exactly 1",
