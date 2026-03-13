@@ -94,7 +94,7 @@ RFC 1034 establishes the conceptual model for authoritative DNS servers: a serve
 
 | Behaviour | Status | Notes |
 |---|---|---|
-| REFUSED for queries outside all served zones | **Non-conformant** | The handler currently returns NXDOMAIN instead of REFUSED when `zone_origins.relativize()` returns `None` (`indisoluble/a_healthy_dns/dns_server_udp_handler.py:36`).  RFC 1034 §6.2 requires REFUSED for out-of-zone queries |
+| REFUSED for queries outside all served zones | **Implemented** | `indisoluble/a_healthy_dns/dns_server_udp_handler.py:36` returns `dns.rcode.REFUSED` when `zone_origins.relativize()` returns `None` |
 | SOA in authority for NXDOMAIN responses | **Not implemented** | The authority section is never populated; see also RFC 2308 §3 |
 | NODATA response includes SOA in authority | **Not implemented** | Authority section is empty on NOERROR/empty-answer responses; see also RFC 2308 §2.1 |
 
@@ -187,8 +187,8 @@ RFC 2308 §5 defines the SOA minimum TTL field as the negative caching TTL; this
 
 #### Changes required for Level 1 conformance
 
-1. **Fix REFUSED for out-of-zone queries.**
-   In `indisoluble/a_healthy_dns/dns_server_udp_handler.py:36`, the branch that handles `relative_name is None` must set `dns.rcode.REFUSED` instead of `dns.rcode.NXDOMAIN`.  This is the correct response code when an authoritative server receives a query for a zone it does not serve (RFC 1034 §6.2).  *This is a mandatory RFC requirement, not a project choice.*
+1. **~~Fix REFUSED for out-of-zone queries.~~** *(implemented)*
+   `indisoluble/a_healthy_dns/dns_server_udp_handler.py:36` now sets `dns.rcode.REFUSED` for out-of-zone queries.
 
 2. **Include apex SOA in the authority section for NXDOMAIN responses.**
    When returning NXDOMAIN (in-zone owner absent), look up the apex SOA record from the current zone transaction and append it to `response.authority`.  The SOA must be retrieved from the zone under the `@` (apex) relative name.  *See also RFC 2308 §3.*
@@ -282,7 +282,7 @@ RFC 7766 (DNS over TCP) was evaluated and excluded because Level 1 scope is UDP 
 
 ### Main current gaps identified
 
-1. **REFUSED for out-of-zone queries** — currently returns NXDOMAIN (non-conformant with RFC 1034 §6.2)
+1. ~~**REFUSED for out-of-zone queries**~~ — **fixed**: `dns_server_udp_handler.py:36` now returns REFUSED
 2. **SOA in authority section** — absent for all negative responses (NXDOMAIN and NODATA), violating RFC 2308 §2.1 and §3
 3. **NOTIMP for unsupported opcodes** — no opcode check at all (non-conformant with RFC 1035 §4.1.1)
 4. **QDCOUNT validation** — QDCOUNT ≠ 1 is not rejected (non-conformant with RFC 2181 §5.1)

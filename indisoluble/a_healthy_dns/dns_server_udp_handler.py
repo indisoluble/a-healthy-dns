@@ -33,7 +33,7 @@ def _update_response(
         logging.warning(
             "Received query for domain not in hosted or alias zones: %s", query_name
         )
-        response.set_rcode(dns.rcode.NXDOMAIN)
+        response.set_rcode(dns.rcode.REFUSED)
         return
 
     with zone.reader() as txn:
