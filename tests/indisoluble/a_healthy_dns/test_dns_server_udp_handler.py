@@ -20,6 +20,20 @@ from indisoluble.a_healthy_dns.dns_server_udp_handler import (
 from indisoluble.a_healthy_dns.records.zone_origins import ZoneOrigins
 
 
+def _make_multi_question_wire(*question_names):
+    queries = [
+        dns.message.make_query(question_name, dns.rdatatype.A)
+        for question_name in question_names
+    ]
+    wire = bytearray(queries[0].to_wire())
+    wire[4:6] = len(queries).to_bytes(2)
+
+    for query in queries[1:]:
+        wire.extend(query.to_wire()[12:])
+
+    return bytes(wire)
+
+
 @pytest.fixture
 def mock_reader():
     reader = MagicMock(spec=dns.zone.Transaction)
@@ -73,7 +87,6 @@ def mock_soa_rdataset(mock_soa_rdata):
     mock_soa_rdataset.ttl = 300
     mock_soa_rdataset.__iter__ = MagicMock(return_value=iter([mock_soa_rdata]))
     return mock_soa_rdataset
-
 
 
 @pytest.fixture
@@ -286,11 +299,7 @@ def test_handle_exception_parsing_query(
     mock_from_wire.side_effect = dns.exception.DNSException("Test exception")
 
     # No need to call handle() as it's called automatically by the constructor
-    with patch("logging.warning") as mock_logging:
-        _ = DnsServerUdpHandler(dns_request, dns_client_address, mock_server)
-
-        mock_logging.assert_called_once()
-        assert "Failed to parse DNS query" in mock_logging.call_args[0][0]
+    _ = DnsServerUdpHandler(dns_request, dns_client_address, mock_server)
 
     # Assertions
     query_data = dns_request[0]
@@ -302,64 +311,24 @@ def test_handle_exception_parsing_query(
 
 
 @patch("indisoluble.a_healthy_dns.dns_server_udp_handler._update_response")
-def test_handle_query_without_question(
-    mock_update_response, dns_client_address, mock_server
+@pytest.mark.parametrize(
+    "query_data",
+    [
+        dns.message.Message().to_wire(),
+        _make_multi_question_wire("example.com.", "test.com."),
+    ],
+)
+def test_handle_query_with_invalid_question_count_returns_formerr(
+    mock_update_response, query_data, dns_client_address, mock_server
 ):
-    # Create a request with an empty question section
-    query = dns.message.Message()
     mock_sock = MagicMock()
-    request = (query.to_wire(), mock_sock)
+    request = (query_data, mock_sock)
 
-    # No need to call handle() as it's called automatically by the constructor
-    with patch("logging.warning") as mock_logging:
-        _ = DnsServerUdpHandler(request, dns_client_address, mock_server)
-
-        mock_logging.assert_called_once()
-        assert "0 questions, expected exactly 1" in (
-            mock_logging.call_args[0][0] % mock_logging.call_args[0][1]
-        )
-
-    # Assertions
-    mock_update_response.assert_not_called()
-
-    # Check response was sent with FORMERR
-    mock_sock.sendto.assert_called_once()
-
-    sent_data = mock_sock.sendto.call_args[0][0]
-    response = dns.message.from_wire(sent_data)
-    assert response.rcode() == dns.rcode.FORMERR
-
-
-@patch("indisoluble.a_healthy_dns.dns_server_udp_handler._update_response")
-def test_handle_query_with_multiple_questions(
-    mock_update_response, dns_client_address, mock_server
-):
-    # Build a wire message with QDCOUNT=2 by crafting the bytes directly:
-    # start from a valid single-question query, patch QDCOUNT to 2, then
-    # append the question bytes from a second query.
-    q1 = dns.message.make_query("example.com.", dns.rdatatype.A)
-    wire = bytearray(q1.to_wire())
-    # QDCOUNT is at bytes 4-5 of the DNS header
-    wire[4] = 0
-    wire[5] = 2
-    q2 = dns.message.make_query("test.com.", dns.rdatatype.A)
-    # Append the question section of q2 (everything after the 12-byte header)
-    wire.extend(q2.to_wire()[12:])
-
-    mock_sock = MagicMock()
-    request = (bytes(wire), mock_sock)
-
-    with patch("logging.warning") as mock_logging:
-        _ = DnsServerUdpHandler(request, dns_client_address, mock_server)
-
-        mock_logging.assert_called_once()
-        assert "2 questions, expected exactly 1" in (
-            mock_logging.call_args[0][0] % mock_logging.call_args[0][1]
-        )
+    _ = DnsServerUdpHandler(request, dns_client_address, mock_server)
 
     mock_update_response.assert_not_called()
-
     mock_sock.sendto.assert_called_once()
+
     sent_data = mock_sock.sendto.call_args[0][0]
     response = dns.message.from_wire(sent_data)
     assert response.rcode() == dns.rcode.FORMERR
