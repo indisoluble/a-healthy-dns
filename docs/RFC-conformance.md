@@ -113,7 +113,7 @@ RFC 1035 defines the DNS wire format: the message header structure (including th
 | Behaviour | Status | Notes |
 |---|---|---|
 | Wire parsing of incoming queries | **Implemented** | `dns.message.from_wire()` is used; `DNSException` is caught |
-| FORMERR when question section is empty | **Implemented** | Handler checks `if query.question:` and returns `dns.rcode.FORMERR` |
+| QDCOUNT validation (must be exactly 1) | **Implemented** | `len(query.question) == 1` check; zero or more-than-one questions returns `dns.rcode.FORMERR` (`indisoluble/a_healthy_dns/dns_server_udp_handler.py:112-123`).  Confirmed via test that dnspython preserves all questions for QDCOUNT > 1 wire messages |
 | Wire serialisation of responses | **Implemented** | `response.to_wire()` is called before sending |
 | A, SOA, NS record types in responses | **Implemented** | All three record types are populated by the zone updater |
 
@@ -123,7 +123,6 @@ RFC 1035 defines the DNS wire format: the message header structure (including th
 |---|---|---|
 | FORMERR when parse fails entirely | **Not implemented** | When `dns.message.from_wire()` raises `DNSException` the handler logs a warning and **returns without sending any response** (`indisoluble/a_healthy_dns/dns_server_udp_handler.py:73-75`).  RFC 1035 §4.1.1 expects a FORMERR response to be sent when possible |
 | NOTIMP for unsupported opcodes | **Not implemented** | The handler does not inspect `query.opcode()`.  A query with opcode IQUERY, STATUS, NOTIFY, or UPDATE is silently processed as a standard query |
-| QDCOUNT validation (must be exactly 1) | **Not implemented** | The handler only checks whether `query.question` is truthy; it does not reject messages where `len(query.question) > 1`.  RFC 1035 §4.1.1, clarified by RFC 2181 §5.1, requires exactly one question |
 | QCLASS / IN class validation | **Not implemented** | The handler never checks `question.rdclass`.  Queries for class CHAOS, HESIOD, or ANY are answered as if they were IN-class queries |
 
 #### Uncertainties
@@ -143,16 +142,11 @@ RFC 2181 §4 also clarifies that the AA flag applies to the entire response when
 | Behaviour | Status | Notes |
 |---|---|---|
 | AA flag set correctly | **Implemented** | Confirmed as noted under RFC 1034 above |
+| FORMERR for QDCOUNT ≠ 1 (RFC 2181 §5.1) | **Implemented** | `len(query.question) == 1` check in `indisoluble/a_healthy_dns/dns_server_udp_handler.py:112`.  Verified by test: dnspython preserves all questions for QDCOUNT > 1 wire messages, so the check is necessary and effective |
 
 #### Current gaps
 
-| Behaviour | Status | Notes |
-|---|---|---|
-| FORMERR for QDCOUNT ≠ 1 (RFC 2181 §5.1) | **Not implemented** | Multi-question messages are not rejected; single-question check uses a truthy test only |
-
-#### Uncertainties
-
-- It is **uncertain** whether dnspython silently drops extra questions when parsing.  Verification is needed to understand what `query.question` actually contains for a QDCOUNT > 1 message.
+No remaining Level 1 gaps in RFC 2181 coverage.
 
 ---
 
@@ -212,8 +206,8 @@ RFC 2308 §5 defines the SOA minimum TTL field as the negative caching TTL; this
 2. **Validate and reject unsupported opcodes with NOTIMP.**
    After parsing, check `query.opcode()`.  If the opcode is not `dns.opcode.QUERY` (value 0), set the response rcode to `dns.rcode.NOTIMP` and return immediately.  *This is a mandatory RFC requirement.*
 
-3. **Validate QDCOUNT = 1 and return FORMERR if not.**
-   After parsing, check `len(query.question) != 1`.  If true, return `dns.rcode.FORMERR`.  This subsumes the current truthy check for `query.question`.  *See also RFC 2181 §5.1.*
+3. **~~Validate QDCOUNT = 1 and return FORMERR if not.~~** *(implemented)*
+   `len(query.question) == 1` check replaces the former truthy test.  Zero-question and multi-question messages both return FORMERR.  Verified: dnspython preserves all questions in `query.question` for QDCOUNT > 1 wire messages.  *See also RFC 2181 §5.1.*
 
 4. **Validate QCLASS = IN and return FORMERR (or REFUSED, project choice) if not.**
    After parsing, check `question.rdclass != dns.rdataclass.IN`.  Returning `dns.rcode.REFUSED` is an acceptable project choice for non-IN queries since the server only serves IN-class data; FORMERR is also permitted.  *Document whichever is chosen as a project decision.*
@@ -233,12 +227,8 @@ RFC 2308 §5 defines the SOA minimum TTL field as the negative caching TTL; this
 
 #### Changes required for Level 1 conformance
 
-1. **Enforce QDCOUNT = 1.**
-   As described in §4.2 item 3, add a check for `len(query.question) != 1` and return FORMERR.  This directly implements RFC 2181 §5.1.
-
-#### Verification work for uncertainties
-
-- **Check dnspython's QDCOUNT parsing:** Confirm via a targeted test whether `query.question` is a list that can contain more than one entry for a QDCOUNT > 1 wire message, or whether dnspython normalises or rejects it during parsing.
+1. **~~Enforce QDCOUNT = 1.~~** *(implemented)*
+   `len(query.question) == 1` check in `dns_server_udp_handler.py` implements RFC 2181 §5.1.  Verified by `test_handle_query_without_question` and `test_handle_query_with_multiple_questions`.
 
 #### Broader changes (beyond Level 1)
 
@@ -280,17 +270,17 @@ RFC 7766 (DNS over TCP) was evaluated and excluded because Level 1 scope is UDP 
 
 ### Main current gaps identified
 
-1. ~~**REFUSED for out-of-zone queries**~~ — **fixed**: `dns_server_udp_handler.py:36` now returns REFUSED
-2. ~~**SOA in authority section**~~ — **fixed**: `_add_apex_soa_to_authority()` populates `response.authority` for NXDOMAIN and NODATA responses
-3. **NOTIMP for unsupported opcodes** — no opcode check at all (non-conformant with RFC 1035 §4.1.1)
-4. **QDCOUNT validation** — QDCOUNT ≠ 1 is not rejected (non-conformant with RFC 2181 §5.1)
+1. ~~**REFUSED for out-of-zone queries**~~ — **fixed**: `dns_server_udp_handler.py` returns REFUSED in the out-of-zone branch
+2. ~~**SOA in authority section**~~ — **fixed**: `_build_authority_with_apex_soa()` populates `response.authority` for NXDOMAIN and NODATA responses
+3. ~~**QDCOUNT validation**~~ — **fixed**: `len(query.question) == 1` check; QDCOUNT ≠ 1 returns FORMERR
+4. **NOTIMP for unsupported opcodes** — no opcode check at all (non-conformant with RFC 1035 §4.1.1)
 5. **QCLASS / IN validation** — non-IN class queries are not rejected
 6. **FORMERR on parse failure** — currently drops the connection with no response
 
 ### Main uncertainties
 
 - Whether dnspython's `from_wire()` internally rejects malformed messages (truncated headers, invalid labels) that would require FORMERR — *not verified; test coverage needed*
-- Whether `query.question` can contain more than one entry after `from_wire()` on a QDCOUNT > 1 wire message — *not verified; test coverage needed*
+- **Resolved:** `query.question` is confirmed to contain all questions for a QDCOUNT > 1 wire message; dnspython does not drop extra questions during parsing
 
 ### Ambiguities intentionally left open
 

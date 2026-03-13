@@ -109,7 +109,7 @@ class DnsServerUdpHandler(socketserver.BaseRequestHandler):
         response = dns.message.make_response(query)
         response.flags |= dns.flags.AA  # Authoritative Answer
 
-        if query.question:
+        if len(query.question) == 1:
             question = query.question[0]
             _update_response(
                 response,
@@ -119,7 +119,10 @@ class DnsServerUdpHandler(socketserver.BaseRequestHandler):
                 self.server.zone_origins,
             )
         else:
-            logging.warning("Received query without question section")
+            logging.warning(
+                "Received query with %d questions, expected exactly 1",
+                len(query.question),
+            )
             response.set_rcode(dns.rcode.FORMERR)
 
         # Send the response back to the client
