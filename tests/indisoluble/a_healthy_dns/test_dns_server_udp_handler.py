@@ -58,6 +58,25 @@ def mock_rdataset():
 
 
 @pytest.fixture
+def mock_soa_rdata():
+    mock_soa_rdata = MagicMock()
+    mock_soa_rdata.rdclass = dns.rdataclass.IN
+    mock_soa_rdata.rdtype = dns.rdatatype.SOA
+    return mock_soa_rdata
+
+
+@pytest.fixture
+def mock_soa_rdataset(mock_soa_rdata):
+    mock_soa_rdataset = MagicMock()
+    mock_soa_rdataset.rdclass = dns.rdataclass.IN
+    mock_soa_rdataset.rdtype = dns.rdatatype.SOA
+    mock_soa_rdataset.ttl = 300
+    mock_soa_rdataset.__iter__ = MagicMock(return_value=iter([mock_soa_rdata]))
+    return mock_soa_rdataset
+
+
+
+@pytest.fixture
 def mock_server(mock_zone, mock_zone_origins):
     server = MagicMock()
     server.zone = mock_zone
@@ -167,7 +186,7 @@ def test_update_response_with_absolute_name_outside_zone_origins(
 
 
 def test_update_response_domain_not_found(
-    mock_zone, mock_reader, dns_response, mock_zone_origins
+    mock_zone, mock_reader, dns_response, mock_zone_origins, mock_soa_rdataset
 ):
     # Setup
     query_name = dns.name.from_text("nonexistent", origin=mock_zone_origins.primary)
@@ -175,6 +194,7 @@ def test_update_response_domain_not_found(
 
     # Mock zone.reader.get_node to return None
     mock_reader.get_node.return_value = None
+    mock_reader.get.return_value = mock_soa_rdataset
 
     mock_zone.reader.return_value.__enter__.return_value = mock_reader
 
@@ -186,12 +206,17 @@ def test_update_response_domain_not_found(
     mock_reader.get_node.assert_called_once_with(
         query_name.relativize(mock_zone_origins.primary)
     )
+    mock_reader.get.assert_called_once_with(dns.name.empty, dns.rdatatype.SOA)
     assert dns_response.rcode() == dns.rcode.NXDOMAIN
     assert len(dns_response.answer) == 0
+    assert len(dns_response.authority) == 1
+    assert dns_response.authority[0].rdtype == dns.rdatatype.SOA
+    assert dns_response.authority[0].name == mock_zone_origins.primary
+    assert dns_response.authority[0].ttl == mock_soa_rdataset.ttl
 
 
 def test_update_response_record_type_not_found(
-    mock_zone, mock_reader, dns_response, mock_zone_origins
+    mock_zone, mock_reader, dns_response, mock_zone_origins, mock_soa_rdataset
 ):
     # Setup
     query_name = dns.name.from_text("test", origin=mock_zone_origins.primary)
@@ -202,6 +227,7 @@ def test_update_response_record_type_not_found(
     mock_node.get_rdataset.return_value = None
 
     mock_reader.get_node.return_value = mock_node
+    mock_reader.get.return_value = mock_soa_rdataset
 
     mock_zone.reader.return_value.__enter__.return_value = mock_reader
 
@@ -214,8 +240,13 @@ def test_update_response_record_type_not_found(
         query_name.relativize(mock_zone_origins.primary)
     )
     mock_node.get_rdataset.assert_called_once_with(mock_zone.rdclass, query_type)
+    mock_reader.get.assert_called_once_with(dns.name.empty, dns.rdatatype.SOA)
     assert dns_response.rcode() == dns.rcode.NOERROR
     assert len(dns_response.answer) == 0
+    assert len(dns_response.authority) == 1
+    assert dns_response.authority[0].rdtype == dns.rdatatype.SOA
+    assert dns_response.authority[0].name == mock_zone_origins.primary
+    assert dns_response.authority[0].ttl == mock_soa_rdataset.ttl
 
 
 @patch("indisoluble.a_healthy_dns.dns_server_udp_handler._update_response")

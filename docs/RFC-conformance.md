@@ -95,8 +95,8 @@ RFC 1034 establishes the conceptual model for authoritative DNS servers: a serve
 | Behaviour | Status | Notes |
 |---|---|---|
 | REFUSED for queries outside all served zones | **Implemented** | `indisoluble/a_healthy_dns/dns_server_udp_handler.py:36` returns `dns.rcode.REFUSED` when `zone_origins.relativize()` returns `None` |
-| SOA in authority for NXDOMAIN responses | **Not implemented** | The authority section is never populated; see also RFC 2308 §3 |
-| NODATA response includes SOA in authority | **Not implemented** | Authority section is empty on NOERROR/empty-answer responses; see also RFC 2308 §2.1 |
+| SOA in authority for NXDOMAIN responses | **Implemented** | `_add_apex_soa_to_authority()` appends the apex SOA to `response.authority` in the NXDOMAIN branch; see also RFC 2308 §3 |
+| NODATA response includes SOA in authority | **Implemented** | `_add_apex_soa_to_authority()` appends the apex SOA to `response.authority` in the NOERROR/empty-answer branch; see also RFC 2308 §2.1 |
 
 ---
 
@@ -174,8 +174,8 @@ RFC 2308 §5 defines the SOA minimum TTL field as the negative caching TTL; this
 
 | Behaviour | Status | Notes |
 |---|---|---|
-| SOA in authority section for NXDOMAIN (RFC 2308 §3) | **Not implemented** | Authority section is never populated in the current handler |
-| SOA in authority section for NODATA (RFC 2308 §2.1) | **Not implemented** | Authority section is never populated for empty-answer NOERROR responses |
+| SOA in authority section for NXDOMAIN (RFC 2308 §3) | **Implemented** | `_add_apex_soa_to_authority()` appends the apex SOA (`txn.get(dns.name.empty, dns.rdatatype.SOA)`) to `response.authority` |
+| SOA in authority section for NODATA (RFC 2308 §2.1) | **Implemented** | Same helper populates the authority section for empty-answer NOERROR responses |
 
 ---
 
@@ -190,11 +190,11 @@ RFC 2308 §5 defines the SOA minimum TTL field as the negative caching TTL; this
 1. **~~Fix REFUSED for out-of-zone queries.~~** *(implemented)*
    `indisoluble/a_healthy_dns/dns_server_udp_handler.py:36` now sets `dns.rcode.REFUSED` for out-of-zone queries.
 
-2. **Include apex SOA in the authority section for NXDOMAIN responses.**
-   When returning NXDOMAIN (in-zone owner absent), look up the apex SOA record from the current zone transaction and append it to `response.authority`.  The SOA must be retrieved from the zone under the `@` (apex) relative name.  *See also RFC 2308 §3.*
+2. **~~Include apex SOA in the authority section for NXDOMAIN responses.~~** *(implemented)*
+   `_add_apex_soa_to_authority()` retrieves the apex SOA via `txn.get(dns.name.empty, dns.rdatatype.SOA)` and appends it to `response.authority` in the NXDOMAIN branch.  *See also RFC 2308 §3.*
 
-3. **Include apex SOA in the authority section for NODATA responses.**
-   When returning NOERROR with an empty answer section (type not found), also append the apex SOA to `response.authority`.  *See also RFC 2308 §2.1.*
+3. **~~Include apex SOA in the authority section for NODATA responses.~~** *(implemented)*
+   Same helper populates the authority section for NOERROR with empty answer.  *See also RFC 2308 §2.1.*
 
 #### Broader changes (beyond Level 1)
 
@@ -250,10 +250,8 @@ RFC 2308 §5 defines the SOA minimum TTL field as the negative caching TTL; this
 
 #### Changes required for Level 1 conformance
 
-1. **Add apex SOA to authority section for NXDOMAIN and NODATA responses.**
-   This is the same change described in §4.1 items 2 and 3.  In `_update_response()`, after determining the response is negative (either rcode NXDOMAIN or NOERROR with no rdataset), retrieve the apex SOA from the zone transaction (`txn.get(dns.name.empty, dns.rdatatype.SOA)` or equivalent) and append a correctly constructed `dns.rrset.RRset` to `response.authority`.
-
-   This change satisfies both RFC 2308 §2.1 (NODATA) and RFC 2308 §3 (NXDOMAIN) simultaneously.  *This is a mandatory RFC requirement for negative caching to work correctly.*
+1. **~~Add apex SOA to authority section for NXDOMAIN and NODATA responses.~~** *(implemented)*
+   `_add_apex_soa_to_authority()` in `dns_server_udp_handler.py` retrieves the apex SOA from the zone transaction and appends it to `response.authority` for both NXDOMAIN and NOERROR/empty-answer responses.  This satisfies both RFC 2308 §2.1 (NODATA) and RFC 2308 §3 (NXDOMAIN).
 
 #### Broader changes (beyond Level 1)
 
@@ -283,7 +281,7 @@ RFC 7766 (DNS over TCP) was evaluated and excluded because Level 1 scope is UDP 
 ### Main current gaps identified
 
 1. ~~**REFUSED for out-of-zone queries**~~ — **fixed**: `dns_server_udp_handler.py:36` now returns REFUSED
-2. **SOA in authority section** — absent for all negative responses (NXDOMAIN and NODATA), violating RFC 2308 §2.1 and §3
+2. ~~**SOA in authority section**~~ — **fixed**: `_add_apex_soa_to_authority()` populates `response.authority` for NXDOMAIN and NODATA responses
 3. **NOTIMP for unsupported opcodes** — no opcode check at all (non-conformant with RFC 1035 §4.1.1)
 4. **QDCOUNT validation** — QDCOUNT ≠ 1 is not rejected (non-conformant with RFC 2181 §5.1)
 5. **QCLASS / IN validation** — non-IN class queries are not rejected

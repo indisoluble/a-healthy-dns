@@ -17,8 +17,24 @@ import dns.rcode
 import dns.rdatatype
 import dns.rrset
 import dns.versioned
+import dns.zone
 
 from indisoluble.a_healthy_dns.records.zone_origins import ZoneOrigins
+
+
+def _add_apex_soa_to_authority(
+    response: dns.message.Message,
+    zone: dns.versioned.Zone,
+    txn: dns.zone.Transaction,
+) -> None:
+    soa_rdataset = txn.get(dns.name.empty, dns.rdatatype.SOA)
+    if soa_rdataset is None:
+        return
+    soa_rrset = dns.rrset.RRset(zone.origin, soa_rdataset.rdclass, soa_rdataset.rdtype)
+    soa_rrset.ttl = soa_rdataset.ttl
+    for rdata in soa_rdataset:
+        soa_rrset.add(rdata)
+    response.authority.append(soa_rrset)
 
 
 def _update_response(
@@ -41,6 +57,7 @@ def _update_response(
         if not node:
             logging.warning("Received query for unknown subdomain: %s", query_name)
             response.set_rcode(dns.rcode.NXDOMAIN)
+            _add_apex_soa_to_authority(response, zone, txn)
             return
 
         rdataset = node.get_rdataset(zone.rdclass, query_type)
@@ -51,6 +68,7 @@ def _update_response(
                 dns.rdatatype.to_text(query_type),
             )
             response.set_rcode(dns.rcode.NOERROR)
+            _add_apex_soa_to_authority(response, zone, txn)
             return
 
         rrset = dns.rrset.RRset(query_name, rdataset.rdclass, rdataset.rdtype)
