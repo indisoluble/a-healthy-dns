@@ -144,7 +144,7 @@ jobs:
 
         assert_dns_status "www.test.other.com" "AAAA" "NOERROR"
         assert_dns_status "missing.test.other.com" "A" "NXDOMAIN"
-        assert_dns_status "www.not-configured.example.org" "A" "NXDOMAIN"
+        assert_dns_status "www.not-configured.example.org" "A" "REFUSED"
 
     - name: test docker-compose configuration
       run: |

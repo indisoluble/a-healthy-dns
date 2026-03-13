@@ -234,7 +234,7 @@ dig @localhost -p 53053 www.example.local +short
 
 1. **All IPs unhealthy** → NXDOMAIN (by design)
 2. **Subdomain not in configuration** → NXDOMAIN
-3. **Wrong zone queried** → NXDOMAIN
+3. **Wrong zone queried** → REFUSED
 
 #### Solutions
 
