@@ -338,7 +338,6 @@ def test_handle_query_with_invalid_question_count_returns_formerr(
 def test_handle_query_with_non_in_class_returns_refused(
     mock_update_response, dns_client_address, mock_server
 ):
-    # Query for an in-zone name but with class CH instead of IN
     query = dns.message.make_query(
         "test.example.com.", dns.rdatatype.A, rdclass=dns.rdataclass.CH
     )
