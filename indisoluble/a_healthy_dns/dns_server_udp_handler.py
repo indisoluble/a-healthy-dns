@@ -9,6 +9,8 @@ zone, and returns appropriate DNS responses with authoritative answers.
 import logging
 import socketserver
 
+from typing import List, Optional
+
 import dns.exception
 import dns.flags
 import dns.message
@@ -22,19 +24,18 @@ import dns.zone
 from indisoluble.a_healthy_dns.records.zone_origins import ZoneOrigins
 
 
-def _add_apex_soa_to_authority(
-    response: dns.message.Message,
+def _build_apex_soa_rrset(
     zone: dns.versioned.Zone,
     txn: dns.zone.Transaction,
-) -> None:
+) -> Optional[dns.rrset.RRset]:
     soa_rdataset = txn.get(dns.name.empty, dns.rdatatype.SOA)
     if soa_rdataset is None:
-        return
+        return None
     soa_rrset = dns.rrset.RRset(zone.origin, soa_rdataset.rdclass, soa_rdataset.rdtype)
     soa_rrset.ttl = soa_rdataset.ttl
     for rdata in soa_rdataset:
         soa_rrset.add(rdata)
-    response.authority.append(soa_rrset)
+    return soa_rrset
 
 
 def _update_response(
@@ -53,31 +54,39 @@ def _update_response(
         return
 
     with zone.reader() as txn:
+        rcode = dns.rcode.NOERROR
+        authority: List[dns.rrset.RRset] = []
+        answer: List[dns.rrset.RRset] = []
+
         node = txn.get_node(relative_name)
         if not node:
             logging.warning("Received query for unknown subdomain: %s", query_name)
-            response.set_rcode(dns.rcode.NXDOMAIN)
-            _add_apex_soa_to_authority(response, zone, txn)
-            return
+            rcode = dns.rcode.NXDOMAIN
+            soa_rrset = _build_apex_soa_rrset(zone, txn)
+            if soa_rrset is not None:
+                authority = [soa_rrset]
+        else:
+            rdataset = node.get_rdataset(zone.rdclass, query_type)
+            if not rdataset:
+                logging.debug(
+                    "Subdomain %s exists but has no %s records",
+                    query_name,
+                    dns.rdatatype.to_text(query_type),
+                )
+                soa_rrset = _build_apex_soa_rrset(zone, txn)
+                if soa_rrset is not None:
+                    authority = [soa_rrset]
+            else:
+                rrset = dns.rrset.RRset(query_name, rdataset.rdclass, rdataset.rdtype)
+                rrset.ttl = rdataset.ttl
+                for rdata in rdataset:
+                    rrset.add(rdata)
+                answer = [rrset]
+                logging.debug("Answered query for %s with %s", query_name, rrset)
 
-        rdataset = node.get_rdataset(zone.rdclass, query_type)
-        if not rdataset:
-            logging.debug(
-                "Subdomain %s exists but has no %s records",
-                query_name,
-                dns.rdatatype.to_text(query_type),
-            )
-            response.set_rcode(dns.rcode.NOERROR)
-            _add_apex_soa_to_authority(response, zone, txn)
-            return
-
-        rrset = dns.rrset.RRset(query_name, rdataset.rdclass, rdataset.rdtype)
-        rrset.ttl = rdataset.ttl
-        for rdata in rdataset:
-            rrset.add(rdata)
-
-        response.answer.append(rrset)
-        logging.debug("Answered query for %s with %s", query_name, rrset)
+    response.set_rcode(rcode)
+    response.authority.extend(authority)
+    response.answer.extend(answer)
 
 
 class DnsServerUdpHandler(socketserver.BaseRequestHandler):
