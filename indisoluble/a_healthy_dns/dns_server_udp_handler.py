@@ -15,6 +15,7 @@ import dns.exception
 import dns.flags
 import dns.message
 import dns.name
+import dns.opcode
 import dns.rcode
 import dns.rdataclass
 import dns.rdatatype
@@ -110,7 +111,13 @@ class DnsServerUdpHandler(socketserver.BaseRequestHandler):
         response = dns.message.make_response(query)
         response.flags |= dns.flags.AA  # Authoritative Answer
 
-        if len(query.question) == 1:
+        if query.opcode() != dns.opcode.QUERY:
+            logging.warning(
+                "Received query with unsupported opcode %s, expected QUERY",
+                dns.opcode.to_text(query.opcode()),
+            )
+            response.set_rcode(dns.rcode.NOTIMP)
+        elif len(query.question) == 1:
             question = query.question[0]
             if question.rdclass == dns.rdataclass.IN:
                 _update_response(

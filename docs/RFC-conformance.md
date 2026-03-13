@@ -113,8 +113,9 @@ RFC 1035 defines the DNS wire format: the message header structure (including th
 | Behaviour | Status | Notes |
 |---|---|---|
 | Wire parsing of incoming queries | **Implemented** | `dns.message.from_wire()` is used; `DNSException` is caught |
-| QDCOUNT validation (must be exactly 1) | **Implemented** | `len(query.question) == 1` check; zero or more-than-one questions returns `dns.rcode.FORMERR` (`indisoluble/a_healthy_dns/dns_server_udp_handler.py:112-123`).  Confirmed via test that dnspython preserves all questions for QDCOUNT > 1 wire messages |
-| QCLASS / IN class validation | **Implemented** | Handler checks `question.rdclass != dns.rdataclass.IN`; non-IN queries return `dns.rcode.REFUSED` (`indisoluble/a_healthy_dns/dns_server_udp_handler.py:115-121`).  Project decision: REFUSED (server only serves IN-class data) |
+| QDCOUNT validation (must be exactly 1) | **Implemented** | `len(query.question) == 1` check; zero or more-than-one questions returns `dns.rcode.FORMERR` (`indisoluble/a_healthy_dns/dns_server_udp_handler.py:120-141`).  Confirmed via test that dnspython preserves all questions for QDCOUNT > 1 wire messages |
+| QCLASS / IN class validation | **Implemented** | Handler checks `question.rdclass != dns.rdataclass.IN`; non-IN queries return `dns.rcode.REFUSED` (`indisoluble/a_healthy_dns/dns_server_udp_handler.py:122-128`).  Project decision: REFUSED (server only serves IN-class data) |
+| Opcode validation — NOTIMP for non-QUERY | **Implemented** | `query.opcode() != dns.opcode.QUERY` check returns `dns.rcode.NOTIMP` (`indisoluble/a_healthy_dns/dns_server_udp_handler.py:114-119`).  Tested with STATUS and NOTIFY opcodes.  Note: UPDATE opcode messages are rejected earlier by dnspython's wire parser as malformed |
 | Wire serialisation of responses | **Implemented** | `response.to_wire()` is called before sending |
 | A, SOA, NS record types in responses | **Implemented** | All three record types are populated by the zone updater |
 
@@ -122,8 +123,7 @@ RFC 1035 defines the DNS wire format: the message header structure (including th
 
 | Behaviour | Status | Notes |
 |---|---|---|
-| FORMERR when parse fails entirely | **Not implemented** | When `dns.message.from_wire()` raises `DNSException` the handler logs a warning and **returns without sending any response** (`indisoluble/a_healthy_dns/dns_server_udp_handler.py:73-75`).  RFC 1035 §4.1.1 expects a FORMERR response to be sent when possible |
-| NOTIMP for unsupported opcodes | **Not implemented** | The handler does not inspect `query.opcode()`.  A query with opcode IQUERY, STATUS, NOTIFY, or UPDATE is silently processed as a standard query |
+| FORMERR when parse fails entirely | **Not implemented** | When `dns.message.from_wire()` raises `DNSException` the handler logs a warning and **returns without sending any response** (`indisoluble/a_healthy_dns/dns_server_udp_handler.py:106-108`).  RFC 1035 §4.1.1 expects a FORMERR response to be sent when possible |
 
 #### Uncertainties
 
@@ -203,8 +203,8 @@ RFC 2308 §5 defines the SOA minimum TTL field as the negative caching TTL; this
 1. **Send FORMERR when wire parsing fails.**
    When `dns.message.from_wire()` raises `dns.exception.DNSException`, construct a minimal FORMERR response and send it back to the client rather than silently dropping the query.  *Note: constructing a valid response from a fully unparseable message is difficult; this may be limited to cases where the header is readable.  Whether dnspython exposes enough from a partial parse is an uncertainty that requires testing.*
 
-2. **Validate and reject unsupported opcodes with NOTIMP.**
-   After parsing, check `query.opcode()`.  If the opcode is not `dns.opcode.QUERY` (value 0), set the response rcode to `dns.rcode.NOTIMP` and return immediately.  *This is a mandatory RFC requirement.*
+2. **~~Validate and reject unsupported opcodes with NOTIMP.~~** *(implemented)*
+   `query.opcode() != dns.opcode.QUERY` check added; non-QUERY opcodes return `dns.rcode.NOTIMP` (`indisoluble/a_healthy_dns/dns_server_udp_handler.py:114-119`).  Tested with STATUS (opcode 2) and NOTIFY (opcode 4).  UPDATE messages (opcode 5) are already rejected by dnspython's wire parser before the check is reached.
 
 3. **~~Validate QDCOUNT = 1 and return FORMERR if not.~~** *(implemented)*
    `len(query.question) == 1` check replaces the former truthy test.  Zero-question and multi-question messages both return FORMERR.  Verified: dnspython preserves all questions in `query.question` for QDCOUNT > 1 wire messages.  *See also RFC 2181 §5.1.*
@@ -273,7 +273,7 @@ RFC 7766 (DNS over TCP) was evaluated and excluded because Level 1 scope is UDP 
 1. ~~**REFUSED for out-of-zone queries**~~ — **fixed**: `dns_server_udp_handler.py` returns REFUSED in the out-of-zone branch
 2. ~~**SOA in authority section**~~ — **fixed**: `_build_authority_with_apex_soa()` populates `response.authority` for NXDOMAIN and NODATA responses
 3. ~~**QDCOUNT validation**~~ — **fixed**: `len(query.question) == 1` check; QDCOUNT ≠ 1 returns FORMERR
-4. **NOTIMP for unsupported opcodes** — no opcode check at all (non-conformant with RFC 1035 §4.1.1)
+4. ~~**NOTIMP for unsupported opcodes**~~ — **fixed**: `query.opcode() != dns.opcode.QUERY` check; non-QUERY opcodes return NOTIMP (STATUS, NOTIFY tested; UPDATE rejected by wire parser)
 5. ~~**QCLASS / IN validation**~~ — **fixed**: `question.rdclass != dns.rdataclass.IN` check; non-IN queries return REFUSED (project decision)
 6. **FORMERR on parse failure** — currently drops the connection with no response
 

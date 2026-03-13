@@ -4,6 +4,7 @@ import dns.exception
 import dns.flags
 import dns.message
 import dns.name
+import dns.opcode
 import dns.rcode
 import dns.rdataclass
 import dns.rdatatype
@@ -354,3 +355,33 @@ def test_handle_query_with_non_in_class_returns_refused(
     assert response.rcode() == dns.rcode.REFUSED
     assert len(response.answer) == 0
     assert len(response.authority) == 0
+
+
+@patch("indisoluble.a_healthy_dns.dns_server_udp_handler._update_response")
+@pytest.mark.parametrize(
+    "opcode",
+    [
+        dns.opcode.STATUS,
+        dns.opcode.NOTIFY,
+        # dns.opcode.UPDATE is excluded: dnspython rejects the wire format as
+        # malformed when opcode=UPDATE appears in a standard-query-shaped message,
+        # so the handler never reaches the opcode check for that case.
+    ],
+)
+def test_handle_query_with_unsupported_opcode_returns_notimp(
+    mock_update_response, opcode, dns_client_address, mock_server
+):
+    query = dns.message.make_query("test.example.com.", dns.rdatatype.A)
+    query.set_opcode(opcode)
+    mock_sock = MagicMock()
+    request = (query.to_wire(), mock_sock)
+
+    _ = DnsServerUdpHandler(request, dns_client_address, mock_server)
+
+    mock_update_response.assert_not_called()
+    mock_sock.sendto.assert_called_once()
+
+    sent_data = mock_sock.sendto.call_args[0][0]
+    response = dns.message.from_wire(sent_data)
+    assert response.rcode() == dns.rcode.NOTIMP
+    assert len(response.answer) == 0
