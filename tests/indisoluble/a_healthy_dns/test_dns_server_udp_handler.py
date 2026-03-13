@@ -26,7 +26,7 @@ def _make_multi_question_wire(*question_names):
         for question_name in question_names
     ]
     wire = bytearray(queries[0].to_wire())
-    wire[4:6] = len(queries).to_bytes(2)
+    wire[4:6] = len(queries).to_bytes(2, byteorder="big")
 
     for query in queries[1:]:
         wire.extend(query.to_wire()[12:])
