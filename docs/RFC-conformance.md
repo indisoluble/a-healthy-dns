@@ -127,7 +127,7 @@ RFC 1035 defines the DNS wire format: the message header structure (including th
 
 #### Uncertainties
 
-- It is **uncertain** whether dnspython's `from_wire()` already rejects some malformed messages that would otherwise require FORMERR.  The project does not have tests that probe specific malformed inputs to verify the boundary.
+- ~~It is **uncertain** whether dnspython's `from_wire()` already rejects some malformed messages that would otherwise require FORMERR.  The project does not have tests that probe specific malformed inputs to verify the boundary.~~  **Resolved:** dnspython raises `dns.exception.DNSException` (via subclasses `ShortHeader`, `FormError`, or `BadPointer`) for all malformed inputs tested: empty bytes, truncated packets, header-only with a missing question section, self-referential compression pointers, and fully garbage payloads.  In all cases the handler's `except dns.exception.DNSException` branch fires and the packet is **dropped silently** — no response is sent.  See `test_handle_malformed_wire_input_drops_silently` in `tests/indisoluble/a_healthy_dns/test_dns_server_udp_handler.py`.
 
 ---
 
@@ -279,7 +279,7 @@ RFC 7766 (DNS over TCP) was evaluated and excluded because Level 1 scope is UDP 
 
 ### Main uncertainties
 
-- Whether dnspython's `from_wire()` internally rejects malformed messages (truncated headers, invalid labels) that would require FORMERR — *not verified; test coverage needed*
+- ~~Whether dnspython's `from_wire()` internally rejects malformed messages (truncated headers, invalid labels) that would require FORMERR — *not verified; test coverage needed*~~  **Resolved:** dnspython raises `DNSException` for all tested malformed inputs (empty, truncated, header-only, bad compression pointer, garbage bytes); the handler drops them all silently with no response sent.  Confirmed by `test_handle_malformed_wire_input_drops_silently`.
 - **Resolved:** `query.question` is confirmed to contain all questions for a QDCOUNT > 1 wire message; dnspython does not drop extra questions during parsing
 
 ### Ambiguities resolved

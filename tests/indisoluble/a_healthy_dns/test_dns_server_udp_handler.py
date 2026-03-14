@@ -334,6 +334,35 @@ def test_handle_exception_parsing_query(
     mock_sock.sendto.assert_not_called()
 
 
+# Wire bytes that dnspython rejects as malformed at parse time.
+# Each case raises dns.exception.DNSException; the handler silently drops
+# the packet and sends no response (RFC 1035 §4.1.1 gap — confirmed behavior).
+_MALFORMED_WIRE_CASES = [
+    # Too short to contain the 12-byte DNS header
+    b"",
+    b"\x00\x01\x00\x00",
+    # Valid 12-byte header claiming QDCOUNT=1 but question section missing
+    b"\x12\x34\x01\x00\x00\x01\x00\x00\x00\x00\x00\x00",
+    # Self-referential compression pointer (offset 12 points to itself)
+    b"\x12\x34\x01\x00\x00\x01\x00\x00\x00\x00\x00\x00\xc0\x0c\x00\x01\x00\x01",
+    # Garbage bytes that do not form a valid DNS message
+    bytes(range(32)),
+]
+
+
+@pytest.mark.parametrize("wire_data", _MALFORMED_WIRE_CASES)
+def test_handle_malformed_wire_input_drops_silently(
+    wire_data, dns_client_address, mock_server
+):
+    mock_sock = MagicMock()
+    request = (wire_data, mock_sock)
+
+    _ = DnsServerUdpHandler(request, dns_client_address, mock_server)
+
+    # Current behavior: handler drops the packet silently — no response is sent.
+    mock_sock.sendto.assert_not_called()
+
+
 @patch("indisoluble.a_healthy_dns.dns_server_udp_handler._update_response")
 @pytest.mark.parametrize(
     "query_data",
