@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # validate-level1.sh — curated Level 1 DNS validation queries
 #
-# Sends the four canonical dig queries that cover all Level 1 response classes
-# documented in docs/RFC-conformance.md §1 and docs/manual-validation.md.
+# Sends the four curated dig queries for manual smoke-validation of the primary
+# Level 1 response scenarios documented in docs/manual-validation.md.
 #
 # Usage:
 #   ./scripts/validate-level1.sh [HOST] [PORT] [ZONE] [SUBDOMAIN]

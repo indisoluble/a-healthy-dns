@@ -14,15 +14,19 @@ All queries are sent as actual UDP datagrams; all assertions operate on the
 parsed wire-level response.
 
 **What this suite covers:**
-- RFC-conformant response shapes for all Level 1 response categories
-  (NOERROR, NXDOMAIN, NODATA, REFUSED, NOTIMP, FORMERR) as documented in
-  docs/RFC-conformance.md
+- RFC-conformant response shapes for the authoritative UDP serving path:
+  positive A/SOA/NS responses (NOERROR), NXDOMAIN, NODATA, out-of-zone
+  and non-IN-class REFUSED, NOTIMP, and FORMERR (QDCOUNT != 1), as
+  documented in docs/RFC-conformance.md
 - Response header fields (QR, ID, AA, RA, TC)
 - Answer / authority / additional section shapes
-- Rejection of malformed wire input (silent drop)
 - Real wire-level QDCOUNT != 1 (zero-question and multi-question FORMERR)
 
 **What this suite does NOT cover:**
+- Malformed wire input (truncated packets, garbage bytes).  That path is
+  exercised by the unit tests in
+  ``tests/indisoluble/a_healthy_dns/test_dns_server_udp_handler.py``
+  (``test_handle_malformed_wire_input_drops_silently``).
 - The health-check lifecycle (periodic TCP probes, dynamic A-record
   addition/removal when backends go up or down).  That behaviour is
   exercised by the Docker end-to-end tests in

@@ -75,7 +75,6 @@ jobs:
         DNS_HOST="127.0.0.1"
         DNS_PORT="53053"
         BACKEND_IP="172.28.0.10"
-        EXPECTED_NS="ns1.test.example.com."
 
         wait_for_a_record() {
           local fqdn="$1"
@@ -95,31 +94,11 @@ jobs:
           return 1
         }
 
-        assert_ns_record() {
-          local zone="$1"
-          local ns_answer
-
-          ns_answer="$(dig +short +time=1 +tries=1 @"${DNS_HOST}" -p "${DNS_PORT}" "${zone}" NS)"
-          printf '%s\n' "${ns_answer}" | grep -qx "${EXPECTED_NS}" || {
-            echo "[FAIL] NS ${zone}"
-            printf '%s\n' "${ns_answer}"
-            exit 1
-          }
-          echo "[OK] NS ${zone}"
-        }
-
         for fqdn in \
           "www.test.example.com" \
           "www.test.other.com" \
           "www.test.another.com"; do
           wait_for_a_record "${fqdn}"
-        done
-
-        for zone in \
-          "test.example.com" \
-          "test.other.com" \
-          "test.another.com"; do
-          assert_ns_record "${zone}"
         done
 
     - name: test health-check-driven dns state transitions
