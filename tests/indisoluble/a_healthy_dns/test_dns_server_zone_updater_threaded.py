@@ -14,8 +14,8 @@ from indisoluble.a_healthy_dns.dns_server_zone_updater import (
     DELTA_PER_RECORD_MANAGEMENT,
     DnsServerZoneUpdater,
 )
-from indisoluble.a_healthy_dns.dns_server_zone_updater_threated import (
-    DnsServerZoneUpdaterThreated,
+from indisoluble.a_healthy_dns.dns_server_zone_updater_threaded import (
+    DnsServerZoneUpdaterThreaded,
 )
 from indisoluble.a_healthy_dns.records.a_healthy_ip import AHealthyIp
 from indisoluble.a_healthy_dns.records.a_healthy_record import AHealthyRecord
@@ -73,7 +73,7 @@ def mock_thread():
 
 @patch("threading.Event")
 @patch(
-    "indisoluble.a_healthy_dns.dns_server_zone_updater_threated.DnsServerZoneUpdater"
+    "indisoluble.a_healthy_dns.dns_server_zone_updater_threaded.DnsServerZoneUpdater"
 )
 def test_init_success(
     mock_updater_class, mock_event_class, mock_updater, mock_event, mock_config
@@ -85,7 +85,7 @@ def test_init_success(
     connection_timeout = 10
 
     assert (
-        DnsServerZoneUpdaterThreated(min_interval, connection_timeout, mock_config)
+        DnsServerZoneUpdaterThreaded(min_interval, connection_timeout, mock_config)
         is not None
     )
 
@@ -97,7 +97,7 @@ def test_init_success(
 
 @patch("threading.Event")
 @patch(
-    "indisoluble.a_healthy_dns.dns_server_zone_updater_threated.DnsServerZoneUpdater"
+    "indisoluble.a_healthy_dns.dns_server_zone_updater_threaded.DnsServerZoneUpdater"
 )
 def test_init_failure_raises_value_error(
     mock_updater_class, mock_event_class, mock_config
@@ -107,14 +107,14 @@ def test_init_failure_raises_value_error(
     with pytest.raises(
         ValueError, match="Failed to initialize updater: Initialization failed"
     ):
-        DnsServerZoneUpdaterThreated(5, 10, mock_config)
+        DnsServerZoneUpdaterThreaded(5, 10, mock_config)
 
     mock_event_class.assert_not_called()
 
 
 @patch("threading.Event")
 @patch(
-    "indisoluble.a_healthy_dns.dns_server_zone_updater_threated.DnsServerZoneUpdater"
+    "indisoluble.a_healthy_dns.dns_server_zone_updater_threaded.DnsServerZoneUpdater"
 )
 def test_zone_property(
     mock_updater_class,
@@ -127,13 +127,13 @@ def test_zone_property(
     mock_updater_class.return_value = mock_updater
     mock_event_class.return_value = mock_event
 
-    assert DnsServerZoneUpdaterThreated(5, 10, mock_config).zone == mock_zone
+    assert DnsServerZoneUpdaterThreaded(5, 10, mock_config).zone == mock_zone
 
 
 @patch("threading.Thread")
 @patch("threading.Event")
 @patch(
-    "indisoluble.a_healthy_dns.dns_server_zone_updater_threated.DnsServerZoneUpdater"
+    "indisoluble.a_healthy_dns.dns_server_zone_updater_threaded.DnsServerZoneUpdater"
 )
 def test_start_success(
     mock_updater_class,
@@ -146,7 +146,7 @@ def test_start_success(
 ):
     mock_updater_class.return_value = mock_updater
     mock_event_class.return_value = mock_event
-    updater = DnsServerZoneUpdaterThreated(5, 10, mock_config)
+    updater = DnsServerZoneUpdaterThreaded(5, 10, mock_config)
 
     mock_thread_class.return_value = mock_thread
 
@@ -164,7 +164,7 @@ def test_start_success(
 @patch("threading.Thread")
 @patch("threading.Event")
 @patch(
-    "indisoluble.a_healthy_dns.dns_server_zone_updater_threated.DnsServerZoneUpdater"
+    "indisoluble.a_healthy_dns.dns_server_zone_updater_threaded.DnsServerZoneUpdater"
 )
 def test_start_already_running(
     mock_updater_class,
@@ -177,7 +177,7 @@ def test_start_already_running(
 ):
     mock_updater_class.return_value = mock_updater
     mock_event_class.return_value = mock_event
-    updater = DnsServerZoneUpdaterThreated(5, 10, mock_config)
+    updater = DnsServerZoneUpdaterThreaded(5, 10, mock_config)
 
     mock_thread_class.return_value = mock_thread
     mock_thread.is_alive.return_value = True
@@ -200,14 +200,14 @@ def test_start_already_running(
 
 @patch("threading.Event")
 @patch(
-    "indisoluble.a_healthy_dns.dns_server_zone_updater_threated.DnsServerZoneUpdater"
+    "indisoluble.a_healthy_dns.dns_server_zone_updater_threaded.DnsServerZoneUpdater"
 )
 def test_stop_not_running(
     mock_updater_class, mock_event_class, mock_updater, mock_event, mock_config
 ):
     mock_updater_class.return_value = mock_updater
     mock_event_class.return_value = mock_event
-    updater = DnsServerZoneUpdaterThreated(5, 10, mock_config)
+    updater = DnsServerZoneUpdaterThreaded(5, 10, mock_config)
 
     assert updater.stop() is True
 
@@ -218,7 +218,7 @@ def test_stop_not_running(
 @patch("threading.Thread")
 @patch("threading.Event")
 @patch(
-    "indisoluble.a_healthy_dns.dns_server_zone_updater_threated.DnsServerZoneUpdater"
+    "indisoluble.a_healthy_dns.dns_server_zone_updater_threaded.DnsServerZoneUpdater"
 )
 def test_stop_with_different_join_result(
     mock_updater_class,
@@ -234,7 +234,7 @@ def test_stop_with_different_join_result(
     mock_event_class.return_value = mock_event
 
     connection_timeout = 10
-    updater = DnsServerZoneUpdaterThreated(5, connection_timeout, mock_config)
+    updater = DnsServerZoneUpdaterThreaded(5, connection_timeout, mock_config)
 
     mock_thread_class.return_value = mock_thread
 
@@ -258,7 +258,7 @@ def test_stop_with_different_join_result(
 @patch("time.time")
 @patch("threading.Event")
 @patch(
-    "indisoluble.a_healthy_dns.dns_server_zone_updater_threated.DnsServerZoneUpdater"
+    "indisoluble.a_healthy_dns.dns_server_zone_updater_threaded.DnsServerZoneUpdater"
 )
 def test_update_zone(
     mock_updater_class,
@@ -273,7 +273,7 @@ def test_update_zone(
     mock_updater_class.return_value = mock_updater
     mock_event_class.return_value = mock_event
 
-    updater = DnsServerZoneUpdaterThreated(min_interval, 10, mock_config)
+    updater = DnsServerZoneUpdaterThreaded(min_interval, 10, mock_config)
 
     update_count = 3
     is_set_results = [False] * update_count + [True]

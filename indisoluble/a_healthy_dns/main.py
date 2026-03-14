@@ -25,8 +25,8 @@ from indisoluble.a_healthy_dns.dns_server_config_factory import (
     make_config,
 )
 from indisoluble.a_healthy_dns.dns_server_udp_handler import DnsServerUdpHandler
-from indisoluble.a_healthy_dns.dns_server_zone_updater_threated import (
-    DnsServerZoneUpdaterThreated,
+from indisoluble.a_healthy_dns.dns_server_zone_updater_threaded import (
+    DnsServerZoneUpdaterThreaded,
 )
 
 
@@ -224,7 +224,7 @@ def _main(args: Dict[str, Any]):
         return
 
     # Start zone updater
-    zone_updater = DnsServerZoneUpdaterThreated(
+    zone_updater = DnsServerZoneUpdaterThreaded(
         args[_ARG_MIN_TEST_INTERVAL], args[_ARG_CONNECTION_TIMEOUT], config
     )
     zone_updater.start()
