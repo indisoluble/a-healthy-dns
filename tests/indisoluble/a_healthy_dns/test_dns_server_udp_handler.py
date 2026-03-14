@@ -145,6 +145,8 @@ def test_update_response_with_relative_name_found(
     assert dns_response.answer[0].rdtype == query_type
     assert dns_response.answer[0].ttl == mock_rdataset.ttl
     assert list(dns_response.answer[0]) == [mock_rdata]
+    assert len(dns_response.authority) == 0
+    assert len(dns_response.additional) == 0
 
 
 def test_update_response_with_absolute_name_found(
@@ -180,6 +182,8 @@ def test_update_response_with_absolute_name_found(
     assert dns_response.answer[0].rdtype == query_type
     assert dns_response.answer[0].ttl == mock_rdataset.ttl
     assert list(dns_response.answer[0]) == [mock_rdata]
+    assert len(dns_response.authority) == 0
+    assert len(dns_response.additional) == 0
 
 
 def test_update_response_with_absolute_name_outside_zone_origins(
@@ -198,6 +202,7 @@ def test_update_response_with_absolute_name_outside_zone_origins(
     assert dns_response.rcode() == dns.rcode.REFUSED
     assert len(dns_response.answer) == 0
     assert len(dns_response.authority) == 0
+    assert len(dns_response.additional) == 0
     # Header field assertions (RFC 1035 §4.1.1)
     assert bool(dns_response.flags & dns.flags.QR)
     assert dns_response.id == original_id
@@ -234,6 +239,7 @@ def test_update_response_domain_not_found(
     assert dns_response.authority[0].rdtype == dns.rdatatype.SOA
     assert dns_response.authority[0].name == mock_zone_origins.primary
     assert dns_response.authority[0].ttl == mock_soa_rdataset.ttl
+    assert len(dns_response.additional) == 0
     # Header field assertions (RFC 1035 §4.1.1)
     assert bool(dns_response.flags & dns.flags.QR)
     assert dns_response.id == original_id
@@ -273,6 +279,7 @@ def test_update_response_record_type_not_found(
     assert dns_response.authority[0].rdtype == dns.rdatatype.SOA
     assert dns_response.authority[0].name == mock_zone_origins.primary
     assert dns_response.authority[0].ttl == mock_soa_rdataset.ttl
+    assert len(dns_response.additional) == 0
 
 
 @patch("indisoluble.a_healthy_dns.dns_server_udp_handler._update_response")
@@ -371,6 +378,7 @@ def test_handle_query_with_non_in_class_returns_refused(
     assert response.rcode() == dns.rcode.REFUSED
     assert len(response.answer) == 0
     assert len(response.authority) == 0
+    assert len(response.additional) == 0
     # Header field assertions (RFC 1035 §4.1.1)
     assert bool(response.flags & dns.flags.QR)
     assert response.id == query.id
@@ -407,6 +415,8 @@ def test_handle_query_with_unsupported_opcode_returns_notimp(
     response = dns.message.from_wire(sent_data)
     assert response.rcode() == dns.rcode.NOTIMP
     assert len(response.answer) == 0
+    assert len(response.authority) == 0
+    assert len(response.additional) == 0
     # Header field assertions (RFC 1035 §4.1.1)
     assert bool(response.flags & dns.flags.QR)
     assert response.id == query.id
