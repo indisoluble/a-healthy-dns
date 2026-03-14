@@ -60,7 +60,6 @@ Requires Python 3.10+.
 | [docs/configuration-reference.md](docs/configuration-reference.md) | All CLI flags and Docker env vars with defaults and examples |
 | [docs/troubleshooting.md](docs/troubleshooting.md) | Common issues, debugging, and operational procedures |
 | [docs/RFC-conformance.md](docs/RFC-conformance.md) | RFC conformance target, current coverage status, and required changes for Level 1 authoritative UDP |
-| [docs/manual-validation.md](docs/manual-validation.md) | Manual wire-level validation guide using `dig` and `tcpdump` |
 | [docs/project-brief.md](docs/project-brief.md) | Goals, non-goals, constraints, requirements |
 | [docs/system-patterns.md](docs/system-patterns.md) | Architecture and design patterns |
 | [docs/project-rules.md](docs/project-rules.md) | Toolchain, QA commands, CI/CD workflow, naming conventions |
