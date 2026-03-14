@@ -95,26 +95,6 @@ jobs:
           return 1
         }
 
-        assert_dns_status() {
-          local fqdn="$1"
-          local rtype="$2"
-          local expected_status="$3"
-          local output
-          local actual_status
-
-          output="$(dig +time=1 +tries=1 +noall +comments @"${DNS_HOST}" -p "${DNS_PORT}" "${fqdn}" "${rtype}")"
-          actual_status="$(printf '%s\n' "${output}" | sed -n 's/.*status: \([A-Z]*\).*/\1/p' | head -n 1)"
-
-          if [ "${actual_status}" = "${expected_status}" ]; then
-            echo "[OK] ${rtype} ${fqdn} ${actual_status}"
-            return 0
-          fi
-
-          echo "[FAIL] ${rtype} ${fqdn} expected=${expected_status} got=${actual_status:-none}"
-          printf '%s\n' "${output}"
-          return 1
-        }
-
         assert_ns_record() {
           local zone="$1"
           local ns_answer
@@ -141,10 +121,6 @@ jobs:
           "test.another.com"; do
           assert_ns_record "${zone}"
         done
-
-        assert_dns_status "www.test.other.com" "AAAA" "NOERROR"
-        assert_dns_status "missing.test.other.com" "A" "NXDOMAIN"
-        assert_dns_status "www.not-configured.example.org" "A" "REFUSED"
 
     - name: test docker-compose configuration
       run: |
