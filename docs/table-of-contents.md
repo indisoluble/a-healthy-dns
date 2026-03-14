@@ -32,6 +32,7 @@ These documents must be read before proposing or applying changes to this reposi
 - [`docs/docker.md`](docker.md) — Docker deployment guide: image details, Docker Compose, deployment patterns, container management, security hardening, and orchestration
 - [`docs/troubleshooting.md`](troubleshooting.md) — Common issues, debugging, log interpretation, and operational procedures
 - [`docs/RFC-conformance.md`](RFC-conformance.md) — RFC conformance target, current coverage, and required changes for the Level 1 authoritative UDP subset
+- [`docs/manual-validation.md`](manual-validation.md) — Manual wire-level validation workflow: server startup, curated `dig` queries, packet capture, and what to inspect for each Level 1 response class
 
 ---
 
