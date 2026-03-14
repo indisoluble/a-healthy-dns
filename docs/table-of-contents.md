@@ -14,6 +14,7 @@ These documents must be read before proposing or applying changes to this reposi
 | [`docs/project-brief.md`](project-brief.md) | Goals, non-goals, constraints, and requirements |
 | [`docs/system-patterns.md`](system-patterns.md) | Architecture patterns and conventions |
 | [`docs/project-rules.md`](project-rules.md) | Language/tool specifics and QA commands |
+| [`docs/RFC-conformance.md`](RFC-conformance.md) | Level 1 authoritative UDP conformance target: scope, minimum RFC set, current coverage per RFC, and remaining gap |
 
 ---
 
