@@ -122,6 +122,64 @@ jobs:
           assert_ns_record "${zone}"
         done
 
+    - name: test health-check-driven dns state transitions
+      run: |
+        set -euo pipefail
+
+        DNS_HOST="127.0.0.1"
+        DNS_PORT="53053"
+        BACKEND_IP="172.28.0.10"
+        MAX_RETRIES=20
+
+        wait_for_a_record() {
+          local fqdn="$1"
+          local answer
+
+          for _ in $(seq 1 "${MAX_RETRIES}"); do
+            answer="$(dig +short +time=1 +tries=1 @"${DNS_HOST}" -p "${DNS_PORT}" "${fqdn}" A)"
+            printf '%s\n' "${answer}" | grep -qx "${BACKEND_IP}" && {
+              echo "[OK] A present: ${fqdn}"
+              return 0
+            }
+            sleep 1
+          done
+
+          echo "[FAIL] A never appeared: ${fqdn}"
+          dig +nocmd +noall +comments +answer @"${DNS_HOST}" -p "${DNS_PORT}" "${fqdn}" A || true
+          return 1
+        }
+
+        wait_for_a_record_gone() {
+          local fqdn="$1"
+          local answer
+
+          for _ in $(seq 1 "${MAX_RETRIES}"); do
+            answer="$(dig +short +time=1 +tries=1 @"${DNS_HOST}" -p "${DNS_PORT}" "${fqdn}" A)"
+            [ -z "${answer}" ] && {
+              echo "[OK] A removed: ${fqdn}"
+              return 0
+            }
+            sleep 1
+          done
+
+          echo "[FAIL] A still present after backend went down: ${fqdn}"
+          dig +nocmd +noall +comments +answer @"${DNS_HOST}" -p "${DNS_PORT}" "${fqdn}" A || true
+          return 1
+        }
+
+        FQDN="www.test.example.com"
+
+        # 1. Confirm A record is present with backend healthy
+        wait_for_a_record "${FQDN}"
+
+        # 2. Stop backend — health checks will fail; DNS must remove the A record
+        docker stop a-healthy-dns-backend
+        wait_for_a_record_gone "${FQDN}"
+
+        # 3. Restart backend — health checks will succeed; DNS must re-add the A record
+        docker start a-healthy-dns-backend
+        wait_for_a_record "${FQDN}"
+
     - name: test docker-compose configuration
       run: |
         # Test that docker-compose example file is valid

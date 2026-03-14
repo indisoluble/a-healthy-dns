@@ -97,6 +97,8 @@ pytest --cov=indisoluble.a_healthy_dns --cov-report=html
 
 ## 6. Test conventions
 
+### 6.1 Unit tests
+
 - **Framework:** `pytest` with standard fixtures and `unittest.mock`.
 - **Test file location:** must mirror the source path. Example: `indisoluble/a_healthy_dns/records/a_healthy_ip.py` → `tests/indisoluble/a_healthy_dns/records/test_a_healthy_ip.py`.
 - **Test file naming:** `test_<module_name>.py`.
@@ -104,6 +106,19 @@ pytest --cov=indisoluble.a_healthy_dns --cov-report=html
 - **No real time dependencies.** Mock `time.time`, `datetime.datetime.now`, or `uint32_current_time` as needed to keep tests deterministic.
 - **One assert per test when practical** (AGENTS.md §5.9).
 - **Coverage exclusions** (`.coveragerc`) include: `__repr__`, `raise NotImplementedError`, `if __name__ == '__main__'`, `pass`, and `pragma: no cover` markers.
+
+### 6.2 Component integration tests
+
+Component integration tests exercise a production component end-to-end over real I/O (e.g. real UDP sockets), but with pre-populated in-memory state rather than the live health-check lifecycle.
+
+- **Test file location:** same directory as the corresponding unit tests, mirroring the source tree.
+- **Test file naming:** `test_<scope>_integration.py` — the `_integration` suffix distinguishes them from unit tests. Example: `tests/indisoluble/a_healthy_dns/test_dns_server_udp_integration.py`.
+- **No real health-check lifecycle.** Zone state is pre-populated via `DnsServerZoneUpdater.update(check_ips=False)`. Tests that verify dynamic A-record changes driven by TCP health checks belong in `test-docker.yml`.
+- **One assert per test when practical** (same as unit tests).
+
+### 6.3 Docker end-to-end tests
+
+Docker end-to-end tests validate the fully packaged application, including health-check-driven DNS state transitions. They live in `.github/workflows/test-docker.yml` and use an isolated Docker network with a real nginx backend. See §7 below.
 
 ---
 
@@ -113,8 +128,8 @@ All workflows target the `master` branch.
 
 | Workflow | File | Trigger | Purpose |
 |---|---|---|---|
-| `test python code` | `test-py-code.yml` | push/PR → master | Runs pytest with coverage, uploads to Codecov |
-| `test docker` | `test-docker.yml` | push/PR → master | Builds Docker image, runs end-to-end DNS resolution tests |
+| `test python code` | `test-py-code.yml` | push/PR → master | Runs pytest (unit + component integration tests) with coverage, uploads to Codecov |
+| `test docker` | `test-docker.yml` | push/PR → master | Builds Docker image; runs end-to-end tests including health-check-driven DNS state transitions |
 | `test version` | `test-version.yml` | push/PR → master | Verifies version in `setup.py` was increased |
 | `validate tests` | `validate-tests.yml` | after above three complete | Gate: all three must pass for the same commit |
 | `release version` | `release-version.yml` | after `validate tests` succeeds | Creates git tag + GitHub release from `setup.py` version |

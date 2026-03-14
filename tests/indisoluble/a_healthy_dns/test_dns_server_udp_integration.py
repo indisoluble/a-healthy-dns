@@ -1,15 +1,35 @@
 #!/usr/bin/env python3
 
-"""Wire-level integration tests for the Level 1 authoritative UDP DNS server.
+"""Component integration tests for the authoritative UDP serving layer.
 
-These tests start a real UDP server on localhost backed by a real in-memory
-zone, send actual UDP DNS queries, and assert wire-level responses according
-to docs/RFC-conformance.md.
+Scope
+-----
+These tests validate the **authoritative UDP server component** end-to-end:
 
-They exercise the complete request/response path:
-  dns.message.from_wire() → DnsServerUdpHandler → DnsServerZoneUpdater zone
-and complement the mocked unit tests in
-  tests/indisoluble/a_healthy_dns/test_dns_server_udp_handler.py
+  dns.message.from_wire()  →  DnsServerUdpHandler  →  DnsServerZoneUpdater zone
+
+A real UDP server is started on localhost with a real in-memory zone whose
+state is pre-populated via ``DnsServerZoneUpdater.update(check_ips=False)``.
+All queries are sent as actual UDP datagrams; all assertions operate on the
+parsed wire-level response.
+
+**What this suite covers:**
+- RFC-conformant response shapes for all Level 1 response categories
+  (NOERROR, NXDOMAIN, NODATA, REFUSED, NOTIMP, FORMERR) as documented in
+  docs/RFC-conformance.md
+- Response header fields (QR, ID, AA, RA, TC)
+- Answer / authority / additional section shapes
+- Rejection of malformed wire input (silent drop)
+
+**What this suite does NOT cover:**
+- The health-check lifecycle (periodic TCP probes, dynamic A-record
+  addition/removal when backends go up or down).  That behaviour is
+  exercised by the Docker end-to-end tests in
+  ``.github/workflows/test-docker.yml``.
+- Container startup, Docker networking, or alias zone routing.
+
+These tests complement the mocked unit tests in
+``tests/indisoluble/a_healthy_dns/test_dns_server_udp_handler.py``.
 """
 
 import socket
@@ -48,6 +68,10 @@ _ZONE_FQDN = f"{_ZONE}."
 _SUBDOMAIN_FQDN = f"{_SUBDOMAIN}.{_ZONE}."
 _ABSENT_FQDN = f"{_ABSENT_SUBDOMAIN}.{_ZONE}."
 _OUT_OF_ZONE_FQDN = "www.unrelated.test."
+
+# Pause after server.serve_forever() starts before sending queries.
+# 50 ms is well above any observable startup latency on CI runners.
+_SERVER_READY_WAIT = 0.05
 
 
 # ---------------------------------------------------------------------------
@@ -121,8 +145,6 @@ def live_server():
     thread.start()
 
     # Pause long enough for serve_forever() to enter its select loop.
-    # 50 ms is well above any observable startup latency on CI runners.
-    _SERVER_READY_WAIT = 0.05
     time.sleep(_SERVER_READY_WAIT)
 
     host, port = server.server_address
