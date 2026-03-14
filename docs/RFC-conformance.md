@@ -148,13 +148,11 @@ No remaining Level 1 gaps in RFC 2308 coverage.
 
 ---
 
-## 4. Remaining gap
+## 4. Out of scope for Level 1
 
-All Level 1 behaviours are now implemented and covered by automated tests (unit tests in `tests/indisoluble/a_healthy_dns/test_dns_server_udp_handler.py` and component integration tests in `tests/indisoluble/a_healthy_dns/test_dns_server_udp_integration.py`).
+All Level 1 behaviours are implemented and covered by automated tests (unit tests in `tests/indisoluble/a_healthy_dns/test_dns_server_udp_handler.py` and component integration tests in `tests/indisoluble/a_healthy_dns/test_dns_server_udp_integration.py`).
 
-### Out of scope for Level 1
-
-The following are explicitly not part of Level 1 scope:
+The following broader-than-Level-1 behaviours are explicitly outside the current scope:
 
 - Additional out-of-zone handling such as referrals to delegated zones
 - Full EDNS(0) handling (OPT pseudo-RR)

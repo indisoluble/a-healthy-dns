@@ -59,7 +59,7 @@ Requires Python 3.10+.
 | [docs/docker.md](docs/docker.md) | Docker deployment: image details, Compose, deployment patterns, container management, security, and orchestration |
 | [docs/configuration-reference.md](docs/configuration-reference.md) | All CLI flags and Docker env vars with defaults and examples |
 | [docs/troubleshooting.md](docs/troubleshooting.md) | Common issues, debugging, and operational procedures |
-| [docs/RFC-conformance.md](docs/RFC-conformance.md) | RFC conformance reference: Level 1 authoritative UDP scope, minimum RFC set, current coverage per RFC, and remaining gap |
+| [docs/RFC-conformance.md](docs/RFC-conformance.md) | RFC conformance reference: Level 1 authoritative UDP scope, minimum RFC set, current coverage per RFC, and broader-than-Level-1 scope limits |
 | [docs/project-brief.md](docs/project-brief.md) | Goals, non-goals, constraints, requirements |
 | [docs/system-patterns.md](docs/system-patterns.md) | Architecture and design patterns |
 | [docs/project-rules.md](docs/project-rules.md) | Toolchain, QA commands, CI/CD workflow, naming conventions |
