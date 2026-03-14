@@ -188,6 +188,7 @@ def test_update_response_with_absolute_name_outside_zone_origins(
     # Setup
     query_name = dns.name.from_text("test", origin=dns.name.from_text("other.com"))
     query_type = dns.rdatatype.A
+    original_id = dns_response.id
 
     # Call function
     _update_response(dns_response, query_name, query_type, mock_zone, mock_zone_origins)
@@ -197,6 +198,11 @@ def test_update_response_with_absolute_name_outside_zone_origins(
     assert dns_response.rcode() == dns.rcode.REFUSED
     assert len(dns_response.answer) == 0
     assert len(dns_response.authority) == 0
+    # Header field assertions (RFC 1035 §4.1.1)
+    assert bool(dns_response.flags & dns.flags.QR)
+    assert dns_response.id == original_id
+    assert not bool(dns_response.flags & dns.flags.RA)
+    assert not bool(dns_response.flags & dns.flags.TC)
 
 
 def test_update_response_domain_not_found(
@@ -205,6 +211,7 @@ def test_update_response_domain_not_found(
     # Setup
     query_name = dns.name.from_text("nonexistent", origin=mock_zone_origins.primary)
     query_type = dns.rdatatype.A
+    original_id = dns_response.id
 
     # Mock zone.reader.get_node to return None
     mock_reader.get_node.return_value = None
@@ -227,6 +234,11 @@ def test_update_response_domain_not_found(
     assert dns_response.authority[0].rdtype == dns.rdatatype.SOA
     assert dns_response.authority[0].name == mock_zone_origins.primary
     assert dns_response.authority[0].ttl == mock_soa_rdataset.ttl
+    # Header field assertions (RFC 1035 §4.1.1)
+    assert bool(dns_response.flags & dns.flags.QR)
+    assert dns_response.id == original_id
+    assert not bool(dns_response.flags & dns.flags.RA)
+    assert not bool(dns_response.flags & dns.flags.TC)
 
 
 def test_update_response_record_type_not_found(
@@ -286,10 +298,14 @@ def test_handle_valid_query(
     mock_sock = dns_request[1]
     mock_sock.sendto.assert_called_once()
 
-    # Verify AA flag is set in the response
+    # Verify response header fields (RFC 1035 §4.1.1)
     sent_data = mock_sock.sendto.call_args[0][0]
     response = dns.message.from_wire(sent_data)
-    assert response.flags & dns.flags.AA
+    assert bool(response.flags & dns.flags.QR)
+    assert response.id == query.id
+    assert not bool(response.flags & dns.flags.RA)
+    assert not bool(response.flags & dns.flags.TC)
+    assert bool(response.flags & dns.flags.AA)
 
 
 @patch("dns.message.from_wire")
@@ -355,6 +371,12 @@ def test_handle_query_with_non_in_class_returns_refused(
     assert response.rcode() == dns.rcode.REFUSED
     assert len(response.answer) == 0
     assert len(response.authority) == 0
+    # Header field assertions (RFC 1035 §4.1.1)
+    assert bool(response.flags & dns.flags.QR)
+    assert response.id == query.id
+    assert not bool(response.flags & dns.flags.RA)
+    assert not bool(response.flags & dns.flags.TC)
+    assert bool(response.flags & dns.flags.AA)
 
 
 @patch("indisoluble.a_healthy_dns.dns_server_udp_handler._update_response")
@@ -385,3 +407,9 @@ def test_handle_query_with_unsupported_opcode_returns_notimp(
     response = dns.message.from_wire(sent_data)
     assert response.rcode() == dns.rcode.NOTIMP
     assert len(response.answer) == 0
+    # Header field assertions (RFC 1035 §4.1.1)
+    assert bool(response.flags & dns.flags.QR)
+    assert response.id == query.id
+    assert not bool(response.flags & dns.flags.RA)
+    assert not bool(response.flags & dns.flags.TC)
+    assert bool(response.flags & dns.flags.AA)
