@@ -70,9 +70,9 @@ The table below identifies the smallest set of RFCs whose requirements must be m
 
 ---
 
-## 3. Current coverage of each RFC
+## 3. Current coverage
 
-The assessments below are based on the source file `indisoluble/a_healthy_dns/dns_server_udp_handler.py` and supporting modules.  Where the repository does not clearly demonstrate a behaviour the assessment is marked **uncertain**.
+The assessments below reflect the current implementation in `indisoluble/a_healthy_dns/dns_server_udp_handler.py` and supporting modules.  All Level 1 behaviours are implemented except where noted in [§4](#4-remaining-gap).
 
 ---
 
@@ -80,23 +80,16 @@ The assessments below are based on the source file `indisoluble/a_healthy_dns/dn
 
 RFC 1034 establishes the conceptual model for authoritative DNS servers: a server is authoritative for one or more zones, answers queries about names in those zones with the AA flag set, and uses defined response codes for names that are absent or that fall outside its zones.
 
-**RFC 1034 §6.2** — https://www.rfc-editor.org/rfc/rfc1034 describes the algorithm an authoritative server uses to process a query.
-
-#### Currently covered
+RFC 1034 §6.2 — https://www.rfc-editor.org/rfc/rfc1034 describes the algorithm an authoritative server uses to process a query.
 
 | Behaviour | Status | Notes |
 |---|---|---|
-| Authoritative Answer (AA) flag set on all responses | **Implemented** | `indisoluble/a_healthy_dns/dns_server_udp_handler.py:79` sets `dns.flags.AA` on every response |
-| NXDOMAIN when owner name is absent from an in-zone query | **Implemented** | Handler returns `dns.rcode.NXDOMAIN` when `txn.get_node(relative_name)` returns nothing |
-| NOERROR when owner name exists and records are found | **Implemented** | Handler adds matching RRset to the answer section and returns NOERROR implicitly |
-
-#### Current gaps
-
-| Behaviour | Status | Notes |
-|---|---|---|
-| REFUSED for queries outside all served zones | **Implemented** | `indisoluble/a_healthy_dns/dns_server_udp_handler.py:36` returns `dns.rcode.REFUSED` when `zone_origins.relativize()` returns `None` |
-| SOA in authority for NXDOMAIN responses | **Implemented** | `_add_apex_soa_to_authority()` appends the apex SOA to `response.authority` in the NXDOMAIN branch; see also RFC 2308 §3 |
-| NODATA response includes SOA in authority | **Implemented** | `_add_apex_soa_to_authority()` appends the apex SOA to `response.authority` in the NOERROR/empty-answer branch; see also RFC 2308 §2.1 |
+| Authoritative Answer (AA) flag set on all responses | **Implemented** | `indisoluble/a_healthy_dns/dns_server_udp_handler.py:112` sets `dns.flags.AA` on every response |
+| REFUSED for queries outside all served zones | **Implemented** | `indisoluble/a_healthy_dns/dns_server_udp_handler.py:67` returns `dns.rcode.REFUSED` when the query name does not fall within any hosted or alias zone |
+| NXDOMAIN when owner name is absent from an in-zone query | **Implemented** | `indisoluble/a_healthy_dns/dns_server_udp_handler.py:90` returns `dns.rcode.NXDOMAIN` when `txn.get_node(relative_name)` returns nothing |
+| NOERROR when owner name exists and matching records are found | **Implemented** | Handler adds the matching RRset to the answer section |
+| SOA in authority for NXDOMAIN responses (RFC 2308 §3) | **Implemented** | `_build_authority_with_apex_soa()` appends the apex SOA to `response.authority` in the NXDOMAIN branch (`indisoluble/a_healthy_dns/dns_server_udp_handler.py:91`) |
+| SOA in authority for NODATA responses (RFC 2308 §2.1) | **Implemented** | Same helper populates the authority section for NOERROR/empty-answer responses (`indisoluble/a_healthy_dns/dns_server_udp_handler.py:87`) |
 
 ---
 
@@ -108,26 +101,17 @@ RFC 1035 defines the DNS wire format: the message header structure (including th
 - RFC 1035 §4.1.2 defines the question section format
 - RFC 1035 §4.1.3 defines answer, authority, and additional section formats
 
-#### Currently covered
-
 | Behaviour | Status | Notes |
 |---|---|---|
-| Wire parsing of incoming queries | **Implemented** | `dns.message.from_wire()` is used; `DNSException` is caught |
-| QDCOUNT validation (must be exactly 1) | **Implemented** | `len(query.question) == 1` check; zero or more-than-one questions returns `dns.rcode.FORMERR` (`indisoluble/a_healthy_dns/dns_server_udp_handler.py:120-141`).  Confirmed via test that dnspython preserves all questions for QDCOUNT > 1 wire messages |
-| QCLASS / IN class validation | **Implemented** | Handler checks `question.rdclass != dns.rdataclass.IN`; non-IN queries return `dns.rcode.REFUSED` (`indisoluble/a_healthy_dns/dns_server_udp_handler.py:122-128`).  Project decision: REFUSED (server only serves IN-class data) |
-| Opcode validation — NOTIMP for non-QUERY | **Implemented** | `query.opcode() != dns.opcode.QUERY` check returns `dns.rcode.NOTIMP` (`indisoluble/a_healthy_dns/dns_server_udp_handler.py:114-119`).  Tested with STATUS and NOTIFY opcodes.  Note: UPDATE opcode messages are rejected earlier by dnspython's wire parser as malformed |
-| Wire serialisation of responses | **Implemented** | `response.to_wire()` is called before sending |
+| Wire parsing of incoming queries | **Implemented** | `dns.message.from_wire()` is used; `dns.exception.DNSException` is caught |
+| FORMERR when wire parsing fails | **Not implemented** | When `dns.message.from_wire()` raises `DNSException` the handler logs a warning and returns without sending any response (`indisoluble/a_healthy_dns/dns_server_udp_handler.py:107-109`).  RFC 1035 §4.1.1 expects a FORMERR response to be sent when possible.  See §4. |
+| Opcode validation — NOTIMP for non-QUERY opcodes | **Implemented** | `indisoluble/a_healthy_dns/dns_server_udp_handler.py:114-119`: `query.opcode() != dns.opcode.QUERY` check returns `dns.rcode.NOTIMP`.  Tested with STATUS (opcode 2) and NOTIFY (opcode 4).  UPDATE messages (opcode 5) are rejected by dnspython's wire parser before this check is reached. |
+| QDCOUNT validation — FORMERR for ≠ 1 question | **Implemented** | `indisoluble/a_healthy_dns/dns_server_udp_handler.py:120-141`: `len(query.question) == 1` check; zero or more-than-one questions return `dns.rcode.FORMERR`.  Confirmed: dnspython preserves all questions for QDCOUNT > 1 wire messages.  See also RFC 2181 §5.1. |
+| QCLASS / IN class validation | **Implemented** | `indisoluble/a_healthy_dns/dns_server_udp_handler.py:122-135`: `question.rdclass != dns.rdataclass.IN` check; non-IN queries return `dns.rcode.REFUSED`.  Project decision: REFUSED because the server exclusively serves IN-class data. |
+| Wire serialisation of responses | **Implemented** | `response.to_wire()` is called before every `sendto()` |
 | A, SOA, NS record types in responses | **Implemented** | All three record types are populated by the zone updater |
 
-#### Current gaps
-
-| Behaviour | Status | Notes |
-|---|---|---|
-| FORMERR when parse fails entirely | **Not implemented** | When `dns.message.from_wire()` raises `DNSException` the handler logs a warning and **returns without sending any response** (`indisoluble/a_healthy_dns/dns_server_udp_handler.py:106-108`).  RFC 1035 §4.1.1 expects a FORMERR response to be sent when possible |
-
-#### Uncertainties
-
-- ~~It is **uncertain** whether dnspython's `from_wire()` already rejects some malformed messages that would otherwise require FORMERR.  The project does not have tests that probe specific malformed inputs to verify the boundary.~~  **Resolved:** dnspython raises `dns.exception.DNSException` (via subclasses `ShortHeader`, `FormError`, or `BadPointer`) for all malformed inputs tested: empty bytes, truncated packets, header-only with a missing question section, self-referential compression pointers, and fully garbage payloads.  In all cases the handler's `except dns.exception.DNSException` branch fires and the packet is **dropped silently** — no response is sent.  See `test_handle_malformed_wire_input_drops_silently` in `tests/indisoluble/a_healthy_dns/test_dns_server_udp_handler.py`.
+Note on malformed-wire inputs: dnspython raises `dns.exception.DNSException` (via subclasses `ShortHeader`, `FormError`, or `BadPointer`) for all tested malformed inputs — empty bytes, truncated packets, header-only with a missing question section, self-referential compression pointers, and fully garbage payloads.  In all cases the handler's `except dns.exception.DNSException` branch fires and the packet is dropped silently with no response sent.  This is confirmed by `test_handle_malformed_wire_input_drops_silently` in `tests/indisoluble/a_healthy_dns/test_dns_server_udp_handler.py`.
 
 ---
 
@@ -135,16 +119,12 @@ RFC 1035 defines the DNS wire format: the message header structure (including th
 
 RFC 2181 corrects and tightens several ambiguities in RFC 1035.  The requirement most relevant to Level 1 is found in §5.1: a DNS query must contain exactly one question; a server receiving a message with QDCOUNT ≠ 1 should return FORMERR — https://www.rfc-editor.org/rfc/rfc2181.
 
-RFC 2181 §4 also clarifies that the AA flag applies to the entire response when the server is authoritative, which this project already satisfies.
-
-#### Currently covered
+RFC 2181 §4 also clarifies that the AA flag applies to the entire response when the server is authoritative.
 
 | Behaviour | Status | Notes |
 |---|---|---|
-| AA flag set correctly | **Implemented** | Confirmed as noted under RFC 1034 above |
-| FORMERR for QDCOUNT ≠ 1 (RFC 2181 §5.1) | **Implemented** | `len(query.question) == 1` check in `indisoluble/a_healthy_dns/dns_server_udp_handler.py:112`.  Verified by test: dnspython preserves all questions for QDCOUNT > 1 wire messages, so the check is necessary and effective |
-
-#### Current gaps
+| AA flag set correctly | **Implemented** | `indisoluble/a_healthy_dns/dns_server_udp_handler.py:112` |
+| FORMERR for QDCOUNT ≠ 1 (RFC 2181 §5.1) | **Implemented** | `indisoluble/a_healthy_dns/dns_server_udp_handler.py:120-141`: `len(query.question) == 1` check.  Verified: dnspython preserves all questions for QDCOUNT > 1 wire messages; the check is necessary and effective. |
 
 No remaining Level 1 gaps in RFC 2181 coverage.
 
@@ -152,136 +132,40 @@ No remaining Level 1 gaps in RFC 2181 coverage.
 
 ### 3.4 RFC 2308 — Negative Caching of DNS Queries
 
-RFC 2308 defines how negative responses (NXDOMAIN and NODATA) must be structured so that resolvers can cache them correctly.  The core requirement is that both response types **must** include the zone's apex SOA record in the authority section — RFC 2308 §3 (NXDOMAIN) and RFC 2308 §2.1 (NODATA/NOERROR) — https://www.rfc-editor.org/rfc/rfc2308.
+RFC 2308 defines how negative responses (NXDOMAIN and NODATA) must be structured so that resolvers can cache them correctly.  Both response types must include the zone's apex SOA record in the authority section — RFC 2308 §3 (NXDOMAIN) and RFC 2308 §2.1 (NODATA/NOERROR) — https://www.rfc-editor.org/rfc/rfc2308.
 
 Without the SOA in the authority section, resolvers either cannot cache the negative result or cache it with an undefined TTL, leading to repeated unnecessary queries.
 
-RFC 2308 §5 defines the SOA minimum TTL field as the negative caching TTL; this project already populates `SOA MINIMUM` via `calculate_soa_min_ttl()` in `records/time.py`.
-
-#### Currently covered
+RFC 2308 §5 defines the SOA minimum TTL field as the negative caching TTL; this project populates `SOA MINIMUM` via `calculate_soa_min_ttl()` in `records/time.py`.
 
 | Behaviour | Status | Notes |
 |---|---|---|
-| SOA record with correct `MINIMUM` field exists in zone | **Implemented** | `soa_record.py` populates the minimum TTL field from `calculate_soa_min_ttl()` |
+| SOA record with correct `MINIMUM` field exists in zone | **Implemented** | `soa_record.py` populates the minimum TTL from `calculate_soa_min_ttl()` |
+| SOA in authority section for NXDOMAIN (RFC 2308 §3) | **Implemented** | `_build_authority_with_apex_soa()` at `indisoluble/a_healthy_dns/dns_server_udp_handler.py:29-41` retrieves the apex SOA via `txn.get(dns.name.empty, dns.rdatatype.SOA)` and appends it to `response.authority` |
+| SOA in authority section for NODATA (RFC 2308 §2.1) | **Implemented** | Same helper populates the authority section for NOERROR/empty-answer responses |
 
-#### Current gaps
-
-| Behaviour | Status | Notes |
-|---|---|---|
-| SOA in authority section for NXDOMAIN (RFC 2308 §3) | **Implemented** | `_add_apex_soa_to_authority()` appends the apex SOA (`txn.get(dns.name.empty, dns.rdatatype.SOA)`) to `response.authority` |
-| SOA in authority section for NODATA (RFC 2308 §2.1) | **Implemented** | Same helper populates the authority section for empty-answer NOERROR responses |
+No remaining Level 1 gaps in RFC 2308 coverage.
 
 ---
 
-## 4. For each RFC, required changes to fully cover it
+## 4. Remaining gap
 
----
+One Level 1 behaviour is not yet fully implemented:
 
-### 4.1 RFC 1034
+| Behaviour | RFC | Status | Notes |
+|---|---|---|---|
+| FORMERR when wire parsing fails | RFC 1035 §4.1.1 | **Not implemented** | When `dns.message.from_wire()` raises `dns.exception.DNSException` the handler logs a warning and returns without sending any response (`indisoluble/a_healthy_dns/dns_server_udp_handler.py:107-109`).  A conformant server should send a FORMERR response when the header is readable.  Constructing a valid FORMERR from a fully unparseable message is constrained by what dnspython exposes from a partial parse. |
 
-#### Changes required for Level 1 conformance
+All other Level 1 behaviours are implemented and covered by automated tests.
 
-1. **~~Fix REFUSED for out-of-zone queries.~~** *(implemented)*
-   `indisoluble/a_healthy_dns/dns_server_udp_handler.py:36` now sets `dns.rcode.REFUSED` for out-of-zone queries.
+### Out of scope for Level 1
 
-2. **~~Include apex SOA in the authority section for NXDOMAIN responses.~~** *(implemented)*
-   `_add_apex_soa_to_authority()` retrieves the apex SOA via `txn.get(dns.name.empty, dns.rdatatype.SOA)` and appends it to `response.authority` in the NXDOMAIN branch.  *See also RFC 2308 §3.*
+The following are explicitly not part of Level 1 scope:
 
-3. **~~Include apex SOA in the authority section for NODATA responses.~~** *(implemented)*
-   Same helper populates the authority section for NOERROR with empty answer.  *See also RFC 2308 §2.1.*
-
-#### Broader changes (beyond Level 1)
-
-- Additional out-of-zone handling (e.g. referrals to delegated zones) is not needed for Level 1 and would require redesigning the zone model.
-
----
-
-### 4.2 RFC 1035
-
-#### Changes required for Level 1 conformance
-
-1. **Send FORMERR when wire parsing fails.**
-   When `dns.message.from_wire()` raises `dns.exception.DNSException`, construct a minimal FORMERR response and send it back to the client rather than silently dropping the query.  *Note: constructing a valid response from a fully unparseable message is difficult; this may be limited to cases where the header is readable.  Whether dnspython exposes enough from a partial parse is an uncertainty that requires testing.*
-
-2. **~~Validate and reject unsupported opcodes with NOTIMP.~~** *(implemented)*
-   `query.opcode() != dns.opcode.QUERY` check added; non-QUERY opcodes return `dns.rcode.NOTIMP` (`indisoluble/a_healthy_dns/dns_server_udp_handler.py:114-119`).  Tested with STATUS (opcode 2) and NOTIFY (opcode 4).  UPDATE messages (opcode 5) are already rejected by dnspython's wire parser before the check is reached.
-
-3. **~~Validate QDCOUNT = 1 and return FORMERR if not.~~** *(implemented)*
-   `len(query.question) == 1` check replaces the former truthy test.  Zero-question and multi-question messages both return FORMERR.  Verified: dnspython preserves all questions in `query.question` for QDCOUNT > 1 wire messages.  *See also RFC 2181 §5.1.*
-
-4. **~~Validate QCLASS = IN and return REFUSED if not.~~** *(implemented — project decision: REFUSED)*
-   `question.rdclass != dns.rdataclass.IN` check added; non-IN queries return `dns.rcode.REFUSED` (`indisoluble/a_healthy_dns/dns_server_udp_handler.py:115-121`).  REFUSED was chosen because the server exclusively serves IN-class data and has no answer to return for any other class.
-
-#### Verification work for uncertainties
-
-- **Verify dnspython parse behaviour for malformed inputs:** Write tests that send messages with truncated headers, invalid label encodings, and QDCOUNT > 1, and observe what `from_wire()` returns or raises.  This will clarify whether the FORMERR-on-parse-failure path is already partially covered by the library.
-
-#### Broader changes (beyond Level 1)
-
-- Full EDNS(0) handling (OPT pseudo-RR) is beyond Level 1 scope.
-- Additional record types (AAAA, MX, TXT, etc.) are outside current scope.
-
----
-
-### 4.3 RFC 2181
-
-#### Changes required for Level 1 conformance
-
-1. **~~Enforce QDCOUNT = 1.~~** *(implemented)*
-   `len(query.question) == 1` check in `dns_server_udp_handler.py` implements RFC 2181 §5.1.  Verified by `test_handle_query_without_question` and `test_handle_query_with_multiple_questions`.
-
-#### Broader changes (beyond Level 1)
-
-- RFC 2181 §8 (class-in-data semantics) and §9 (TTL semantics) are informational for this scope; no implementation change is needed for Level 1.
-
----
-
-### 4.4 RFC 2308
-
-#### Changes required for Level 1 conformance
-
-1. **~~Add apex SOA to authority section for NXDOMAIN and NODATA responses.~~** *(implemented)*
-   `_add_apex_soa_to_authority()` in `dns_server_udp_handler.py` retrieves the apex SOA from the zone transaction and appends it to `response.authority` for both NXDOMAIN and NOERROR/empty-answer responses.  This satisfies both RFC 2308 §2.1 (NODATA) and RFC 2308 §3 (NXDOMAIN).
-
-#### Broader changes (beyond Level 1)
-
-- RFC 2308 §4 describes referral responses; not applicable for Level 1 since this server does not delegate sub-zones.
-- RFC 2308 §6 describes server-side negative caching; also not applicable since this server is authoritative and does not cache resolver results.
-
----
-
-## PR-style summary
-
-### Files changed
-
-| File | Change type |
-|---|---|
-| `docs/RFC-conformance.md` | New — this document |
-| `docs/table-of-contents.md` | Updated — added entry for this document |
-
-### Minimum RFC set selected
-
-- RFC 1034 — Domain Names: Concepts and Facilities
-- RFC 1035 — Domain Names: Implementation and Specification
-- RFC 2181 — Clarifications to the DNS Specification
-- RFC 2308 — Negative Caching of DNS Queries
-
-RFC 7766 (DNS over TCP) was evaluated and excluded because Level 1 scope is UDP only.
-
-### Main current gaps identified
-
-1. ~~**REFUSED for out-of-zone queries**~~ — **fixed**: `dns_server_udp_handler.py` returns REFUSED in the out-of-zone branch
-2. ~~**SOA in authority section**~~ — **fixed**: `_build_authority_with_apex_soa()` populates `response.authority` for NXDOMAIN and NODATA responses
-3. ~~**QDCOUNT validation**~~ — **fixed**: `len(query.question) == 1` check; QDCOUNT ≠ 1 returns FORMERR
-4. ~~**NOTIMP for unsupported opcodes**~~ — **fixed**: `query.opcode() != dns.opcode.QUERY` check; non-QUERY opcodes return NOTIMP (STATUS, NOTIFY tested; UPDATE rejected by wire parser)
-5. ~~**QCLASS / IN validation**~~ — **fixed**: `question.rdclass != dns.rdataclass.IN` check; non-IN queries return REFUSED (project decision)
-6. **FORMERR on parse failure** — currently drops the connection with no response
-
-### Main uncertainties
-
-- ~~Whether dnspython's `from_wire()` internally rejects malformed messages (truncated headers, invalid labels) that would require FORMERR — *not verified; test coverage needed*~~  **Resolved:** dnspython raises `DNSException` for all tested malformed inputs (empty, truncated, header-only, bad compression pointer, garbage bytes); the handler drops them all silently with no response sent.  Confirmed by `test_handle_malformed_wire_input_drops_silently`.
-- **Resolved:** `query.question` is confirmed to contain all questions for a QDCOUNT > 1 wire message; dnspython does not drop extra questions during parsing
-
-### Ambiguities resolved
-
-- Non-IN class queries return REFUSED (project decision: the server exclusively serves IN-class data).
+- Additional out-of-zone handling such as referrals to delegated zones
+- Full EDNS(0) handling (OPT pseudo-RR)
+- Additional record types (AAAA, MX, TXT, etc.)
+- RFC 2308 §4 referral responses — this server does not delegate sub-zones
+- RFC 2308 §6 server-side negative caching — this server is authoritative and does not cache resolver results
+- RFC 2181 §8 (class-in-data semantics) and §9 (TTL semantics) — informational for this scope
+- RFC 7766 (DNS over TCP) — Level 1 uses UDP only
