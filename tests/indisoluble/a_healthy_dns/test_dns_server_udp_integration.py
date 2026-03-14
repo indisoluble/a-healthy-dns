@@ -20,12 +20,13 @@ parsed wire-level response.
 - Response header fields (QR, ID, AA, RA, TC)
 - Answer / authority / additional section shapes
 - Rejection of malformed wire input (silent drop)
+- Real wire-level QDCOUNT != 1 (zero-question and multi-question FORMERR)
 
 **What this suite does NOT cover:**
 - The health-check lifecycle (periodic TCP probes, dynamic A-record
   addition/removal when backends go up or down).  That behaviour is
   exercised by the Docker end-to-end tests in
-  ``.github/workflows/test-docker.yml``.
+  ``.github/workflows/test-integration.yml``.
 - Container startup, Docker networking, or alias zone routing.
 
 These tests complement the mocked unit tests in
@@ -93,6 +94,39 @@ def _udp_query(
         return dns.message.from_wire(data)
     finally:
         sock.close()
+
+
+def _udp_raw_query(
+    host: str,
+    port: int,
+    wire: bytes,
+    timeout: float = 2.0,
+) -> dns.message.Message:
+    """Send raw *wire* bytes over UDP and return the parsed response."""
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    sock.settimeout(timeout)
+    try:
+        sock.sendto(wire, (host, port))
+        data, _ = sock.recvfrom(4096)
+        return dns.message.from_wire(data)
+    finally:
+        sock.close()
+
+
+def _make_two_question_wire(name1: str, name2: str) -> bytes:
+    """Build a valid DNS wire message with QDCOUNT=2.
+
+    Constructs the first query normally, then patches QDCOUNT to 2 and
+    appends the question section from a second query.  dnspython does not
+    natively produce multi-question messages; this reproduces the exact
+    wire format used by the handler unit tests.
+    """
+    q1 = dns.message.make_query(name1, dns.rdatatype.A)
+    q2 = dns.message.make_query(name2, dns.rdatatype.A)
+    wire = bytearray(q1.to_wire())
+    wire[4:6] = (2).to_bytes(2, byteorder="big")
+    wire.extend(q2.to_wire()[12:])
+    return bytes(wire)
 
 
 # ---------------------------------------------------------------------------
@@ -383,5 +417,16 @@ class TestRejectedQueries:
         # with QDCOUNT=0; the handler must return FORMERR (RFC 2181 §5.1)
         query = dns.message.Message()
         resp = _udp_query(host, port, query)
+
+        assert resp.rcode() == dns.rcode.FORMERR
+
+    def test_multi_question_query_returns_formerr(self, live_server):
+        host, port = live_server
+        # Build a structurally well-formed but RFC-noncompliant DNS wire message
+        # with QDCOUNT=2.  RFC 2181 §5.1 requires exactly one question per query.
+        # dnspython preserves both questions when parsing; the handler must return
+        # FORMERR because len(query.question) != 1.
+        wire = _make_two_question_wire(_SUBDOMAIN_FQDN, _ABSENT_FQDN)
+        resp = _udp_raw_query(host, port, wire)
 
         assert resp.rcode() == dns.rcode.FORMERR

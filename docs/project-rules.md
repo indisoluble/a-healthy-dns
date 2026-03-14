@@ -113,12 +113,12 @@ Component integration tests exercise a production component end-to-end over real
 
 - **Test file location:** same directory as the corresponding unit tests, mirroring the source tree.
 - **Test file naming:** `test_<scope>_integration.py` — the `_integration` suffix distinguishes them from unit tests. Example: `tests/indisoluble/a_healthy_dns/test_dns_server_udp_integration.py`.
-- **No real health-check lifecycle.** Zone state is pre-populated via `DnsServerZoneUpdater.update(check_ips=False)`. Tests that verify dynamic A-record changes driven by TCP health checks belong in `test-docker.yml`.
+- **No real health-check lifecycle.** Zone state is pre-populated via `DnsServerZoneUpdater.update(check_ips=False)`. Tests that verify dynamic A-record changes driven by TCP health checks belong in `test-integration.yml`.
 - **One assert per test when practical** (same as unit tests).
 
 ### 6.3 Docker end-to-end tests
 
-Docker end-to-end tests validate the fully packaged application, including health-check-driven DNS state transitions. They live in `.github/workflows/test-docker.yml` and use an isolated Docker network with a real nginx backend. See §7 below.
+Docker end-to-end tests validate the fully packaged application, including health-check-driven DNS state transitions. They live in `.github/workflows/test-integration.yml` and use an isolated Docker network with a real nginx backend. See §7 below.
 
 ---
 
@@ -129,7 +129,7 @@ All workflows target the `master` branch.
 | Workflow | File | Trigger | Purpose |
 |---|---|---|---|
 | `test python code` | `test-py-code.yml` | push/PR → master | Runs pytest (unit + component integration tests) with coverage, uploads to Codecov |
-| `test docker` | `test-docker.yml` | push/PR → master | Builds Docker image; runs end-to-end tests including health-check-driven DNS state transitions |
+| `test integration` | `test-integration.yml` | push/PR → master | Builds Docker image; runs end-to-end tests including health-check-driven DNS state transitions |
 | `test version` | `test-version.yml` | push/PR → master | Verifies version in `setup.py` was increased |
 | `validate tests` | `validate-tests.yml` | after above three complete | Gate: all three must pass for the same commit |
 | `release version` | `release-version.yml` | after `validate tests` succeeds | Creates git tag + GitHub release from `setup.py` version |
@@ -162,7 +162,7 @@ Docker end-to-end tests in CI use an isolated `172.28.0.0/24` bridge network wit
 1. Update `version` in `setup.py` to a new PEP 440 value higher than the current one.
 2. Merge to `master`.
 3. CI automatically:
-   - runs `test python code`, `test docker`, `test version`,
+   - runs `test python code`, `test integration`, `test version`,
    - if all three pass: `validate tests` succeeds,
    - `release version` creates the git tag and GitHub release,
    - `release docker` pushes the tagged image to Docker Hub.

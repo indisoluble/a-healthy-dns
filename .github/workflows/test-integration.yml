@@ -1,4 +1,4 @@
-name: test docker
+name: test integration
 
 on:
   push:
@@ -167,18 +167,31 @@ jobs:
           return 1
         }
 
-        FQDN="www.test.example.com"
+        # Verify state transitions for hosted zone and all alias zones
+        for fqdn in \
+          "www.test.example.com" \
+          "www.test.other.com" \
+          "www.test.another.com"; do
+          wait_for_a_record "${fqdn}"
+        done
 
-        # 1. Confirm A record is present with backend healthy
-        wait_for_a_record "${FQDN}"
-
-        # 2. Stop backend — health checks will fail; DNS must remove the A record
+        # Stop backend — health checks will fail; DNS must remove A records from all zones
         docker stop a-healthy-dns-backend
-        wait_for_a_record_gone "${FQDN}"
+        for fqdn in \
+          "www.test.example.com" \
+          "www.test.other.com" \
+          "www.test.another.com"; do
+          wait_for_a_record_gone "${fqdn}"
+        done
 
-        # 3. Restart backend — health checks will succeed; DNS must re-add the A record
+        # Restart backend — health checks will succeed; DNS must re-add A records to all zones
         docker start a-healthy-dns-backend
-        wait_for_a_record "${FQDN}"
+        for fqdn in \
+          "www.test.example.com" \
+          "www.test.other.com" \
+          "www.test.another.com"; do
+          wait_for_a_record "${fqdn}"
+        done
 
     - name: test docker-compose configuration
       run: |
