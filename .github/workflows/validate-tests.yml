@@ -24,7 +24,7 @@ jobs:
         COMMIT_SHA="${{ github.event.workflow_run.head_sha }}"
         echo "Validating workflows for commit: $COMMIT_SHA"
         
-        WORKFLOWS=("Test Integration" "Test Python Code" "Test Version")
+        WORKFLOWS=("test integration" "test python code" "test version")
         
         for workflow in "${WORKFLOWS[@]}"; do
           echo "Checking workflow: $workflow"

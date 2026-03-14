@@ -24,11 +24,6 @@ jobs:
       run: |
         docker build -t a-healthy-dns:test .
 
-    - name: test docker image builds successfully
-      run: |
-        # Verify the image was created
-        docker images a-healthy-dns:test
-
     - name: test docker image with alias zone configuration
       run: |
         # Create an isolated network for deterministic container-to-container checks
