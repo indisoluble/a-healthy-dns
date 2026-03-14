@@ -131,12 +131,14 @@ All workflows target the `master` branch.
 | `test python code` | `test-py-code.yml` | push/PR → master | Runs pytest (unit + component integration tests) with coverage, uploads to Codecov |
 | `test integration` | `test-integration.yml` | push/PR → master | Builds Docker image; runs end-to-end tests including health-check-driven DNS state transitions |
 | `test version` | `test-version.yml` | push/PR → master | Verifies version in `setup.py` was increased |
-| `validate tests` | `validate-tests.yml` | after above three complete | Gate: all three must pass for the same commit |
+| `validate tests` | `validate-tests.yml` | `workflow_run` on any of the three above | Gate: all three must pass for the same commit |
 | `release version` | `release-version.yml` | after `validate tests` succeeds | Creates git tag + GitHub release from `setup.py` version |
 | `release docker` | `release-docker.yml` | after `release version` succeeds | Pushes Docker image to Docker Hub |
 | `security scan` | `security-scan.yml` | push → master | Trivy vulnerability scan on Docker image, uploads SARIF to GitHub Security tab |
 
 **Rule:** never push directly to `master` from a branch that hasn't passed all three gate workflows.
+
+**`validate tests` trigger model:** GitHub Actions `workflow_run` fires each time *any one* of the listed upstream workflows completes — not once after all three are done. This means `validate tests` may run before the other two upstream workflows have finished; early runs that fail because a sibling workflow hasn't completed yet are expected and not the final picture. The meaningful result is the run that executes after all three required workflows for the same commit SHA have completed. This is an implementation detail of the current `workflow_run` model; the intended policy (all three must pass) is unchanged.
 
 ---
 
