@@ -2,7 +2,7 @@ name: validate tests
 
 on:
   workflow_run:
-    workflows: ["test docker", "test python code", "test version"]
+    workflows: ["test integration", "test python code", "test version"]
     types:
       - completed
     branches:
@@ -24,7 +24,7 @@ jobs:
         COMMIT_SHA="${{ github.event.workflow_run.head_sha }}"
         echo "Validating workflows for commit: $COMMIT_SHA"
         
-        WORKFLOWS=("Test Docker" "Test Python Code" "Test Version")
+        WORKFLOWS=("Test Integration" "Test Python Code" "Test Version")
         
         for workflow in "${WORKFLOWS[@]}"; do
           echo "Checking workflow: $workflow"
