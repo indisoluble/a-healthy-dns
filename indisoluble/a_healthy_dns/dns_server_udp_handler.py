@@ -106,6 +106,14 @@ class DnsServerUdpHandler(socketserver.BaseRequestHandler):
             query = dns.message.from_wire(data)
         except dns.exception.DNSException as ex:
             logging.warning("Failed to parse DNS query: %s", ex)
+            if len(data) >= 12:
+                # DNS header is readable: recover the transaction ID and respond
+                # with a minimal FORMERR (RFC 1035 §4.1.1).
+                # Flags byte 2: QR=1 (0x80); byte 3: RCODE=FORMERR (0x01).
+                wire = bytes(
+                    [data[0], data[1], 0x80, 0x01, 0, 0, 0, 0, 0, 0, 0, 0]
+                )
+                sock.sendto(wire, self.client_address)
             return
 
         response = dns.message.make_response(query)

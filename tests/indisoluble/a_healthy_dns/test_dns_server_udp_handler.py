@@ -329,18 +329,29 @@ def test_handle_exception_parsing_query(
     query_data = dns_request[0]
     mock_from_wire.assert_called_once_with(query_data)
 
-    # Check no response was sent
+    # The request data is ≥ 12 bytes so the handler must respond with a
+    # minimal FORMERR (RFC 1035 §4.1.1), preserving the original transaction ID.
     mock_sock = dns_request[1]
-    mock_sock.sendto.assert_not_called()
+    mock_sock.sendto.assert_called_once()
+    sent_wire = mock_sock.sendto.call_args[0][0]
+    assert len(sent_wire) == 12
+    assert sent_wire[0] == query_data[0]
+    assert sent_wire[1] == query_data[1]
+    assert sent_wire[2] & 0x80  # QR=1
+    assert (sent_wire[3] & 0x0F) == dns.rcode.FORMERR
 
 
-# Wire bytes that dnspython rejects as malformed at parse time.
-# Each case raises dns.exception.DNSException; the handler silently drops
-# the packet and sends no response (RFC 1035 §4.1.1 gap — confirmed behavior).
-_MALFORMED_WIRE_CASES = [
-    # Too short to contain the 12-byte DNS header
+# Wire bytes that are too short to contain a 12-byte DNS header.
+# The handler silently drops these — no transaction ID can be recovered.
+_MALFORMED_WIRE_TOO_SHORT_CASES = [
     b"",
     b"\x00\x01\x00\x00",
+]
+
+# Wire bytes that fail dns.message.from_wire() but are ≥ 12 bytes so the DNS
+# header (and transaction ID) can still be recovered.  The handler must respond
+# with FORMERR, preserving the original transaction ID (RFC 1035 §4.1.1).
+_MALFORMED_WIRE_WITH_HEADER_CASES = [
     # Valid 12-byte header claiming QDCOUNT=1 but question section missing
     b"\x12\x34\x01\x00\x00\x01\x00\x00\x00\x00\x00\x00",
     # Self-referential compression pointer (offset 12 points to itself)
@@ -350,7 +361,7 @@ _MALFORMED_WIRE_CASES = [
 ]
 
 
-@pytest.mark.parametrize("wire_data", _MALFORMED_WIRE_CASES)
+@pytest.mark.parametrize("wire_data", _MALFORMED_WIRE_TOO_SHORT_CASES)
 def test_handle_malformed_wire_input_drops_silently(
     wire_data, dns_client_address, mock_server
 ):
@@ -359,8 +370,28 @@ def test_handle_malformed_wire_input_drops_silently(
 
     _ = DnsServerUdpHandler(request, dns_client_address, mock_server)
 
-    # Current behavior: handler drops the packet silently — no response is sent.
+    # Payload too short to recover a DNS header: drop silently, no response.
     mock_sock.sendto.assert_not_called()
+
+
+@pytest.mark.parametrize("wire_data", _MALFORMED_WIRE_WITH_HEADER_CASES)
+def test_handle_malformed_wire_with_recoverable_header_returns_formerr(
+    wire_data, dns_client_address, mock_server
+):
+    mock_sock = MagicMock()
+    request = (wire_data, mock_sock)
+
+    _ = DnsServerUdpHandler(request, dns_client_address, mock_server)
+
+    mock_sock.sendto.assert_called_once()
+    sent_wire = mock_sock.sendto.call_args[0][0]
+
+    # Minimal 12-byte FORMERR response: transaction ID preserved, QR=1.
+    assert len(sent_wire) == 12
+    assert sent_wire[0] == wire_data[0]
+    assert sent_wire[1] == wire_data[1]
+    assert sent_wire[2] & 0x80  # QR=1
+    assert (sent_wire[3] & 0x0F) == dns.rcode.FORMERR
 
 
 @patch("indisoluble.a_healthy_dns.dns_server_udp_handler._update_response")

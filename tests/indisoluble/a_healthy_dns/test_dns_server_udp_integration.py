@@ -16,17 +16,18 @@ parsed wire-level response.
 **What this suite covers:**
 - RFC-conformant response shapes for the authoritative UDP serving path:
   positive A/SOA/NS responses (NOERROR), NXDOMAIN, NODATA, out-of-zone
-  and non-IN-class REFUSED, NOTIMP, and FORMERR (QDCOUNT != 1), as
+  and non-IN-class REFUSED, NOTIMP, FORMERR (QDCOUNT != 1), and
+  FORMERR (malformed wire with a recoverable DNS header), as
   documented in docs/RFC-conformance.md
 - Response header fields (QR, ID, AA, RA, TC)
 - Answer / authority / additional section shapes
 - Real wire-level QDCOUNT != 1 (zero-question and multi-question FORMERR)
 
 **What this suite does NOT cover:**
-- Malformed wire input (truncated packets, garbage bytes).  That path is
-  exercised by the unit tests in
-  ``tests/indisoluble/a_healthy_dns/test_dns_server_udp_handler.py``
-  (``test_handle_malformed_wire_input_drops_silently``).
+- Malformed wire input shorter than 12 bytes (no DNS header to recover).
+  Those packets are silently dropped.  That behaviour is confirmed by
+  ``test_handle_malformed_wire_input_drops_silently`` in the unit test file
+  ``tests/indisoluble/a_healthy_dns/test_dns_server_udp_handler.py``.
 - The health-check lifecycle (periodic TCP probes, dynamic A-record
   addition/removal when backends go up or down).  That behaviour is
   exercised by the Docker end-to-end tests in
@@ -73,6 +74,13 @@ _ZONE_FQDN = f"{_ZONE}."
 _SUBDOMAIN_FQDN = f"{_SUBDOMAIN}.{_ZONE}."
 _ABSENT_FQDN = f"{_ABSENT_SUBDOMAIN}.{_ZONE}."
 _OUT_OF_ZONE_FQDN = "www.unrelated.test."
+
+# A wire payload that is ≥ 12 bytes (DNS header is readable) but not a valid
+# DNS message.  The handler must recover the transaction ID and return FORMERR
+# (RFC 1035 §4.1.1).  Exactly 12 bytes: valid DNS header with QDCOUNT=1 but
+# the question section is absent.
+_MALFORMED_HEADER_ONLY_WIRE = b"\x12\x34\x01\x00\x00\x01\x00\x00\x00\x00\x00\x00"
+_MALFORMED_HEADER_ONLY_ID = 0x1234
 
 # Pause after server.serve_forever() starts before sending queries.
 # 50 ms is well above any observable startup latency on CI runners.
@@ -434,3 +442,29 @@ class TestRejectedQueries:
         resp = _udp_raw_query(host, port, wire)
 
         assert resp.rcode() == dns.rcode.FORMERR
+
+
+# ---------------------------------------------------------------------------
+# Malformed wire input — RFC 1035 §4.1.1
+# ---------------------------------------------------------------------------
+
+class TestMalformedWireInput:
+    """Malformed UDP payloads with a recoverable DNS header return FORMERR."""
+
+    def test_malformed_wire_with_header_returns_formerr(self, live_server):
+        host, port = live_server
+        resp = _udp_raw_query(host, port, _MALFORMED_HEADER_ONLY_WIRE)
+
+        assert resp.rcode() == dns.rcode.FORMERR
+
+    def test_malformed_wire_formerr_preserves_transaction_id(self, live_server):
+        host, port = live_server
+        resp = _udp_raw_query(host, port, _MALFORMED_HEADER_ONLY_WIRE)
+
+        assert resp.id == _MALFORMED_HEADER_ONLY_ID
+
+    def test_malformed_wire_formerr_sets_qr_flag(self, live_server):
+        host, port = live_server
+        resp = _udp_raw_query(host, port, _MALFORMED_HEADER_ONLY_WIRE)
+
+        assert bool(resp.flags & dns.flags.QR)
