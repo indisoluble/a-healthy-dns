@@ -19,7 +19,7 @@ from indisoluble.a_healthy_dns.dns_server_zone_updater import (
 )
 
 
-class DnsServerZoneUpdaterThreated:
+class DnsServerZoneUpdaterThreaded:
     """Threaded DNS zone updater that runs health checks in background."""
 
     @property

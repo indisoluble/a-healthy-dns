@@ -13,7 +13,7 @@ The system is built around two independent, concurrently-running concerns separa
 │  main.py (_main)                                               │
 │                                                                │
 │  ┌──────────────────────────────┐                              │
-│  │ DnsServerZoneUpdaterThreated │  ← background daemon thread  │
+│  │ DnsServerZoneUpdaterThreaded │  ← background daemon thread  │
 │  │  ┌──────────────────────┐    │                              │
 │  │  │ DnsServerZoneUpdater │    │  ← health check + zone write │
 │  │  └──────────────────────┘    │                              │
@@ -45,7 +45,7 @@ Layer 0 – Entry-point
   indisoluble/a_healthy_dns/main.py
 
 Layer 1 – Server orchestration
-  dns_server_zone_updater_threated.py   (threading wrapper)
+  dns_server_zone_updater_threaded.py   (threading wrapper)
   dns_server_udp_handler.py             (UDP query handler)
 
 Layer 2 – Domain logic
