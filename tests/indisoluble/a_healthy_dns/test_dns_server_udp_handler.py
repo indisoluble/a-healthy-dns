@@ -14,12 +14,22 @@ import pytest
 
 from unittest.mock import MagicMock, patch
 
-from indisoluble.a_healthy_dns.dns_server_udp_handler import _update_response, DnsServerUdpHandler
+from indisoluble.a_healthy_dns.dns_server_udp_handler import (
+    _update_response,
+    DnsServerUdpHandler,
+)
 from indisoluble.a_healthy_dns.records.zone_origins import ZoneOrigins
+
+# Captured before any test patches dns.message.from_wire so we can still parse
+# response wire bytes inside tests that mock from_wire.
+_real_from_wire = dns.message.from_wire
 
 
 def _make_multi_question_wire(*question_names):
-    queries = [dns.message.make_query(question_name, dns.rdatatype.A) for question_name in question_names]
+    queries = [
+        dns.message.make_query(question_name, dns.rdatatype.A)
+        for question_name in question_names
+    ]
 
     wire = bytearray(queries[0].to_wire())
     wire[4:6] = len(queries).to_bytes(2, byteorder="big")
@@ -109,7 +119,14 @@ def mock_dns_client_address():
     return ("127.0.0.1", 12345)
 
 
-def test_update_response_with_relative_name_found(mock_zone, mock_reader, mock_rdata, mock_rdataset, mock_dns_response, mock_zone_origins):
+def test_update_response_with_relative_name_found(
+    mock_zone,
+    mock_reader,
+    mock_rdata,
+    mock_rdataset,
+    mock_dns_response,
+    mock_zone_origins,
+):
     # Setup
     query_name = dns.name.from_text("test", origin=None)
     query_type = dns.rdatatype.A
@@ -125,7 +142,9 @@ def test_update_response_with_relative_name_found(mock_zone, mock_reader, mock_r
     mock_zone.reader.return_value.__enter__.return_value = mock_reader
 
     # Call function
-    _update_response(mock_dns_response, query_name, query_type, mock_zone, mock_zone_origins)
+    _update_response(
+        mock_dns_response, query_name, query_type, mock_zone, mock_zone_origins
+    )
 
     # Assertions
     mock_zone.reader.assert_called_once()
@@ -146,7 +165,14 @@ def test_update_response_with_relative_name_found(mock_zone, mock_reader, mock_r
     assert list(mock_dns_response.answer[0]) == [mock_rdata]
 
 
-def test_update_response_with_absolute_name_found(mock_zone, mock_reader, mock_rdata, mock_rdataset, mock_dns_response, mock_zone_origins):
+def test_update_response_with_absolute_name_found(
+    mock_zone,
+    mock_reader,
+    mock_rdata,
+    mock_rdataset,
+    mock_dns_response,
+    mock_zone_origins,
+):
     # Setup
     query_name = dns.name.from_text("test", origin=mock_zone_origins.primary)
     query_type = dns.rdatatype.A
@@ -162,11 +188,15 @@ def test_update_response_with_absolute_name_found(mock_zone, mock_reader, mock_r
     mock_zone.reader.return_value.__enter__.return_value = mock_reader
 
     # Call function
-    _update_response(mock_dns_response, query_name, query_type, mock_zone, mock_zone_origins)
+    _update_response(
+        mock_dns_response, query_name, query_type, mock_zone, mock_zone_origins
+    )
 
     # Assertions
     mock_zone.reader.assert_called_once()
-    mock_reader.get_node.assert_called_once_with(query_name.relativize(mock_zone_origins.primary))
+    mock_reader.get_node.assert_called_once_with(
+        query_name.relativize(mock_zone_origins.primary)
+    )
     mock_node.get_rdataset.assert_called_once_with(mock_zone.rdclass, query_type)
     mock_reader.get.assert_not_called()  # SOA lookup should not be needed when node is found
 
@@ -183,13 +213,17 @@ def test_update_response_with_absolute_name_found(mock_zone, mock_reader, mock_r
     assert list(mock_dns_response.answer[0]) == [mock_rdata]
 
 
-def test_update_response_with_absolute_name_outside_zone_origins(mock_zone, mock_dns_response, mock_zone_origins):
+def test_update_response_with_absolute_name_outside_zone_origins(
+    mock_zone, mock_dns_response, mock_zone_origins
+):
     # Setup
     query_name = dns.name.from_text("test", origin=dns.name.from_text("other.com"))
     query_type = dns.rdatatype.A
 
     # Call function
-    _update_response(mock_dns_response, query_name, query_type, mock_zone, mock_zone_origins)
+    _update_response(
+        mock_dns_response, query_name, query_type, mock_zone, mock_zone_origins
+    )
 
     # Assertions
     mock_zone.reader.assert_not_called()
@@ -202,7 +236,9 @@ def test_update_response_with_absolute_name_outside_zone_origins(mock_zone, mock
     assert len(mock_dns_response.answer) == 0
 
 
-def test_update_response_domain_not_found(mock_zone, mock_reader, mock_dns_response, mock_zone_origins, mock_soa_rdataset):
+def test_update_response_domain_not_found(
+    mock_zone, mock_reader, mock_dns_response, mock_zone_origins, mock_soa_rdataset
+):
     # Setup
     query_name = dns.name.from_text("nonexistent", origin=mock_zone_origins.primary)
     query_type = dns.rdatatype.A
@@ -214,11 +250,15 @@ def test_update_response_domain_not_found(mock_zone, mock_reader, mock_dns_respo
     mock_zone.reader.return_value.__enter__.return_value = mock_reader
 
     # Call function
-    _update_response(mock_dns_response, query_name, query_type, mock_zone, mock_zone_origins)
+    _update_response(
+        mock_dns_response, query_name, query_type, mock_zone, mock_zone_origins
+    )
 
     # Assertions
     mock_zone.reader.assert_called_once()
-    mock_reader.get_node.assert_called_once_with(query_name.relativize(mock_zone_origins.primary))
+    mock_reader.get_node.assert_called_once_with(
+        query_name.relativize(mock_zone_origins.primary)
+    )
     mock_reader.get.assert_called_once_with(dns.name.empty, dns.rdatatype.SOA)
 
     assert mock_dns_response.rcode() == dns.rcode.NXDOMAIN
@@ -232,7 +272,9 @@ def test_update_response_domain_not_found(mock_zone, mock_reader, mock_dns_respo
     assert len(mock_dns_response.answer) == 0
 
 
-def test_update_response_record_type_not_found(mock_zone, mock_reader, mock_dns_response, mock_zone_origins, mock_soa_rdataset):
+def test_update_response_record_type_not_found(
+    mock_zone, mock_reader, mock_dns_response, mock_zone_origins, mock_soa_rdataset
+):
     # Setup
     query_name = dns.name.from_text("test", origin=mock_zone_origins.primary)
     query_type = dns.rdatatype.A
@@ -247,11 +289,15 @@ def test_update_response_record_type_not_found(mock_zone, mock_reader, mock_dns_
     mock_zone.reader.return_value.__enter__.return_value = mock_reader
 
     # Call function
-    _update_response(mock_dns_response, query_name, query_type, mock_zone, mock_zone_origins)
+    _update_response(
+        mock_dns_response, query_name, query_type, mock_zone, mock_zone_origins
+    )
 
     # Assertions
     mock_zone.reader.assert_called_once()
-    mock_reader.get_node.assert_called_once_with(query_name.relativize(mock_zone_origins.primary))
+    mock_reader.get_node.assert_called_once_with(
+        query_name.relativize(mock_zone_origins.primary)
+    )
     mock_node.get_rdataset.assert_called_once_with(mock_zone.rdclass, query_type)
     mock_reader.get.assert_called_once_with(dns.name.empty, dns.rdatatype.SOA)
 
@@ -267,7 +313,9 @@ def test_update_response_record_type_not_found(mock_zone, mock_reader, mock_dns_
 
 
 @patch("indisoluble.a_healthy_dns.dns_server_udp_handler._update_response")
-def test_handle_valid_query(mock_update_response, mock_dns_request, mock_dns_client_address, mock_server):
+def test_handle_valid_query(
+    mock_update_response, mock_dns_request, mock_dns_client_address, mock_server
+):
     # No need to call handle() as it's called automatically by the constructor
     _ = DnsServerUdpHandler(mock_dns_request, mock_dns_client_address, mock_server)
 
@@ -298,48 +346,45 @@ def test_handle_valid_query(mock_update_response, mock_dns_request, mock_dns_cli
 
 
 @patch("dns.message.from_wire")
-def test_handle_exception_parsing_query(mock_from_wire, mock_dns_request, mock_dns_client_address, mock_server):
-    # Setup to simulate an exception when parsing DNS query
+@patch("indisoluble.a_healthy_dns.dns_server_udp_handler._update_response")
+def test_handle_exception_parsing_query(
+    mock_update_response,
+    mock_from_wire,
+    mock_dns_request,
+    mock_dns_client_address,
+    mock_server,
+):
+    # Simulate a malformed message that passes the 12-byte ShortHeader check
+    # but fails full parsing (DNSException).
     mock_from_wire.side_effect = dns.exception.DNSException("Test exception")
 
-    # No need to call handle() as it's called automatically by the constructor
     _ = DnsServerUdpHandler(mock_dns_request, mock_dns_client_address, mock_server)
 
-    # Assertions
     query_data = mock_dns_request[0]
     mock_from_wire.assert_called_once_with(query_data)
 
-    # The request data is ≥ 12 bytes so the handler must respond with a
-    # minimal FORMERR (RFC 1035 §4.1.1), preserving the original transaction ID.
+    # The handler must respond with FORMERR (RFC 1035 §4.1.1),
+    # preserving the original transaction ID.
     mock_sock = mock_dns_request[1]
     mock_sock.sendto.assert_called_once()
+
     sent_wire = mock_sock.sendto.call_args[0][0]
-    assert len(sent_wire) == 12
-    assert sent_wire[0] == query_data[0]
-    assert sent_wire[1] == query_data[1]
-    assert sent_wire[2] & 0x80  # QR=1
-    assert (sent_wire[3] & 0x0F) == dns.rcode.FORMERR
+    response = _real_from_wire(sent_wire)
+    assert response.id == int.from_bytes(query_data[:2], "big")
+    assert response.rcode() == dns.rcode.FORMERR
+    assert not bool(response.flags & dns.flags.AA)
+    assert bool(response.flags & dns.flags.QR)
+    assert not bool(response.flags & dns.flags.RA)
+    assert not bool(response.flags & dns.flags.TC)
+
+    assert mock_update_response.call_not_called()
 
 
-# Wire bytes that are too short to contain a 12-byte DNS header.
-# The handler silently drops these — no transaction ID can be recovered.
-_MALFORMED_WIRE_TOO_SHORT_CASES = [b"",b"\x00\x01\x00\x00"]
-
-# Wire bytes that fail dns.message.from_wire() but are ≥ 12 bytes so the DNS
-# header (and transaction ID) can still be recovered.  The handler must respond
-# with FORMERR, preserving the original transaction ID (RFC 1035 §4.1.1).
-_MALFORMED_WIRE_WITH_HEADER_CASES = [
-    # Valid 12-byte header claiming QDCOUNT=1 but question section missing
-    b"\x12\x34\x01\x00\x00\x01\x00\x00\x00\x00\x00\x00",
-    # Self-referential compression pointer (offset 12 points to itself)
-    b"\x12\x34\x01\x00\x00\x01\x00\x00\x00\x00\x00\x00\xc0\x0c\x00\x01\x00\x01",
-    # Garbage bytes that do not form a valid DNS message
-    bytes(range(32)),
-]
-
-
-@pytest.mark.parametrize("wire_data", _MALFORMED_WIRE_TOO_SHORT_CASES)
-def test_handle_malformed_wire_input_drops_silently(wire_data, mock_dns_client_address, mock_server):
+@pytest.mark.parametrize("wire_data", [b"", b"\x00\x01\x00\x00"])
+@patch("indisoluble.a_healthy_dns.dns_server_udp_handler._update_response")
+def test_handle_malformed_wire_input_drops_silently(
+    mock_update_response, wire_data, mock_dns_client_address, mock_server
+):
     mock_sock = MagicMock()
     request = (wire_data, mock_sock)
 
@@ -347,10 +392,27 @@ def test_handle_malformed_wire_input_drops_silently(wire_data, mock_dns_client_a
 
     # Payload too short to recover a DNS header: drop silently, no response.
     mock_sock.sendto.assert_not_called()
+    assert mock_update_response.call_not_called()
 
 
-@pytest.mark.parametrize("wire_data", _MALFORMED_WIRE_WITH_HEADER_CASES)
-def test_handle_malformed_wire_with_recoverable_header_returns_formerr(wire_data, mock_dns_client_address, mock_server):
+# Wire bytes that fail dns.message.from_wire() but are ≥ 12 bytes so the DNS
+# header (and transaction ID) can still be recovered.  The handler must respond
+# with FORMERR, preserving the original transaction ID (RFC 1035 §4.1.1).
+@pytest.mark.parametrize(
+    "wire_data",
+    [
+        # Valid 12-byte header claiming QDCOUNT=1 but question section missing
+        b"\x12\x34\x01\x00\x00\x01\x00\x00\x00\x00\x00\x00",
+        # Self-referential compression pointer (offset 12 points to itself)
+        b"\x12\x34\x01\x00\x00\x01\x00\x00\x00\x00\x00\x00\xc0\x0c\x00\x01\x00\x01",
+        # Garbage bytes that do not form a valid DNS message
+        bytes(range(32)),
+    ],
+)
+@patch("indisoluble.a_healthy_dns.dns_server_udp_handler._update_response")
+def test_handle_malformed_wire_with_recoverable_header_returns_formerr(
+    mock_update_response, wire_data, mock_dns_client_address, mock_server
+):
     mock_sock = MagicMock()
     request = (wire_data, mock_sock)
 
@@ -366,10 +428,59 @@ def test_handle_malformed_wire_with_recoverable_header_returns_formerr(wire_data
     assert sent_wire[2] & 0x80  # QR=1
     assert (sent_wire[3] & 0x0F) == dns.rcode.FORMERR
 
+    assert mock_update_response.call_not_called()
 
+
+@pytest.mark.parametrize(
+    "opcode",
+    [
+        dns.opcode.STATUS,
+        dns.opcode.NOTIFY,
+        # dns.opcode.UPDATE is excluded: dnspython rejects the wire format as
+        # malformed when opcode=UPDATE appears in a standard-query-shaped message,
+        # so the handler never reaches the opcode check for that case.
+    ],
+)
 @patch("indisoluble.a_healthy_dns.dns_server_udp_handler._update_response")
-@pytest.mark.parametrize("query_data",[dns.message.Message().to_wire(),_make_multi_question_wire("example.com.", "test.com.")])
-def test_handle_query_with_invalid_question_count_returns_formerr(mock_update_response, query_data, mock_dns_client_address, mock_server):
+def test_handle_query_with_unsupported_opcode_returns_notimp(
+    mock_update_response, opcode, mock_dns_client_address, mock_server
+):
+    query = dns.message.make_query("test.example.com.", dns.rdatatype.A)
+    query.set_opcode(opcode)
+    mock_sock = MagicMock()
+    request = (query.to_wire(), mock_sock)
+
+    _ = DnsServerUdpHandler(request, mock_dns_client_address, mock_server)
+
+    mock_update_response.assert_not_called()
+    mock_sock.sendto.assert_called_once()
+
+    sent_data = mock_sock.sendto.call_args[0][0]
+    response = dns.message.from_wire(sent_data)
+    assert response.rcode() == dns.rcode.NOTIMP
+    assert len(response.answer) == 0
+    assert len(response.authority) == 0
+    assert len(response.additional) == 0
+
+    # Header field assertions (RFC 1035 §4.1.1)
+    assert response.id == query.id
+    assert bool(response.flags & dns.flags.AA)
+    assert bool(response.flags & dns.flags.QR)
+    assert not bool(response.flags & dns.flags.RA)
+    assert not bool(response.flags & dns.flags.TC)
+
+
+@pytest.mark.parametrize(
+    "query_data",
+    [
+        dns.message.Message().to_wire(),
+        _make_multi_question_wire("example.com.", "test.com."),
+    ],
+)
+@patch("indisoluble.a_healthy_dns.dns_server_udp_handler._update_response")
+def test_handle_query_with_invalid_question_count_returns_formerr(
+    mock_update_response, query_data, mock_dns_client_address, mock_server
+):
     mock_sock = MagicMock()
     request = (query_data, mock_sock)
 
@@ -381,10 +492,22 @@ def test_handle_query_with_invalid_question_count_returns_formerr(mock_update_re
     sent_data = mock_sock.sendto.call_args[0][0]
     response = dns.message.from_wire(sent_data)
     assert response.rcode() == dns.rcode.FORMERR
+    assert len(response.answer) == 0
+    assert len(response.authority) == 0
+    assert len(response.additional) == 0
+
+    # Header field assertions (RFC 1035 §4.1.1)
+    assert response.id == dns.message.from_wire(query_data).id
+    assert bool(response.flags & dns.flags.AA)
+    assert bool(response.flags & dns.flags.QR)
+    assert not bool(response.flags & dns.flags.RA)
+    assert not bool(response.flags & dns.flags.TC)
 
 
 @patch("indisoluble.a_healthy_dns.dns_server_udp_handler._update_response")
-def test_handle_query_with_non_in_class_returns_refused(mock_update_response, mock_dns_client_address, mock_server):
+def test_handle_query_with_non_in_class_returns_refused(
+    mock_update_response, mock_dns_client_address, mock_server
+):
     query = dns.message.make_query(
         "test.example.com.", dns.rdatatype.A, rdclass=dns.rdataclass.CH
     )
@@ -402,45 +525,10 @@ def test_handle_query_with_non_in_class_returns_refused(mock_update_response, mo
     assert len(response.answer) == 0
     assert len(response.authority) == 0
     assert len(response.additional) == 0
+
     # Header field assertions (RFC 1035 §4.1.1)
-    assert bool(response.flags & dns.flags.QR)
     assert response.id == query.id
+    assert bool(response.flags & dns.flags.AA)
+    assert bool(response.flags & dns.flags.QR)
     assert not bool(response.flags & dns.flags.RA)
     assert not bool(response.flags & dns.flags.TC)
-    assert bool(response.flags & dns.flags.AA)
-
-
-@patch("indisoluble.a_healthy_dns.dns_server_udp_handler._update_response")
-@pytest.mark.parametrize(
-    "opcode",
-    [
-        dns.opcode.STATUS,
-        dns.opcode.NOTIFY,
-        # dns.opcode.UPDATE is excluded: dnspython rejects the wire format as
-        # malformed when opcode=UPDATE appears in a standard-query-shaped message,
-        # so the handler never reaches the opcode check for that case.
-    ],
-)
-def test_handle_query_with_unsupported_opcode_returns_notimp(mock_update_response, opcode, mock_dns_client_address, mock_server):
-    query = dns.message.make_query("test.example.com.", dns.rdatatype.A)
-    query.set_opcode(opcode)
-    mock_sock = MagicMock()
-    request = (query.to_wire(), mock_sock)
-
-    _ = DnsServerUdpHandler(request, mock_dns_client_address, mock_server)
-
-    mock_update_response.assert_not_called()
-    mock_sock.sendto.assert_called_once()
-
-    sent_data = mock_sock.sendto.call_args[0][0]
-    response = dns.message.from_wire(sent_data)
-    assert response.rcode() == dns.rcode.NOTIMP
-    assert len(response.answer) == 0
-    assert len(response.authority) == 0
-    assert len(response.additional) == 0
-    # Header field assertions (RFC 1035 §4.1.1)
-    assert bool(response.flags & dns.flags.QR)
-    assert response.id == query.id
-    assert not bool(response.flags & dns.flags.RA)
-    assert not bool(response.flags & dns.flags.TC)
-    assert bool(response.flags & dns.flags.AA)
