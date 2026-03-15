@@ -110,9 +110,7 @@ class DnsServerUdpHandler(socketserver.BaseRequestHandler):
                 # DNS header is readable: recover the transaction ID and respond
                 # with a minimal FORMERR (RFC 1035 §4.1.1).
                 # Flags byte 2: QR=1 (0x80); byte 3: RCODE=FORMERR (0x01).
-                wire = bytes(
-                    [data[0], data[1], 0x80, 0x01, 0, 0, 0, 0, 0, 0, 0, 0]
-                )
+                wire = bytes([data[0], data[1], 0x80, 0x01, 0, 0, 0, 0, 0, 0, 0, 0])
                 sock.sendto(wire, self.client_address)
             return
 
@@ -125,9 +123,21 @@ class DnsServerUdpHandler(socketserver.BaseRequestHandler):
                 dns.opcode.to_text(query.opcode()),
             )
             response.set_rcode(dns.rcode.NOTIMP)
-        elif len(query.question) == 1:
+        elif len(query.question) != 1:
+            logging.warning(
+                "Received query with %d questions, expected exactly 1",
+                len(query.question),
+            )
+            response.set_rcode(dns.rcode.FORMERR)
+        else:
             question = query.question[0]
-            if question.rdclass == dns.rdataclass.IN:
+            if question.rdclass != dns.rdataclass.IN:
+                logging.warning(
+                    "Received query for unsupported class %s, expected IN",
+                    dns.rdataclass.to_text(question.rdclass),
+                )
+                response.set_rcode(dns.rcode.REFUSED)
+            else:
                 _update_response(
                     response,
                     question.name,
@@ -135,18 +145,6 @@ class DnsServerUdpHandler(socketserver.BaseRequestHandler):
                     self.server.zone,
                     self.server.zone_origins,
                 )
-            else:
-                logging.warning(
-                    "Received query for unsupported class %s, expected IN",
-                    dns.rdataclass.to_text(question.rdclass),
-                )
-                response.set_rcode(dns.rcode.REFUSED)
-        else:
-            logging.warning(
-                "Received query with %d questions, expected exactly 1",
-                len(query.question),
-            )
-            response.set_rcode(dns.rcode.FORMERR)
 
         # Send the response back to the client
         sock.sendto(response.to_wire(), self.client_address)
