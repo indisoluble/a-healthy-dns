@@ -109,6 +109,13 @@ def _make_two_question_wire(name1: str, name2: str) -> bytes:
     return bytes(wire)
 
 
+def _assert_response_flags(resp: dns.message.Message, *, aa: bool = True) -> None:
+    assert bool(resp.flags & dns.flags.AA) == aa
+    assert bool(resp.flags & dns.flags.QR)
+    assert not bool(resp.flags & dns.flags.RA)
+    assert not bool(resp.flags & dns.flags.TC)
+
+
 # ---------------------------------------------------------------------------
 # Module-scoped server fixture
 # ---------------------------------------------------------------------------
@@ -190,10 +197,7 @@ class TestPositiveResponses:
         assert resp.answer[0].rdtype == dns.rdatatype.A
         assert any(str(rdata) == _SUBDOMAIN_IP for rdata in resp.answer[0])
 
-        assert bool(resp.flags & dns.flags.AA)
-        assert bool(resp.flags & dns.flags.QR)
-        assert not bool(resp.flags & dns.flags.RA)
-        assert not bool(resp.flags & dns.flags.TC)
+        _assert_response_flags(resp)
 
     def test_soa_query_answer_contains_soa_at_apex(self, live_server):
         host, port = live_server
@@ -209,10 +213,7 @@ class TestPositiveResponses:
         assert resp.answer[0].rdtype == dns.rdatatype.SOA
         assert resp.answer[0].name == dns.name.from_text(_ZONE_FQDN)
 
-        assert bool(resp.flags & dns.flags.AA)
-        assert bool(resp.flags & dns.flags.QR)
-        assert not bool(resp.flags & dns.flags.RA)
-        assert not bool(resp.flags & dns.flags.TC)
+        _assert_response_flags(resp)
 
     def test_ns_query_answer_contains_expected_ns(self, live_server):
         host, port = live_server
@@ -229,10 +230,7 @@ class TestPositiveResponses:
         ns_targets = {str(rdata.target) for rdata in resp.answer[0]}
         assert _NS in ns_targets
 
-        assert bool(resp.flags & dns.flags.AA)
-        assert bool(resp.flags & dns.flags.QR)
-        assert not bool(resp.flags & dns.flags.RA)
-        assert not bool(resp.flags & dns.flags.TC)
+        _assert_response_flags(resp)
 
 
 # ---------------------------------------------------------------------------
@@ -268,10 +266,7 @@ class TestNegativeResponses:
         assert resp.authority[0].name == dns.name.from_text(_ZONE_FQDN)
         assert len(resp.answer) == 0
 
-        assert bool(resp.flags & dns.flags.AA)
-        assert bool(resp.flags & dns.flags.QR)
-        assert not bool(resp.flags & dns.flags.RA)
-        assert not bool(resp.flags & dns.flags.TC)
+        _assert_response_flags(resp)
 
 
 # ---------------------------------------------------------------------------
@@ -314,10 +309,7 @@ class TestRejectedQueries:
         assert len(resp.authority) == 0
         assert len(resp.answer) == 0
 
-        assert bool(resp.flags & dns.flags.AA)
-        assert bool(resp.flags & dns.flags.QR)
-        assert not bool(resp.flags & dns.flags.RA)
-        assert not bool(resp.flags & dns.flags.TC)
+        _assert_response_flags(resp)
 
     def test_multi_question_query_returns_formerr(self, live_server):
         host, port = live_server
@@ -335,10 +327,7 @@ class TestRejectedQueries:
         assert len(resp.authority) == 0
         assert len(resp.answer) == 0
 
-        assert bool(resp.flags & dns.flags.AA)
-        assert bool(resp.flags & dns.flags.QR)
-        assert not bool(resp.flags & dns.flags.RA)
-        assert not bool(resp.flags & dns.flags.TC)
+        _assert_response_flags(resp)
 
     def test_status_opcode_returns_notimp(self, live_server):
         host, port = live_server
@@ -353,10 +342,7 @@ class TestRejectedQueries:
         assert len(resp.authority) == 0
         assert len(resp.answer) == 0
 
-        assert bool(resp.flags & dns.flags.AA)
-        assert bool(resp.flags & dns.flags.QR)
-        assert not bool(resp.flags & dns.flags.RA)
-        assert not bool(resp.flags & dns.flags.TC)
+        _assert_response_flags(resp)
 
 
 # ---------------------------------------------------------------------------
@@ -379,7 +365,4 @@ class TestMalformedWireInput:
         assert len(resp.authority) == 0
         assert len(resp.answer) == 0
 
-        assert not bool(resp.flags & dns.flags.AA)
-        assert bool(resp.flags & dns.flags.QR)
-        assert not bool(resp.flags & dns.flags.RA)
-        assert not bool(resp.flags & dns.flags.TC)
+        _assert_response_flags(resp, aa=False)
