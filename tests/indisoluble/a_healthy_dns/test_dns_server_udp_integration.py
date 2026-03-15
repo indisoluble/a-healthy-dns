@@ -32,7 +32,7 @@ from indisoluble.a_healthy_dns.records.zone_origins import ZoneOrigins
 # ---------------------------------------------------------------------------
 
 _ZONE = "example.integration.test"
-_NS = "ns1.example.integration.test."
+_NS = "ns1.integration.test."
 _SUBDOMAIN = "www"
 _SUBDOMAIN_IP = "192.0.2.1"   # RFC 5737 TEST-NET-1
 _ABSENT_SUBDOMAIN = "missing"
@@ -119,7 +119,7 @@ def live_server():
     Zone layout
     -----------
     Zone:  example.integration.test.
-      NS   @ → ns1.example.integration.test.
+      NS   @ → ns1.integration.test.
       SOA  @ (auto-generated via DnsServerZoneUpdater)
       A    www → 192.0.2.1  (RFC 5737 TEST-NET-1)
 
@@ -128,24 +128,14 @@ def live_server():
     """
     zone_origins = ZoneOrigins(_ZONE, [])
 
-    a_record = AHealthyRecord(
-        subdomain=dns.name.from_text(_SUBDOMAIN, origin=zone_origins.primary),
-        healthy_ips=[AHealthyIp(ip=_SUBDOMAIN_IP, health_port=8080, is_healthy=True)],
-    )
+    a_record = AHealthyRecord(subdomain=dns.name.from_text(_SUBDOMAIN, origin=zone_origins.primary),healthy_ips=[AHealthyIp(ip=_SUBDOMAIN_IP, health_port=8080, is_healthy=True)])
 
-    config = DnsServerConfig(
-        zone_origins=zone_origins,
-        name_servers=frozenset([_NS]),
-        a_records=frozenset([a_record]),
-        ext_private_key=None,
-    )
+    config = DnsServerConfig(zone_origins=zone_origins,name_servers=frozenset([_NS]),a_records=frozenset([a_record]),ext_private_key=None)
 
     # min_interval drives TTL calculations for NS/SOA/A records; 30 s is a
     # reasonable value for tests — it has no effect on timing because
     # update() is called exactly once with check_ips=False.
-    updater = DnsServerZoneUpdater(
-        min_interval=30, connection_timeout=2, config=config
-    )
+    updater = DnsServerZoneUpdater(min_interval=30, connection_timeout=2, config=config)
     # Populate zone without health checks — IPs already marked healthy above
     updater.update(check_ips=False)
 
@@ -169,168 +159,124 @@ def live_server():
 
 # ---------------------------------------------------------------------------
 # Positive responses — RFC 1034 §6.2
+# Response header fields — RFC 1035 §4.1.1
 # ---------------------------------------------------------------------------
 
 class TestPositiveResponses:
     """NOERROR responses for in-zone owner names and record types."""
 
-    def test_a_query_returns_noerror(self, live_server):
+    def test_a_query_returns_noerror_expected_ip_and_empty_authority(self, live_server):
         host, port = live_server
         query = dns.message.make_query(_SUBDOMAIN_FQDN, dns.rdatatype.A)
         resp = _udp_query(host, port, query)
+
+        assert len(resp.additional) == 0
+        assert len(resp.authority) == 0
 
         assert resp.rcode() == dns.rcode.NOERROR
-
-    def test_a_query_answer_contains_expected_ip(self, live_server):
-        host, port = live_server
-        query = dns.message.make_query(_SUBDOMAIN_FQDN, dns.rdatatype.A)
-        resp = _udp_query(host, port, query)
 
         assert len(resp.answer) == 1
         assert resp.answer[0].rdtype == dns.rdatatype.A
         assert any(str(rdata) == _SUBDOMAIN_IP for rdata in resp.answer[0])
 
-    def test_a_query_authority_and_additional_empty(self, live_server):
-        host, port = live_server
-        query = dns.message.make_query(_SUBDOMAIN_FQDN, dns.rdatatype.A)
-        resp = _udp_query(host, port, query)
-
-        assert len(resp.authority) == 0
-        assert len(resp.additional) == 0
-
-    def test_soa_query_at_apex_returns_noerror(self, live_server):
-        host, port = live_server
-        query = dns.message.make_query(_ZONE_FQDN, dns.rdatatype.SOA)
-        resp = _udp_query(host, port, query)
-
-        assert resp.rcode() == dns.rcode.NOERROR
+        assert resp.id == query.id
+        assert bool(resp.flags & dns.flags.AA)
+        assert bool(resp.flags & dns.flags.QR)
+        assert not bool(resp.flags & dns.flags.RA)
+        assert not bool(resp.flags & dns.flags.TC)
 
     def test_soa_query_answer_contains_soa_at_apex(self, live_server):
         host, port = live_server
         query = dns.message.make_query(_ZONE_FQDN, dns.rdatatype.SOA)
         resp = _udp_query(host, port, query)
 
+        assert len(resp.additional) == 0
+        assert len(resp.authority) == 0
+
+        assert resp.rcode() == dns.rcode.NOERROR
+
         assert len(resp.answer) == 1
         assert resp.answer[0].rdtype == dns.rdatatype.SOA
         assert resp.answer[0].name == dns.name.from_text(_ZONE_FQDN)
 
-    def test_ns_query_at_apex_returns_noerror(self, live_server):
-        host, port = live_server
-        query = dns.message.make_query(_ZONE_FQDN, dns.rdatatype.NS)
-        resp = _udp_query(host, port, query)
-
-        assert resp.rcode() == dns.rcode.NOERROR
+        assert resp.id == query.id
+        assert bool(resp.flags & dns.flags.AA)
+        assert bool(resp.flags & dns.flags.QR)
+        assert not bool(resp.flags & dns.flags.RA)
+        assert not bool(resp.flags & dns.flags.TC)
 
     def test_ns_query_answer_contains_expected_ns(self, live_server):
         host, port = live_server
         query = dns.message.make_query(_ZONE_FQDN, dns.rdatatype.NS)
         resp = _udp_query(host, port, query)
 
+        assert len(resp.additional) == 0
+        assert len(resp.authority) == 0
+
+        assert resp.rcode() == dns.rcode.NOERROR
+
         assert len(resp.answer) == 1
         assert resp.answer[0].rdtype == dns.rdatatype.NS
         ns_targets = {str(rdata.target) for rdata in resp.answer[0]}
         assert _NS in ns_targets
 
-
-# ---------------------------------------------------------------------------
-# Response header fields — RFC 1035 §4.1.1
-# ---------------------------------------------------------------------------
-
-class TestResponseHeaderFields:
-    """QR, ID, AA, RA, TC fields on all Level 1 response categories."""
-
-    def test_positive_a_response_header(self, live_server):
-        host, port = live_server
-        query = dns.message.make_query(_SUBDOMAIN_FQDN, dns.rdatatype.A)
-        resp = _udp_query(host, port, query)
-
-        assert bool(resp.flags & dns.flags.QR)
         assert resp.id == query.id
         assert bool(resp.flags & dns.flags.AA)
-        assert not bool(resp.flags & dns.flags.RA)
-        assert not bool(resp.flags & dns.flags.TC)
-
-    def test_nxdomain_response_header(self, live_server):
-        host, port = live_server
-        query = dns.message.make_query(_ABSENT_FQDN, dns.rdatatype.A)
-        resp = _udp_query(host, port, query)
-
         assert bool(resp.flags & dns.flags.QR)
-        assert resp.id == query.id
-        assert bool(resp.flags & dns.flags.AA)
         assert not bool(resp.flags & dns.flags.RA)
         assert not bool(resp.flags & dns.flags.TC)
-
-    def test_refused_response_header(self, live_server):
-        host, port = live_server
-        query = dns.message.make_query(_OUT_OF_ZONE_FQDN, dns.rdatatype.A)
-        resp = _udp_query(host, port, query)
-
-        assert bool(resp.flags & dns.flags.QR)
-        assert resp.id == query.id
-        assert bool(resp.flags & dns.flags.AA)
-        assert not bool(resp.flags & dns.flags.RA)
-        assert not bool(resp.flags & dns.flags.TC)
-
 
 # ---------------------------------------------------------------------------
 # Negative responses — RFC 2308 §2.1 (NODATA) and §3 (NXDOMAIN)
+# Response header fields — RFC 1035 §4.1.1
 # ---------------------------------------------------------------------------
 
 class TestNegativeResponses:
     """NXDOMAIN and NODATA responses must carry the apex SOA in authority."""
 
-    def test_nxdomain_rcode_for_absent_owner(self, live_server):
+    def test_nxdomain_rcode_authority_answer_for_absent_owner(self, live_server):
         host, port = live_server
         query = dns.message.make_query(_ABSENT_FQDN, dns.rdatatype.A)
         resp = _udp_query(host, port, query)
+
+        assert len(resp.additional) == 0
+        assert len(resp.authority) == 1
+        assert resp.authority[0].rdtype == dns.rdatatype.SOA
+        assert resp.authority[0].name == dns.name.from_text(_ZONE_FQDN)
 
         assert resp.rcode() == dns.rcode.NXDOMAIN
 
-    def test_nxdomain_authority_contains_apex_soa(self, live_server):
-        host, port = live_server
-        query = dns.message.make_query(_ABSENT_FQDN, dns.rdatatype.A)
-        resp = _udp_query(host, port, query)
-
-        assert len(resp.authority) == 1
-        assert resp.authority[0].rdtype == dns.rdatatype.SOA
-        assert resp.authority[0].name == dns.name.from_text(_ZONE_FQDN)
-
-    def test_nxdomain_answer_and_additional_empty(self, live_server):
-        host, port = live_server
-        query = dns.message.make_query(_ABSENT_FQDN, dns.rdatatype.A)
-        resp = _udp_query(host, port, query)
-
         assert len(resp.answer) == 0
-        assert len(resp.additional) == 0
 
-    def test_nodata_rcode_for_absent_type(self, live_server):
+        assert resp.id == query.id
+        assert bool(resp.flags & dns.flags.AA)
+        assert bool(resp.flags & dns.flags.QR)
+        assert not bool(resp.flags & dns.flags.RA)
+        assert not bool(resp.flags & dns.flags.TC)
+
+    def test_nodata_rcode_authority_answer_for_absent_type(self, live_server):
         host, port = live_server
         query = dns.message.make_query(_SUBDOMAIN_FQDN, dns.rdatatype.AAAA)
         resp = _udp_query(host, port, query)
+
+        assert len(resp.additional) == 0
+        assert len(resp.authority) == 1
+        assert resp.authority[0].rdtype == dns.rdatatype.SOA
+        assert resp.authority[0].name == dns.name.from_text(_ZONE_FQDN)
 
         assert resp.rcode() == dns.rcode.NOERROR
 
-    def test_nodata_authority_contains_apex_soa(self, live_server):
-        host, port = live_server
-        query = dns.message.make_query(_SUBDOMAIN_FQDN, dns.rdatatype.AAAA)
-        resp = _udp_query(host, port, query)
-
-        assert len(resp.authority) == 1
-        assert resp.authority[0].rdtype == dns.rdatatype.SOA
-        assert resp.authority[0].name == dns.name.from_text(_ZONE_FQDN)
-
-    def test_nodata_answer_and_additional_empty(self, live_server):
-        host, port = live_server
-        query = dns.message.make_query(_SUBDOMAIN_FQDN, dns.rdatatype.AAAA)
-        resp = _udp_query(host, port, query)
-
         assert len(resp.answer) == 0
-        assert len(resp.additional) == 0
 
+        assert resp.id == query.id
+        assert bool(resp.flags & dns.flags.AA)
+        assert bool(resp.flags & dns.flags.QR)
+        assert not bool(resp.flags & dns.flags.RA)
+        assert not bool(resp.flags & dns.flags.TC)
 
 # ---------------------------------------------------------------------------
 # Rejected queries — RFC 1034 §6.2, RFC 1035 §4.1.1, RFC 2181 §5.1
+# Response header fields — RFC 1035 §4.1.1
 # ---------------------------------------------------------------------------
 
 class TestRejectedQueries:
@@ -341,36 +287,36 @@ class TestRejectedQueries:
         query = dns.message.make_query(_OUT_OF_ZONE_FQDN, dns.rdatatype.A)
         resp = _udp_query(host, port, query)
 
+        assert len(resp.additional) == 0
+        assert len(resp.authority) == 0
+
         assert resp.rcode() == dns.rcode.REFUSED
 
-    def test_out_of_zone_refused_sections_empty(self, live_server):
-        host, port = live_server
-        query = dns.message.make_query(_OUT_OF_ZONE_FQDN, dns.rdatatype.A)
-        resp = _udp_query(host, port, query)
-
         assert len(resp.answer) == 0
-        assert len(resp.authority) == 0
-        assert len(resp.additional) == 0
+
+        assert resp.id == query.id
+        assert bool(resp.flags & dns.flags.AA)
+        assert bool(resp.flags & dns.flags.QR)
+        assert not bool(resp.flags & dns.flags.RA)
+        assert not bool(resp.flags & dns.flags.TC)
 
     def test_non_in_class_returns_refused(self, live_server):
         host, port = live_server
-        query = dns.message.make_query(
-            _SUBDOMAIN_FQDN, dns.rdatatype.A, rdclass=dns.rdataclass.CH
-        )
+        query = dns.message.make_query(_SUBDOMAIN_FQDN, dns.rdatatype.A, rdclass=dns.rdataclass.CH)
         resp = _udp_query(host, port, query)
+
+        assert len(resp.additional) == 0
+        assert len(resp.authority) == 0
 
         assert resp.rcode() == dns.rcode.REFUSED
 
-    def test_non_in_class_refused_sections_empty(self, live_server):
-        host, port = live_server
-        query = dns.message.make_query(
-            _SUBDOMAIN_FQDN, dns.rdatatype.A, rdclass=dns.rdataclass.CH
-        )
-        resp = _udp_query(host, port, query)
-
         assert len(resp.answer) == 0
-        assert len(resp.authority) == 0
-        assert len(resp.additional) == 0
+
+        assert resp.id == query.id
+        assert bool(resp.flags & dns.flags.AA)
+        assert bool(resp.flags & dns.flags.QR)
+        assert not bool(resp.flags & dns.flags.RA)
+        assert not bool(resp.flags & dns.flags.TC)
 
     def test_status_opcode_returns_notimp(self, live_server):
         host, port = live_server
@@ -378,17 +324,18 @@ class TestRejectedQueries:
         query.set_opcode(dns.opcode.STATUS)
         resp = _udp_query(host, port, query)
 
+        assert len(resp.additional) == 0
+        assert len(resp.authority) == 0
+
         assert resp.rcode() == dns.rcode.NOTIMP
 
-    def test_notimp_sections_empty(self, live_server):
-        host, port = live_server
-        query = dns.message.make_query(_SUBDOMAIN_FQDN, dns.rdatatype.A)
-        query.set_opcode(dns.opcode.STATUS)
-        resp = _udp_query(host, port, query)
-
         assert len(resp.answer) == 0
-        assert len(resp.authority) == 0
-        assert len(resp.additional) == 0
+
+        assert resp.id == query.id
+        assert bool(resp.flags & dns.flags.AA)
+        assert bool(resp.flags & dns.flags.QR)
+        assert not bool(resp.flags & dns.flags.RA)
+        assert not bool(resp.flags & dns.flags.TC)
 
     def test_zero_question_query_returns_formerr(self, live_server):
         host, port = live_server
@@ -397,7 +344,18 @@ class TestRejectedQueries:
         query = dns.message.Message()
         resp = _udp_query(host, port, query)
 
+        assert len(resp.additional) == 0
+        assert len(resp.authority) == 0
+
         assert resp.rcode() == dns.rcode.FORMERR
+
+        assert len(resp.answer) == 0
+
+        assert resp.id == query.id
+        assert bool(resp.flags & dns.flags.AA)
+        assert bool(resp.flags & dns.flags.QR)
+        assert not bool(resp.flags & dns.flags.RA)
+        assert not bool(resp.flags & dns.flags.TC)
 
     def test_multi_question_query_returns_formerr(self, live_server):
         host, port = live_server
@@ -408,11 +366,22 @@ class TestRejectedQueries:
         wire = _make_two_question_wire(_SUBDOMAIN_FQDN, _ABSENT_FQDN)
         resp = _udp_raw_query(host, port, wire)
 
+        assert len(resp.additional) == 0
+        assert len(resp.authority) == 0
+
         assert resp.rcode() == dns.rcode.FORMERR
 
+        assert len(resp.answer) == 0
+
+        assert resp.id == dns.message.from_wire(wire).id
+        assert bool(resp.flags & dns.flags.AA)
+        assert bool(resp.flags & dns.flags.QR)
+        assert not bool(resp.flags & dns.flags.RA)
+        assert not bool(resp.flags & dns.flags.TC)
 
 # ---------------------------------------------------------------------------
 # Malformed wire input — RFC 1035 §4.1.1
+# Response header fields — RFC 1035 §4.1.1
 # ---------------------------------------------------------------------------
 
 class TestMalformedWireInput:
@@ -422,16 +391,15 @@ class TestMalformedWireInput:
         host, port = live_server
         resp = _udp_raw_query(host, port, _MALFORMED_HEADER_ONLY_WIRE)
 
+        assert len(resp.additional) == 0
+        assert len(resp.authority) == 0
+
         assert resp.rcode() == dns.rcode.FORMERR
 
-    def test_malformed_wire_formerr_preserves_transaction_id(self, live_server):
-        host, port = live_server
-        resp = _udp_raw_query(host, port, _MALFORMED_HEADER_ONLY_WIRE)
+        assert len(resp.answer) == 0
 
         assert resp.id == _MALFORMED_HEADER_ONLY_ID
-
-    def test_malformed_wire_formerr_sets_qr_flag(self, live_server):
-        host, port = live_server
-        resp = _udp_raw_query(host, port, _MALFORMED_HEADER_ONLY_WIRE)
-
+        assert not bool(resp.flags & dns.flags.AA)
         assert bool(resp.flags & dns.flags.QR)
+        assert not bool(resp.flags & dns.flags.RA)
+        assert not bool(resp.flags & dns.flags.TC)
