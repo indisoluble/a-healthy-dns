@@ -150,7 +150,26 @@ No remaining Level 1 gaps in RFC 2308 coverage.
 
 ---
 
-## 4. Out of scope for Level 1
+## 4. Test coverage mapping
+
+| Behaviour | Test location |
+|---|---|
+| Positive A/SOA/NS responses (NOERROR) | `tests/indisoluble/a_healthy_dns/test_dns_server_udp_integration.py` (component integration) |
+| NXDOMAIN with SOA in authority | `tests/indisoluble/a_healthy_dns/test_dns_server_udp_integration.py` (component integration) |
+| NODATA with SOA in authority | `tests/indisoluble/a_healthy_dns/test_dns_server_udp_integration.py` (component integration) |
+| Out-of-zone REFUSED | `tests/indisoluble/a_healthy_dns/test_dns_server_udp_integration.py` (component integration) |
+| Non-IN-class REFUSED | `tests/indisoluble/a_healthy_dns/test_dns_server_udp_integration.py` (component integration) |
+| NOTIMP for unsupported opcodes | `tests/indisoluble/a_healthy_dns/test_dns_server_udp_integration.py` (component integration) |
+| FORMERR for QDCOUNT ≠ 1 (wire-level) | `tests/indisoluble/a_healthy_dns/test_dns_server_udp_integration.py` (component integration) |
+| FORMERR for malformed wire with recoverable header (≥ 12 bytes) | `tests/indisoluble/a_healthy_dns/test_dns_server_udp_integration.py` (component integration) + `tests/indisoluble/a_healthy_dns/test_dns_server_udp_handler.py` (unit) |
+| Silent drop for malformed wire shorter than 12 bytes | `tests/indisoluble/a_healthy_dns/test_dns_server_udp_handler.py` (unit — no transaction ID to reply to) |
+| Response header fields (QR, ID, AA, RA, TC) | `tests/indisoluble/a_healthy_dns/test_dns_server_udp_integration.py` (component integration) |
+| Health-check-driven A-record addition/removal | `.github/workflows/test-integration.yml` (Docker end-to-end) |
+| Container startup, Docker networking, alias zone routing | `.github/workflows/test-integration.yml` (Docker end-to-end) |
+
+---
+
+## 5. Out of scope for Level 1
 
 All Level 1 behaviours are implemented and covered by automated tests (unit tests in `tests/indisoluble/a_healthy_dns/test_dns_server_udp_handler.py` and component integration tests in `tests/indisoluble/a_healthy_dns/test_dns_server_udp_integration.py`).
 

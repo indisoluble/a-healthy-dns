@@ -2,40 +2,7 @@
 
 """Component integration tests for the authoritative UDP serving layer.
 
-Scope
------
-These tests validate the **authoritative UDP server component** end-to-end:
-
-  dns.message.from_wire()  →  DnsServerUdpHandler  →  DnsServerZoneUpdater zone
-
-A real UDP server is started on localhost with a real in-memory zone whose
-state is pre-populated via ``DnsServerZoneUpdater.update(check_ips=False)``.
-All queries are sent as actual UDP datagrams; all assertions operate on the
-parsed wire-level response.
-
-**What this suite covers:**
-- RFC-conformant response shapes for the authoritative UDP serving path:
-  positive A/SOA/NS responses (NOERROR), NXDOMAIN, NODATA, out-of-zone
-  and non-IN-class REFUSED, NOTIMP, FORMERR (QDCOUNT != 1), and
-  FORMERR (malformed wire with a recoverable DNS header), as
-  documented in docs/RFC-conformance.md
-- Response header fields (QR, ID, AA, RA, TC)
-- Answer / authority / additional section shapes
-- Real wire-level QDCOUNT != 1 (zero-question and multi-question FORMERR)
-
-**What this suite does NOT cover:**
-- Malformed wire input shorter than 12 bytes (no DNS header to recover).
-  Those packets are silently dropped.  That behaviour is confirmed by
-  ``test_handle_malformed_wire_input_drops_silently`` in the unit test file
-  ``tests/indisoluble/a_healthy_dns/test_dns_server_udp_handler.py``.
-- The health-check lifecycle (periodic TCP probes, dynamic A-record
-  addition/removal when backends go up or down).  That behaviour is
-  exercised by the Docker end-to-end tests in
-  ``.github/workflows/test-integration.yml``.
-- Container startup, Docker networking, or alias zone routing.
-
-These tests complement the mocked unit tests in
-``tests/indisoluble/a_healthy_dns/test_dns_server_udp_handler.py``.
+See docs/RFC-conformance.md §4 for the full test coverage mapping.
 """
 
 import socket
