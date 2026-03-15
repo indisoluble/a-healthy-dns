@@ -44,7 +44,7 @@ jobs:
           -e DNS_HOSTED_ZONE="test.example.com" \
           -e DNS_ALIAS_ZONES='["test.other.com","test.another.com"]' \
           -e DNS_ZONE_RESOLUTIONS='{"www":{"ips":["172.28.0.10"],"health_port":80}}' \
-          -e DNS_NAME_SERVERS='["ns1.test.example.com"]' \
+          -e DNS_NAME_SERVERS='["ns1.example.com"]' \
           -e DNS_PORT="53053" \
           -e DNS_TEST_MIN_INTERVAL="1" \
           -e DNS_TEST_TIMEOUT="1" \
