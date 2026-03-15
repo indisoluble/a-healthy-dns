@@ -104,14 +104,22 @@ class DnsServerUdpHandler(socketserver.BaseRequestHandler):
 
         try:
             query = dns.message.from_wire(data)
-        except dns.exception.DNSException as ex:
+        except dns.message.ShortHeader as ex:
+            # Payload too short to contain a DNS header — no transaction ID to
+            # recover, drop silently (RFC 1035 §4.1.1).
             logging.warning("Failed to parse DNS query: %s", ex)
-            if len(data) >= 12:
-                # DNS header is readable: recover the transaction ID and respond
-                # with a minimal FORMERR (RFC 1035 §4.1.1).
-                # Flags byte 2: QR=1 (0x80); byte 3: RCODE=FORMERR (0x01).
-                wire = bytes([data[0], data[1], 0x80, 0x01, 0, 0, 0, 0, 0, 0, 0, 0])
-                sock.sendto(wire, self.client_address)
+            return
+        except dns.exception.DNSException as ex:
+            # Header is readable but message is malformed — recover the
+            # transaction ID and respond with FORMERR (RFC 1035 §4.1.1).
+            logging.warning("Failed to parse DNS query: %s", ex)
+
+            msg_id = int.from_bytes(data[:2], "big")
+            formerr = dns.message.Message(id=msg_id)
+            formerr.flags = dns.flags.QR
+            formerr.set_rcode(dns.rcode.FORMERR)
+
+            sock.sendto(formerr.to_wire(), self.client_address)
             return
 
         response = dns.message.make_response(query)
