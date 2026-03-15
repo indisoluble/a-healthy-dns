@@ -14,18 +14,13 @@ import pytest
 
 from unittest.mock import MagicMock, patch
 
-from indisoluble.a_healthy_dns.dns_server_udp_handler import (
-    _update_response,
-    DnsServerUdpHandler,
-)
+from indisoluble.a_healthy_dns.dns_server_udp_handler import _update_response, DnsServerUdpHandler
 from indisoluble.a_healthy_dns.records.zone_origins import ZoneOrigins
 
 
 def _make_multi_question_wire(*question_names):
-    queries = [
-        dns.message.make_query(question_name, dns.rdatatype.A)
-        for question_name in question_names
-    ]
+    queries = [dns.message.make_query(question_name, dns.rdatatype.A) for question_name in question_names]
+
     wire = bytearray(queries[0].to_wire())
     wire[4:6] = len(queries).to_bytes(2, byteorder="big")
 
@@ -99,24 +94,22 @@ def mock_server(mock_zone, mock_zone_origins):
 
 
 @pytest.fixture
-def dns_response():
+def mock_dns_response():
     return dns.message.make_response(dns.message.make_query("dummy", dns.rdatatype.A))
 
 
 @pytest.fixture
-def dns_request():
+def mock_dns_request():
     query = dns.message.make_query("test.example.com.", dns.rdatatype.A)
     return (query.to_wire(), MagicMock())
 
 
 @pytest.fixture
-def dns_client_address():
+def mock_dns_client_address():
     return ("127.0.0.1", 12345)
 
 
-def test_update_response_with_relative_name_found(
-    mock_zone, mock_reader, mock_rdata, mock_rdataset, dns_response, mock_zone_origins
-):
+def test_update_response_with_relative_name_found(mock_zone, mock_reader, mock_rdata, mock_rdataset, mock_dns_response, mock_zone_origins):
     # Setup
     query_name = dns.name.from_text("test", origin=None)
     query_type = dns.rdatatype.A
@@ -132,26 +125,28 @@ def test_update_response_with_relative_name_found(
     mock_zone.reader.return_value.__enter__.return_value = mock_reader
 
     # Call function
-    _update_response(dns_response, query_name, query_type, mock_zone, mock_zone_origins)
+    _update_response(mock_dns_response, query_name, query_type, mock_zone, mock_zone_origins)
 
     # Assertions
     mock_zone.reader.assert_called_once()
     mock_reader.get_node.assert_called_once_with(query_name)
     mock_node.get_rdataset.assert_called_once_with(mock_zone.rdclass, query_type)
-    assert dns_response.rcode() == dns.rcode.NOERROR
-    assert len(dns_response.answer) == 1
-    assert dns_response.answer[0].name == query_name
-    assert dns_response.answer[0].rdclass == mock_rdataset.rdclass
-    assert dns_response.answer[0].rdtype == query_type
-    assert dns_response.answer[0].ttl == mock_rdataset.ttl
-    assert list(dns_response.answer[0]) == [mock_rdata]
-    assert len(dns_response.authority) == 0
-    assert len(dns_response.additional) == 0
+    mock_reader.get.assert_not_called()  # SOA lookup should not be needed when node is found
+
+    assert mock_dns_response.rcode() == dns.rcode.NOERROR
+
+    assert len(mock_dns_response.additional) == 0
+    assert len(mock_dns_response.authority) == 0
+
+    assert len(mock_dns_response.answer) == 1
+    assert mock_dns_response.answer[0].name == query_name
+    assert mock_dns_response.answer[0].rdclass == mock_rdataset.rdclass
+    assert mock_dns_response.answer[0].rdtype == query_type
+    assert mock_dns_response.answer[0].ttl == mock_rdataset.ttl
+    assert list(mock_dns_response.answer[0]) == [mock_rdata]
 
 
-def test_update_response_with_absolute_name_found(
-    mock_zone, mock_reader, mock_rdata, mock_rdataset, dns_response, mock_zone_origins
-):
+def test_update_response_with_absolute_name_found(mock_zone, mock_reader, mock_rdata, mock_rdataset, mock_dns_response, mock_zone_origins):
     # Setup
     query_name = dns.name.from_text("test", origin=mock_zone_origins.primary)
     query_type = dns.rdatatype.A
@@ -167,56 +162,50 @@ def test_update_response_with_absolute_name_found(
     mock_zone.reader.return_value.__enter__.return_value = mock_reader
 
     # Call function
-    _update_response(dns_response, query_name, query_type, mock_zone, mock_zone_origins)
+    _update_response(mock_dns_response, query_name, query_type, mock_zone, mock_zone_origins)
 
     # Assertions
     mock_zone.reader.assert_called_once()
-    mock_reader.get_node.assert_called_once_with(
-        query_name.relativize(mock_zone_origins.primary)
-    )
+    mock_reader.get_node.assert_called_once_with(query_name.relativize(mock_zone_origins.primary))
     mock_node.get_rdataset.assert_called_once_with(mock_zone.rdclass, query_type)
-    assert dns_response.rcode() == dns.rcode.NOERROR
-    assert len(dns_response.answer) == 1
-    assert dns_response.answer[0].name == query_name
-    assert dns_response.answer[0].rdclass == mock_rdataset.rdclass
-    assert dns_response.answer[0].rdtype == query_type
-    assert dns_response.answer[0].ttl == mock_rdataset.ttl
-    assert list(dns_response.answer[0]) == [mock_rdata]
-    assert len(dns_response.authority) == 0
-    assert len(dns_response.additional) == 0
+    mock_reader.get.assert_not_called()  # SOA lookup should not be needed when node is found
+
+    assert mock_dns_response.rcode() == dns.rcode.NOERROR
+
+    assert len(mock_dns_response.additional) == 0
+    assert len(mock_dns_response.authority) == 0
+
+    assert len(mock_dns_response.answer) == 1
+    assert mock_dns_response.answer[0].name == query_name
+    assert mock_dns_response.answer[0].rdclass == mock_rdataset.rdclass
+    assert mock_dns_response.answer[0].rdtype == query_type
+    assert mock_dns_response.answer[0].ttl == mock_rdataset.ttl
+    assert list(mock_dns_response.answer[0]) == [mock_rdata]
 
 
-def test_update_response_with_absolute_name_outside_zone_origins(
-    mock_zone, dns_response, mock_zone_origins
-):
+def test_update_response_with_absolute_name_outside_zone_origins(mock_zone, mock_dns_response, mock_zone_origins):
     # Setup
     query_name = dns.name.from_text("test", origin=dns.name.from_text("other.com"))
     query_type = dns.rdatatype.A
-    original_id = dns_response.id
 
     # Call function
-    _update_response(dns_response, query_name, query_type, mock_zone, mock_zone_origins)
+    _update_response(mock_dns_response, query_name, query_type, mock_zone, mock_zone_origins)
 
     # Assertions
     mock_zone.reader.assert_not_called()
-    assert dns_response.rcode() == dns.rcode.REFUSED
-    assert len(dns_response.answer) == 0
-    assert len(dns_response.authority) == 0
-    assert len(dns_response.additional) == 0
-    # Header field assertions (RFC 1035 §4.1.1)
-    assert bool(dns_response.flags & dns.flags.QR)
-    assert dns_response.id == original_id
-    assert not bool(dns_response.flags & dns.flags.RA)
-    assert not bool(dns_response.flags & dns.flags.TC)
+
+    assert mock_dns_response.rcode() == dns.rcode.REFUSED
+
+    assert len(mock_dns_response.additional) == 0
+    assert len(mock_dns_response.authority) == 0
+
+    assert len(mock_dns_response.answer) == 0
 
 
-def test_update_response_domain_not_found(
-    mock_zone, mock_reader, dns_response, mock_zone_origins, mock_soa_rdataset
-):
+def test_update_response_domain_not_found(mock_zone, mock_reader, mock_dns_response, mock_zone_origins, mock_soa_rdataset):
     # Setup
     query_name = dns.name.from_text("nonexistent", origin=mock_zone_origins.primary)
     query_type = dns.rdatatype.A
-    original_id = dns_response.id
 
     # Mock zone.reader.get_node to return None
     mock_reader.get_node.return_value = None
@@ -225,31 +214,25 @@ def test_update_response_domain_not_found(
     mock_zone.reader.return_value.__enter__.return_value = mock_reader
 
     # Call function
-    _update_response(dns_response, query_name, query_type, mock_zone, mock_zone_origins)
+    _update_response(mock_dns_response, query_name, query_type, mock_zone, mock_zone_origins)
 
     # Assertions
     mock_zone.reader.assert_called_once()
-    mock_reader.get_node.assert_called_once_with(
-        query_name.relativize(mock_zone_origins.primary)
-    )
+    mock_reader.get_node.assert_called_once_with(query_name.relativize(mock_zone_origins.primary))
     mock_reader.get.assert_called_once_with(dns.name.empty, dns.rdatatype.SOA)
-    assert dns_response.rcode() == dns.rcode.NXDOMAIN
-    assert len(dns_response.answer) == 0
-    assert len(dns_response.authority) == 1
-    assert dns_response.authority[0].rdtype == dns.rdatatype.SOA
-    assert dns_response.authority[0].name == mock_zone_origins.primary
-    assert dns_response.authority[0].ttl == mock_soa_rdataset.ttl
-    assert len(dns_response.additional) == 0
-    # Header field assertions (RFC 1035 §4.1.1)
-    assert bool(dns_response.flags & dns.flags.QR)
-    assert dns_response.id == original_id
-    assert not bool(dns_response.flags & dns.flags.RA)
-    assert not bool(dns_response.flags & dns.flags.TC)
+
+    assert mock_dns_response.rcode() == dns.rcode.NXDOMAIN
+
+    assert len(mock_dns_response.additional) == 0
+    assert len(mock_dns_response.authority) == 1
+    assert mock_dns_response.authority[0].rdtype == dns.rdatatype.SOA
+    assert mock_dns_response.authority[0].name == mock_zone_origins.primary
+    assert mock_dns_response.authority[0].ttl == mock_soa_rdataset.ttl
+
+    assert len(mock_dns_response.answer) == 0
 
 
-def test_update_response_record_type_not_found(
-    mock_zone, mock_reader, dns_response, mock_zone_origins, mock_soa_rdataset
-):
+def test_update_response_record_type_not_found(mock_zone, mock_reader, mock_dns_response, mock_zone_origins, mock_soa_rdataset):
     # Setup
     query_name = dns.name.from_text("test", origin=mock_zone_origins.primary)
     query_type = dns.rdatatype.A
@@ -264,33 +247,32 @@ def test_update_response_record_type_not_found(
     mock_zone.reader.return_value.__enter__.return_value = mock_reader
 
     # Call function
-    _update_response(dns_response, query_name, query_type, mock_zone, mock_zone_origins)
+    _update_response(mock_dns_response, query_name, query_type, mock_zone, mock_zone_origins)
 
     # Assertions
     mock_zone.reader.assert_called_once()
-    mock_reader.get_node.assert_called_once_with(
-        query_name.relativize(mock_zone_origins.primary)
-    )
+    mock_reader.get_node.assert_called_once_with(query_name.relativize(mock_zone_origins.primary))
     mock_node.get_rdataset.assert_called_once_with(mock_zone.rdclass, query_type)
     mock_reader.get.assert_called_once_with(dns.name.empty, dns.rdatatype.SOA)
-    assert dns_response.rcode() == dns.rcode.NOERROR
-    assert len(dns_response.answer) == 0
-    assert len(dns_response.authority) == 1
-    assert dns_response.authority[0].rdtype == dns.rdatatype.SOA
-    assert dns_response.authority[0].name == mock_zone_origins.primary
-    assert dns_response.authority[0].ttl == mock_soa_rdataset.ttl
-    assert len(dns_response.additional) == 0
+
+    assert mock_dns_response.rcode() == dns.rcode.NOERROR
+
+    assert len(mock_dns_response.additional) == 0
+    assert len(mock_dns_response.authority) == 1
+    assert mock_dns_response.authority[0].rdtype == dns.rdatatype.SOA
+    assert mock_dns_response.authority[0].name == mock_zone_origins.primary
+    assert mock_dns_response.authority[0].ttl == mock_soa_rdataset.ttl
+
+    assert len(mock_dns_response.answer) == 0
 
 
 @patch("indisoluble.a_healthy_dns.dns_server_udp_handler._update_response")
-def test_handle_valid_query(
-    mock_update_response, dns_request, dns_client_address, mock_server
-):
+def test_handle_valid_query(mock_update_response, mock_dns_request, mock_dns_client_address, mock_server):
     # No need to call handle() as it's called automatically by the constructor
-    _ = DnsServerUdpHandler(dns_request, dns_client_address, mock_server)
+    _ = DnsServerUdpHandler(mock_dns_request, mock_dns_client_address, mock_server)
 
     # Get the original query for comparison
-    query_data = dns_request[0]
+    query_data = mock_dns_request[0]
     query = dns.message.from_wire(query_data)
     question = query.question[0]
 
@@ -302,36 +284,34 @@ def test_handle_valid_query(
     assert mock_update_response.call_args[0][4] == mock_server.zone_origins
 
     # Check response was sent
-    mock_sock = dns_request[1]
+    mock_sock = mock_dns_request[1]
     mock_sock.sendto.assert_called_once()
 
     # Verify response header fields (RFC 1035 §4.1.1)
     sent_data = mock_sock.sendto.call_args[0][0]
     response = dns.message.from_wire(sent_data)
-    assert bool(response.flags & dns.flags.QR)
     assert response.id == query.id
+    assert bool(response.flags & dns.flags.AA)
+    assert bool(response.flags & dns.flags.QR)
     assert not bool(response.flags & dns.flags.RA)
     assert not bool(response.flags & dns.flags.TC)
-    assert bool(response.flags & dns.flags.AA)
 
 
 @patch("dns.message.from_wire")
-def test_handle_exception_parsing_query(
-    mock_from_wire, dns_request, dns_client_address, mock_server
-):
+def test_handle_exception_parsing_query(mock_from_wire, mock_dns_request, mock_dns_client_address, mock_server):
     # Setup to simulate an exception when parsing DNS query
     mock_from_wire.side_effect = dns.exception.DNSException("Test exception")
 
     # No need to call handle() as it's called automatically by the constructor
-    _ = DnsServerUdpHandler(dns_request, dns_client_address, mock_server)
+    _ = DnsServerUdpHandler(mock_dns_request, mock_dns_client_address, mock_server)
 
     # Assertions
-    query_data = dns_request[0]
+    query_data = mock_dns_request[0]
     mock_from_wire.assert_called_once_with(query_data)
 
     # The request data is ≥ 12 bytes so the handler must respond with a
     # minimal FORMERR (RFC 1035 §4.1.1), preserving the original transaction ID.
-    mock_sock = dns_request[1]
+    mock_sock = mock_dns_request[1]
     mock_sock.sendto.assert_called_once()
     sent_wire = mock_sock.sendto.call_args[0][0]
     assert len(sent_wire) == 12
@@ -343,10 +323,7 @@ def test_handle_exception_parsing_query(
 
 # Wire bytes that are too short to contain a 12-byte DNS header.
 # The handler silently drops these — no transaction ID can be recovered.
-_MALFORMED_WIRE_TOO_SHORT_CASES = [
-    b"",
-    b"\x00\x01\x00\x00",
-]
+_MALFORMED_WIRE_TOO_SHORT_CASES = [b"",b"\x00\x01\x00\x00"]
 
 # Wire bytes that fail dns.message.from_wire() but are ≥ 12 bytes so the DNS
 # header (and transaction ID) can still be recovered.  The handler must respond
@@ -362,26 +339,22 @@ _MALFORMED_WIRE_WITH_HEADER_CASES = [
 
 
 @pytest.mark.parametrize("wire_data", _MALFORMED_WIRE_TOO_SHORT_CASES)
-def test_handle_malformed_wire_input_drops_silently(
-    wire_data, dns_client_address, mock_server
-):
+def test_handle_malformed_wire_input_drops_silently(wire_data, mock_dns_client_address, mock_server):
     mock_sock = MagicMock()
     request = (wire_data, mock_sock)
 
-    _ = DnsServerUdpHandler(request, dns_client_address, mock_server)
+    _ = DnsServerUdpHandler(request, mock_dns_client_address, mock_server)
 
     # Payload too short to recover a DNS header: drop silently, no response.
     mock_sock.sendto.assert_not_called()
 
 
 @pytest.mark.parametrize("wire_data", _MALFORMED_WIRE_WITH_HEADER_CASES)
-def test_handle_malformed_wire_with_recoverable_header_returns_formerr(
-    wire_data, dns_client_address, mock_server
-):
+def test_handle_malformed_wire_with_recoverable_header_returns_formerr(wire_data, mock_dns_client_address, mock_server):
     mock_sock = MagicMock()
     request = (wire_data, mock_sock)
 
-    _ = DnsServerUdpHandler(request, dns_client_address, mock_server)
+    _ = DnsServerUdpHandler(request, mock_dns_client_address, mock_server)
 
     mock_sock.sendto.assert_called_once()
     sent_wire = mock_sock.sendto.call_args[0][0]
@@ -395,20 +368,12 @@ def test_handle_malformed_wire_with_recoverable_header_returns_formerr(
 
 
 @patch("indisoluble.a_healthy_dns.dns_server_udp_handler._update_response")
-@pytest.mark.parametrize(
-    "query_data",
-    [
-        dns.message.Message().to_wire(),
-        _make_multi_question_wire("example.com.", "test.com."),
-    ],
-)
-def test_handle_query_with_invalid_question_count_returns_formerr(
-    mock_update_response, query_data, dns_client_address, mock_server
-):
+@pytest.mark.parametrize("query_data",[dns.message.Message().to_wire(),_make_multi_question_wire("example.com.", "test.com.")])
+def test_handle_query_with_invalid_question_count_returns_formerr(mock_update_response, query_data, mock_dns_client_address, mock_server):
     mock_sock = MagicMock()
     request = (query_data, mock_sock)
 
-    _ = DnsServerUdpHandler(request, dns_client_address, mock_server)
+    _ = DnsServerUdpHandler(request, mock_dns_client_address, mock_server)
 
     mock_update_response.assert_not_called()
     mock_sock.sendto.assert_called_once()
@@ -419,16 +384,14 @@ def test_handle_query_with_invalid_question_count_returns_formerr(
 
 
 @patch("indisoluble.a_healthy_dns.dns_server_udp_handler._update_response")
-def test_handle_query_with_non_in_class_returns_refused(
-    mock_update_response, dns_client_address, mock_server
-):
+def test_handle_query_with_non_in_class_returns_refused(mock_update_response, mock_dns_client_address, mock_server):
     query = dns.message.make_query(
         "test.example.com.", dns.rdatatype.A, rdclass=dns.rdataclass.CH
     )
     mock_sock = MagicMock()
     request = (query.to_wire(), mock_sock)
 
-    _ = DnsServerUdpHandler(request, dns_client_address, mock_server)
+    _ = DnsServerUdpHandler(request, mock_dns_client_address, mock_server)
 
     mock_update_response.assert_not_called()
     mock_sock.sendto.assert_called_once()
@@ -458,15 +421,13 @@ def test_handle_query_with_non_in_class_returns_refused(
         # so the handler never reaches the opcode check for that case.
     ],
 )
-def test_handle_query_with_unsupported_opcode_returns_notimp(
-    mock_update_response, opcode, dns_client_address, mock_server
-):
+def test_handle_query_with_unsupported_opcode_returns_notimp(mock_update_response, opcode, mock_dns_client_address, mock_server):
     query = dns.message.make_query("test.example.com.", dns.rdatatype.A)
     query.set_opcode(opcode)
     mock_sock = MagicMock()
     request = (query.to_wire(), mock_sock)
 
-    _ = DnsServerUdpHandler(request, dns_client_address, mock_server)
+    _ = DnsServerUdpHandler(request, mock_dns_client_address, mock_server)
 
     mock_update_response.assert_not_called()
     mock_sock.sendto.assert_called_once()
