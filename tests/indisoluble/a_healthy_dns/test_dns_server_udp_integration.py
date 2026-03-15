@@ -116,6 +116,18 @@ def _assert_response_flags(resp: dns.message.Message, *, aa: bool = True) -> Non
     assert not bool(resp.flags & dns.flags.TC)
 
 
+def _assert_section_counts(
+    resp: dns.message.Message,
+    *,
+    additional: int = 0,
+    authority: int = 0,
+    answer: int = 0,
+) -> None:
+    assert len(resp.additional) == additional
+    assert len(resp.authority) == authority
+    assert len(resp.answer) == answer
+
+
 # ---------------------------------------------------------------------------
 # Module-scoped server fixture
 # ---------------------------------------------------------------------------
@@ -191,9 +203,7 @@ class TestPositiveResponses:
         assert resp.rcode() == dns.rcode.NOERROR
         assert resp.id == query.id
 
-        assert len(resp.additional) == 0
-        assert len(resp.authority) == 0
-        assert len(resp.answer) == 1
+        _assert_section_counts(resp, answer=1)
         assert resp.answer[0].rdtype == dns.rdatatype.A
         assert any(str(rdata) == _SUBDOMAIN_IP for rdata in resp.answer[0])
 
@@ -207,9 +217,7 @@ class TestPositiveResponses:
         assert resp.rcode() == dns.rcode.NOERROR
         assert resp.id == query.id
 
-        assert len(resp.additional) == 0
-        assert len(resp.authority) == 0
-        assert len(resp.answer) == 1
+        _assert_section_counts(resp, answer=1)
         assert resp.answer[0].rdtype == dns.rdatatype.SOA
         assert resp.answer[0].name == dns.name.from_text(_ZONE_FQDN)
 
@@ -223,9 +231,7 @@ class TestPositiveResponses:
         assert resp.rcode() == dns.rcode.NOERROR
         assert resp.id == query.id
 
-        assert len(resp.additional) == 0
-        assert len(resp.authority) == 0
-        assert len(resp.answer) == 1
+        _assert_section_counts(resp, answer=1)
         assert resp.answer[0].rdtype == dns.rdatatype.NS
         ns_targets = {str(rdata.target) for rdata in resp.answer[0]}
         assert _NS in ns_targets
@@ -260,11 +266,9 @@ class TestNegativeResponses:
         assert resp.rcode() == expected_rcode
         assert resp.id == query.id
 
-        assert len(resp.additional) == 0
-        assert len(resp.authority) == 1
+        _assert_section_counts(resp, authority=1)
         assert resp.authority[0].rdtype == dns.rdatatype.SOA
         assert resp.authority[0].name == dns.name.from_text(_ZONE_FQDN)
-        assert len(resp.answer) == 0
 
         _assert_response_flags(resp)
 
@@ -305,10 +309,7 @@ class TestRejectedQueries:
         assert resp.rcode() == expected_rcode
         assert resp.id == query.id
 
-        assert len(resp.additional) == 0
-        assert len(resp.authority) == 0
-        assert len(resp.answer) == 0
-
+        _assert_section_counts(resp)
         _assert_response_flags(resp)
 
     def test_multi_question_query_returns_formerr(self, live_server):
@@ -323,10 +324,7 @@ class TestRejectedQueries:
         assert resp.rcode() == dns.rcode.FORMERR
         assert resp.id == dns.message.from_wire(wire).id
 
-        assert len(resp.additional) == 0
-        assert len(resp.authority) == 0
-        assert len(resp.answer) == 0
-
+        _assert_section_counts(resp)
         _assert_response_flags(resp)
 
     def test_status_opcode_returns_notimp(self, live_server):
@@ -338,10 +336,7 @@ class TestRejectedQueries:
         assert resp.rcode() == dns.rcode.NOTIMP
         assert resp.id == query.id
 
-        assert len(resp.additional) == 0
-        assert len(resp.authority) == 0
-        assert len(resp.answer) == 0
-
+        _assert_section_counts(resp)
         _assert_response_flags(resp)
 
 
@@ -361,8 +356,5 @@ class TestMalformedWireInput:
         assert resp.rcode() == dns.rcode.FORMERR
         assert resp.id == _MALFORMED_HEADER_ONLY_ID
 
-        assert len(resp.additional) == 0
-        assert len(resp.authority) == 0
-        assert len(resp.answer) == 0
-
+        _assert_section_counts(resp)
         _assert_response_flags(resp, aa=False)
