@@ -32,8 +32,8 @@ Standard authoritative DNS servers return static records. When a backend becomes
 |---|---|
 | Python version | ≥ 3.10 |
 | Transport | UDP only (standard DNS port or configurable alternative) |
-| DNS library | `dnspython ≥ 2.8, < 3.0` |
-| DNSSEC crypto | `cryptography ≥ 46.0.5, < 47.0` |
+| DNS library | `dnspython ≥ 2.8.0, < 3.0.0` |
+| DNSSEC crypto | `cryptography ≥ 46.0.5, < 47.0.0` |
 | Health check protocol | TCP connectivity test (`socket.create_connection`) |
 | Record type served | Base records: A, SOA, and NS. With DNSSEC enabled, the zone also publishes DNSKEY, NSEC, and corresponding RRSIG records |
 | Concurrency model | Single UDP server thread + one background zone-updater thread |
