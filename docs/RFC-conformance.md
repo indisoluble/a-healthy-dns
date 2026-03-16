@@ -84,7 +84,7 @@ RFC 1034 §6.2 — https://www.rfc-editor.org/rfc/rfc1034 describes the algorith
 
 | Behaviour | Status | Notes |
 |---|---|---|
-| Authoritative Answer (AA) flag set on all responses | **Implemented** | `indisoluble/a_healthy_dns/dns_server_udp_handler.py:120` sets `dns.flags.AA` on every response |
+| Authoritative Answer (AA) flag set on all responses | **Implemented** | `indisoluble/a_healthy_dns/dns_server_udp_handler.py:126` sets `dns.flags.AA` on every response |
 | REFUSED for queries outside all served zones | **Implemented** | `indisoluble/a_healthy_dns/dns_server_udp_handler.py:67` returns `dns.rcode.REFUSED` when the query name does not fall within any hosted or alias zone |
 | NXDOMAIN when owner name is absent from an in-zone query | **Implemented** | `indisoluble/a_healthy_dns/dns_server_udp_handler.py:90` returns `dns.rcode.NXDOMAIN` when `txn.get_node(relative_name)` returns nothing |
 | NOERROR when owner name exists and matching records are found | **Implemented** | Handler adds the matching RRset to the answer section |
@@ -104,10 +104,10 @@ RFC 1035 defines the DNS wire format: the message header structure (including th
 | Behaviour | Status | Notes |
 |---|---|---|
 | Wire parsing of incoming queries | **Implemented** | `dns.message.from_wire()` is used; `dns.exception.DNSException` is caught |
-| FORMERR when wire parsing fails | **Implemented** | When `dns.message.from_wire()` raises `DNSException` and the payload is ≥ 12 bytes (DNS header readable), the handler extracts the transaction ID from bytes 0–1 and responds with a minimal FORMERR: QR=1, ID preserved, all counts zero, no question or answer sections (`indisoluble/a_healthy_dns/dns_server_udp_handler.py:107-117`).  Payloads shorter than 12 bytes are dropped silently — no transaction ID is available to construct a reply. |
-| Opcode validation — NOTIMP for non-QUERY opcodes | **Implemented** | `indisoluble/a_healthy_dns/dns_server_udp_handler.py:122-127`: `query.opcode() != dns.opcode.QUERY` check returns `dns.rcode.NOTIMP`.  Tested with STATUS (opcode 2) and NOTIFY (opcode 4).  UPDATE messages (opcode 5) are rejected by dnspython's wire parser before this check is reached. |
-| QDCOUNT validation — FORMERR for ≠ 1 question | **Implemented** | `indisoluble/a_healthy_dns/dns_server_udp_handler.py:128-149`: `len(query.question) == 1` check; zero or more-than-one questions return `dns.rcode.FORMERR`.  Confirmed: dnspython preserves all questions for QDCOUNT > 1 wire messages.  See also RFC 2181 §5.1. |
-| QCLASS / IN class validation | **Implemented** | `indisoluble/a_healthy_dns/dns_server_udp_handler.py:130-143`: `question.rdclass != dns.rdataclass.IN` check; non-IN queries return `dns.rcode.REFUSED`.  Project decision: REFUSED because the server exclusively serves IN-class data. |
+| FORMERR when wire parsing fails | **Implemented** | When `dns.message.from_wire()` raises a `DNSException` other than `ShortHeader` (DNS header readable), the handler extracts the transaction ID from bytes 0–1 and responds with FORMERR (`indisoluble/a_healthy_dns/dns_server_udp_handler.py:112-123`).  When `ShortHeader` is raised (payload < 12 bytes), the packet is dropped silently (`indisoluble/a_healthy_dns/dns_server_udp_handler.py:107-111`).  See the note below for details. |
+| Opcode validation — NOTIMP for non-QUERY opcodes | **Implemented** | `indisoluble/a_healthy_dns/dns_server_udp_handler.py:128-133`: `query.opcode() != dns.opcode.QUERY` check returns `dns.rcode.NOTIMP`.  Tested with STATUS (opcode 2) and NOTIFY (opcode 4).  UPDATE messages (opcode 5) are rejected by dnspython's wire parser before this check is reached. |
+| QDCOUNT validation — FORMERR for ≠ 1 question | **Implemented** | `indisoluble/a_healthy_dns/dns_server_udp_handler.py:134-139`: `len(query.question) != 1` check; zero or more-than-one questions return `dns.rcode.FORMERR`.  Confirmed: dnspython preserves all questions for QDCOUNT > 1 wire messages.  See also RFC 2181 §5.1. |
+| QCLASS / IN class validation | **Implemented** | `indisoluble/a_healthy_dns/dns_server_udp_handler.py:142-147`: `question.rdclass != dns.rdataclass.IN` check; non-IN queries return `dns.rcode.REFUSED`.  Project decision: REFUSED because the server exclusively serves IN-class data. |
 | Wire serialisation of responses | **Implemented** | `response.to_wire()` is called before every `sendto()` |
 | A, SOA, NS record types in responses | **Implemented** | All three record types are populated by the zone updater |
 
@@ -125,8 +125,8 @@ RFC 2181 §4 also clarifies that the AA flag applies to the entire response when
 
 | Behaviour | Status | Notes |
 |---|---|---|
-| AA flag set correctly | **Implemented** | `indisoluble/a_healthy_dns/dns_server_udp_handler.py:120` |
-| FORMERR for QDCOUNT ≠ 1 (RFC 2181 §5.1) | **Implemented** | `indisoluble/a_healthy_dns/dns_server_udp_handler.py:128-149`: `len(query.question) == 1` check.  Verified: dnspython preserves all questions for QDCOUNT > 1 wire messages; the check is necessary and effective. |
+| AA flag set correctly | **Implemented** | `indisoluble/a_healthy_dns/dns_server_udp_handler.py:126` |
+| FORMERR for QDCOUNT ≠ 1 (RFC 2181 §5.1) | **Implemented** | `indisoluble/a_healthy_dns/dns_server_udp_handler.py:134-139`: `len(query.question) != 1` check.  Verified: dnspython preserves all questions for QDCOUNT > 1 wire messages; the check is necessary and effective. |
 
 No remaining Level 1 gaps in RFC 2181 coverage.
 
