@@ -109,7 +109,7 @@ def _make_two_question_wire(name1: str, name2: str) -> bytes:
     return bytes(wire)
 
 
-def _assert_response_flags(resp: dns.message.Message, *, aa: bool = True) -> None:
+def _assert_response_flags(resp: dns.message.Message, *, aa: bool = True):
     assert bool(resp.flags & dns.flags.AA) == aa
     assert bool(resp.flags & dns.flags.QR)
     assert not bool(resp.flags & dns.flags.RA)
@@ -122,7 +122,7 @@ def _assert_section_counts(
     additional: int = 0,
     authority: int = 0,
     answer: int = 0,
-) -> None:
+):
     assert len(resp.additional) == additional
     assert len(resp.authority) == authority
     assert len(resp.answer) == answer
