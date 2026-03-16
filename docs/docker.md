@@ -54,7 +54,7 @@ docker run -d \
 ### Security Features
 - Runs as non-root user (`appuser`)
 - Minimal attack surface (slim base, minimal dependencies)
-- Capability management (`CAP_NET_BIND_SERVICE` for port 53)
+- File capability on the Python binary for port-53 binds; hardened runtimes that drop all capabilities must add back `NET_BIND_SERVICE`
 - Tini init system for proper signal handling
 - No unnecessary packages or build tools in final image
 
@@ -314,11 +314,12 @@ docker inspect a-healthy-dns | jq '.[0].Config.Env'
 # Get shell access
 docker exec -it a-healthy-dns sh
 
-# Check listening ports
-docker exec a-healthy-dns netstat -uln
+# Locate the installed CLI and package
+docker exec a-healthy-dns which a-healthy-dns
+docker exec a-healthy-dns python3 -c "import indisoluble.a_healthy_dns.main as m; print(m.__file__)"
 
-# Test health check connectivity
-docker exec a-healthy-dns nc -zv 192.168.1.100 8080
+# Test health check connectivity using the Python runtime already in the image
+docker exec a-healthy-dns python3 -c "import socket; socket.create_connection(('192.168.1.100', 8080), 2).close(); print('ok')"
 
 # View Python packages
 docker exec a-healthy-dns pip list
@@ -419,15 +420,14 @@ networks:
 
 ### DNS Resolution from Container
 
-The container needs to reach backend IPs for health checks:
+The container needs to reach backend IPs for health checks. The production image intentionally omits troubleshooting tools such as `ping`, `nc`, `nslookup`, and `netstat`, so use host-side Docker inspection plus the bundled Python runtime for connectivity checks:
 
 ```bash
-# Test connectivity from container
-docker exec a-healthy-dns ping -c 1 192.168.1.100
-docker exec a-healthy-dns nc -zv 192.168.1.100 8080
+# Inspect the container network from the host
+docker inspect a-healthy-dns | jq '.[0].NetworkSettings'
 
-# Check DNS resolution (if using hostnames)
-docker exec a-healthy-dns nslookup backend1.local
+# Test backend connectivity from inside the container
+docker exec a-healthy-dns python3 -c "import socket; socket.create_connection(('192.168.1.100', 8080), 2).close(); print('ok')"
 ```
 
 ## Security Hardening
@@ -455,6 +455,8 @@ docker run -d \
   ... \
   indisoluble/a-healthy-dns
 ```
+
+Use the extra `NET_BIND_SERVICE` capability only when you intentionally harden the runtime with `--cap-drop=ALL` (or equivalent) and still want the process to bind container port `53`. With Docker's default capability bounding set, the image's built-in `setcap` is sufficient for a non-root bind to port `53`.
 
 ### Read-Only Root Filesystem
 
@@ -504,14 +506,14 @@ For Docker-specific issues — container exits immediately, port binding failure
 docker pull indisoluble/a-healthy-dns:latest
 
 # Pull specific version
-docker pull indisoluble/a-healthy-dns:v0.1.26
+docker pull indisoluble/a-healthy-dns:<version>
 ```
 
 ### Version Pinning
 
 ```bash
 # Pin to specific version (recommended for production)
-docker run -d ... indisoluble/a-healthy-dns:v0.1.26
+docker run -d ... indisoluble/a-healthy-dns:<version>
 
 # Use latest (for development)
 docker run -d ... indisoluble/a-healthy-dns:latest
@@ -524,7 +526,7 @@ docker run -d ... indisoluble/a-healthy-dns:latest
 docker image prune -a
 
 # Remove specific image
-docker rmi indisoluble/a-healthy-dns:v0.1.25
+docker rmi indisoluble/a-healthy-dns:<version>
 
 # Remove dangling images
 docker image prune

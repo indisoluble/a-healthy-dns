@@ -149,7 +149,7 @@ See [docs/system-patterns.md § 7](system-patterns.md#7-multi-domain-support-via
 
 ## DNSSEC parameters (optional)
 
-Both parameters are optional. If `--priv-key-path` / `DNS_PRIV_KEY_PATH` is omitted, DNSSEC signing is disabled entirely and no RRSIG records are produced.
+Both parameters are optional. If `--priv-key-path` / `DNS_PRIV_KEY_PATH` is omitted, DNSSEC signing is disabled entirely and no DNSSEC-generated records (`DNSKEY`, `NSEC`, `RRSIG`) are produced.
 
 ### Private key path
 

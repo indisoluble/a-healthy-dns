@@ -153,6 +153,7 @@ The `Dockerfile` uses a **multi-stage build**:
 - The container runs as non-root (`appuser`). Do not change this.
 - DNSSEC keys are mounted into `/app/keys` (mode `700`, owned by `appuser`).
 - The Python binary is granted `CAP_NET_BIND_SERVICE` via `setcap` to allow binding to port 53 without root.
+- If a deployment hardens the container with `cap_drop: [ALL]` or equivalent, it must add back `NET_BIND_SERVICE` explicitly for port 53 binds.
 - Entrypoint variables are the `DNS_*` environment variables (see [docs/configuration-reference.md](configuration-reference.md)).
 
 Docker end-to-end tests in CI use an isolated `172.28.0.0/24` bridge network with a real `nginx:alpine` backend so health checks exercise an actual TCP connection.

@@ -58,7 +58,7 @@ Layer 3 – Records
   records/a_record.py                   (DNS A rdataset factory)
   records/ns_record.py                  (DNS NS rdataset factory)
   records/soa_record.py                 (DNS SOA rdataset factory)
-  records/dnssec.py                     (RRSIG key + timing)
+  records/dnssec.py                     (DNSSEC signing inputs + timing)
   records/zone_origins.py               (primary + alias zone set)
   records/time.py                       (TTL and signature timing calculations)
 
@@ -119,7 +119,7 @@ _recreate_zone()
        │    ├─ NS record (apex)
        │    ├─ SOA record (apex)
        │    └─ A records (one per healthy subdomain; omitted if all IPs unhealthy)
-       └─ _sign_zone()          — DNSSEC RRSIG (if key is configured)
+       └─ _sign_zone()          — DNSSEC artifacts (if key is configured)
 ```
 
 The `dns.versioned.Zone` writer is used inside a `with` block; the transaction is committed atomically on exit and rolled back on exception.
@@ -173,8 +173,8 @@ Origins are sorted by descending specificity (length) to ensure the most specifi
 
 DNSSEC is an additive, opt-in behaviour controlled by the presence of `DnsServerConfig.ext_private_key`:
 
-- `None` → no signing, no RRSIG records, standard A/NS/SOA responses.
-- set → `_sign_zone()` is called at the end of each zone-recreation transaction.
+- `None` → no signing; the zone contains only the base A/NS/SOA records.
+- set → `_sign_zone()` is called at the end of each zone-recreation transaction, and `dnspython.sign_zone()` adds DNSKEY, NSEC, and corresponding RRSIG datasets to the zone.
 
 RRSIG key rotation timing is managed by `records/dnssec.iter_rrsig_key()`, a stateful generator that yields a new `ExtendedRRSigKey` each time signing is invoked. The zone updater tracks `resign` time and forces a zone recreation before the current signature expires.
 
