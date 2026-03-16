@@ -97,13 +97,28 @@ pytest --cov=indisoluble.a_healthy_dns --cov-report=html
 
 ## 6. Test conventions
 
+### 6.1 Unit tests
+
 - **Framework:** `pytest` with standard fixtures and `unittest.mock`.
-- **Test file location:** must mirror the source path. Example: `indisoluble/a_healthy_dns/records/a_healthy_ip.py` → `tests/indisoluble/a_healthy_dns/records/test_a_healthy_ip.py`.
+- **Test file location:** for module-focused tests, mirror the source path. Example: `indisoluble/a_healthy_dns/records/a_healthy_ip.py` → `tests/indisoluble/a_healthy_dns/records/test_a_healthy_ip.py`. Cross-cutting behavior tests that do not map to a single source module may live at `tests/indisoluble/a_healthy_dns/`.
 - **Test file naming:** `test_<module_name>.py`.
 - **No real network calls in unit tests.** Mock `can_create_connection` or `socket.create_connection` for any test that exercises health logic.
 - **No real time dependencies.** Mock `time.time`, `datetime.datetime.now`, or `uint32_current_time` as needed to keep tests deterministic.
 - **One assert per test when practical** (AGENTS.md §5.9).
-- **Coverage exclusions** (`.coveragerc`) include: `__repr__`, `raise NotImplementedError`, `if __name__ == '__main__'`, `pass`, and `pragma: no cover` markers.
+- **Coverage exclusions** (`.coveragerc`) include: `__repr__`, `raise NotImplementedError`, `raise ImportError`, `if __name__ == '__main__'`, `pass`, and `pragma: no cover` markers.
+
+### 6.2 Component integration tests
+
+Component integration tests exercise a production component end-to-end over real I/O (e.g. real UDP sockets), but with pre-populated in-memory state rather than the live health-check lifecycle.
+
+- **Test file location:** same directory as the corresponding unit tests, mirroring the source tree.
+- **Test file naming:** `test_<scope>_integration.py` — the `_integration` suffix distinguishes them from unit tests. Example: `tests/indisoluble/a_healthy_dns/test_dns_server_udp_integration.py`.
+- **No real health-check lifecycle.** Zone state is pre-populated via `DnsServerZoneUpdater.update(check_ips=False)`. Tests that verify dynamic A-record changes driven by TCP health checks belong in `test-integration.yml`.
+- **One assert per test when practical** (same as unit tests).
+
+### 6.3 Docker end-to-end tests
+
+Docker end-to-end tests validate the fully packaged application, including health-check-driven DNS state transitions. They live in `.github/workflows/test-integration.yml` and use an isolated Docker network with a real nginx backend. See §7 below.
 
 ---
 
@@ -113,15 +128,17 @@ All workflows target the `master` branch.
 
 | Workflow | File | Trigger | Purpose |
 |---|---|---|---|
-| `test python code` | `test-py-code.yml` | push/PR → master | Runs pytest with coverage, uploads to Codecov |
-| `test docker` | `test-docker.yml` | push/PR → master | Builds Docker image, runs end-to-end DNS resolution tests |
+| `test python code` | `test-py-code.yml` | push/PR → master | Runs pytest (unit + component integration tests) with coverage, uploads to Codecov |
+| `test integration` | `test-integration.yml` | push/PR → master | Builds Docker image; runs end-to-end tests including health-check-driven DNS state transitions |
 | `test version` | `test-version.yml` | push/PR → master | Verifies version in `setup.py` was increased |
-| `validate tests` | `validate-tests.yml` | after above three complete | Gate: all three must pass for the same commit |
+| `validate tests` | `validate-tests.yml` | `workflow_run` on any of the three above | Gate: all three must pass for the same commit |
 | `release version` | `release-version.yml` | after `validate tests` succeeds | Creates git tag + GitHub release from `setup.py` version |
 | `release docker` | `release-docker.yml` | after `release version` succeeds | Pushes Docker image to Docker Hub |
 | `security scan` | `security-scan.yml` | push → master | Trivy vulnerability scan on Docker image, uploads SARIF to GitHub Security tab |
 
 **Rule:** never push directly to `master` from a branch that hasn't passed all three gate workflows.
+
+**`validate tests` trigger model:** GitHub Actions `workflow_run` fires each time *any one* of the listed upstream workflows completes — not once after all three are done. This means `validate tests` may run before the other two upstream workflows have finished; early runs that fail because a sibling workflow hasn't completed yet are expected and not the final picture. The meaningful result is the run that executes after all three required workflows for the same commit SHA have completed. This is an implementation detail of the current `workflow_run` model; the intended policy (all three must pass) is unchanged.
 
 ---
 
@@ -136,6 +153,7 @@ The `Dockerfile` uses a **multi-stage build**:
 - The container runs as non-root (`appuser`). Do not change this.
 - DNSSEC keys are mounted into `/app/keys` (mode `700`, owned by `appuser`).
 - The Python binary is granted `CAP_NET_BIND_SERVICE` via `setcap` to allow binding to port 53 without root.
+- If a deployment hardens the container with `cap_drop: [ALL]` or equivalent, it must add back `NET_BIND_SERVICE` explicitly for port 53 binds.
 - Entrypoint variables are the `DNS_*` environment variables (see [docs/configuration-reference.md](configuration-reference.md)).
 
 Docker end-to-end tests in CI use an isolated `172.28.0.0/24` bridge network with a real `nginx:alpine` backend so health checks exercise an actual TCP connection.
@@ -147,7 +165,7 @@ Docker end-to-end tests in CI use an isolated `172.28.0.0/24` bridge network wit
 1. Update `version` in `setup.py` to a new PEP 440 value higher than the current one.
 2. Merge to `master`.
 3. CI automatically:
-   - runs `test python code`, `test docker`, `test version`,
+   - runs `test python code`, `test integration`, `test version`,
    - if all three pass: `validate tests` succeeds,
    - `release version` creates the git tag and GitHub release,
    - `release docker` pushes the tagged image to Docker Hub.

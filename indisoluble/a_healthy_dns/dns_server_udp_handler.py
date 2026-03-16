@@ -9,16 +9,47 @@ zone, and returns appropriate DNS responses with authoritative answers.
 import logging
 import socketserver
 
+from typing import List
+
 import dns.exception
 import dns.flags
 import dns.message
 import dns.name
+import dns.opcode
 import dns.rcode
+import dns.rdataclass
 import dns.rdatatype
 import dns.rrset
 import dns.versioned
+import dns.zone
 
 from indisoluble.a_healthy_dns.records.zone_origins import ZoneOrigins
+
+
+def _build_authority_with_apex_soa(
+    zone: dns.versioned.Zone, txn: dns.zone.Transaction
+) -> List[dns.rrset.RRset]:
+    soa_rdataset = txn.get(dns.name.empty, dns.rdatatype.SOA)
+    if soa_rdataset is None:
+        return []
+
+    soa_rrset = dns.rrset.RRset(zone.origin, soa_rdataset.rdclass, soa_rdataset.rdtype)
+    soa_rrset.ttl = soa_rdataset.ttl
+    for rdata in soa_rdataset:
+        soa_rrset.add(rdata)
+
+    return [soa_rrset]
+
+
+def _build_answer(
+    query_name: dns.name.Name, rdataset: dns.rdataset.Rdataset
+) -> List[dns.rrset.RRset]:
+    rrset = dns.rrset.RRset(query_name, rdataset.rdclass, rdataset.rdtype)
+    rrset.ttl = rdataset.ttl
+    for rdata in rdataset:
+        rrset.add(rdata)
+
+    return [rrset]
 
 
 def _update_response(
@@ -33,33 +64,35 @@ def _update_response(
         logging.warning(
             "Received query for domain not in hosted or alias zones: %s", query_name
         )
-        response.set_rcode(dns.rcode.NXDOMAIN)
+        response.set_rcode(dns.rcode.REFUSED)
         return
 
     with zone.reader() as txn:
+        rcode = dns.rcode.NOERROR
+        authority = []
+        answer = []
+
         node = txn.get_node(relative_name)
-        if not node:
+        if node:
+            rdataset = node.get_rdataset(zone.rdclass, query_type)
+            if rdataset:
+                answer = _build_answer(query_name, rdataset)
+                logging.debug("Answered query for %s with %s", query_name, answer)
+            else:
+                logging.debug(
+                    "Subdomain %s exists but has no %s records",
+                    query_name,
+                    dns.rdatatype.to_text(query_type),
+                )
+                authority = _build_authority_with_apex_soa(zone, txn)
+        else:
             logging.warning("Received query for unknown subdomain: %s", query_name)
-            response.set_rcode(dns.rcode.NXDOMAIN)
-            return
+            rcode = dns.rcode.NXDOMAIN
+            authority = _build_authority_with_apex_soa(zone, txn)
 
-        rdataset = node.get_rdataset(zone.rdclass, query_type)
-        if not rdataset:
-            logging.debug(
-                "Subdomain %s exists but has no %s records",
-                query_name,
-                dns.rdatatype.to_text(query_type),
-            )
-            response.set_rcode(dns.rcode.NOERROR)
-            return
-
-        rrset = dns.rrset.RRset(query_name, rdataset.rdclass, rdataset.rdtype)
-        rrset.ttl = rdataset.ttl
-        for rdata in rdataset:
-            rrset.add(rdata)
-
-        response.answer.append(rrset)
-        logging.debug("Answered query for %s with %s", query_name, rrset)
+    response.set_rcode(rcode)
+    response.authority.extend(authority)
+    response.answer.extend(answer)
 
 
 class DnsServerUdpHandler(socketserver.BaseRequestHandler):
@@ -71,25 +104,55 @@ class DnsServerUdpHandler(socketserver.BaseRequestHandler):
 
         try:
             query = dns.message.from_wire(data)
-        except dns.exception.DNSException as ex:
+        except dns.message.ShortHeader as ex:
+            # Payload too short to contain a DNS header — no transaction ID to
+            # recover, drop silently (RFC 1035 §4.1.1).
             logging.warning("Failed to parse DNS query: %s", ex)
+            return
+        except dns.exception.DNSException as ex:
+            # Header is readable but message is malformed — recover the
+            # transaction ID and respond with FORMERR (RFC 1035 §4.1.1).
+            logging.warning("Failed to parse DNS query: %s", ex)
+
+            msg_id = int.from_bytes(data[:2], "big")
+            formerr = dns.message.Message(id=msg_id)
+            formerr.flags = dns.flags.QR
+            formerr.set_rcode(dns.rcode.FORMERR)
+
+            sock.sendto(formerr.to_wire(), self.client_address)
             return
 
         response = dns.message.make_response(query)
         response.flags |= dns.flags.AA  # Authoritative Answer
 
-        if query.question:
-            question = query.question[0]
-            _update_response(
-                response,
-                question.name,
-                question.rdtype,
-                self.server.zone,
-                self.server.zone_origins,
+        if query.opcode() != dns.opcode.QUERY:
+            logging.warning(
+                "Received query with unsupported opcode %s, expected QUERY",
+                dns.opcode.to_text(query.opcode()),
             )
-        else:
-            logging.warning("Received query without question section")
+            response.set_rcode(dns.rcode.NOTIMP)
+        elif len(query.question) != 1:
+            logging.warning(
+                "Received query with %d questions, expected exactly 1",
+                len(query.question),
+            )
             response.set_rcode(dns.rcode.FORMERR)
+        else:
+            question = query.question[0]
+            if question.rdclass != dns.rdataclass.IN:
+                logging.warning(
+                    "Received query for unsupported class %s, expected IN",
+                    dns.rdataclass.to_text(question.rdclass),
+                )
+                response.set_rcode(dns.rcode.REFUSED)
+            else:
+                _update_response(
+                    response,
+                    question.name,
+                    question.rdtype,
+                    self.server.zone,
+                    self.server.zone_origins,
+                )
 
         # Send the response back to the client
         sock.sendto(response.to_wire(), self.client_address)

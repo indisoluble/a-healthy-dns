@@ -5,7 +5,7 @@ services:
     build: .
     ports:
       # Map container port to host port (host:container)
-      - "53053:53053/udp"
+      - "53:53/udp"
     environment:
       # Required parameters
       DNS_HOSTED_ZONE: "example.com"

@@ -17,8 +17,7 @@ Common issues, debugging techniques, and operational procedures for **A Healthy 
 ps aux | grep a-healthy-dns
 
 # Check port binding
-netstat -uln | grep 53053  # Or your configured port
-lsof -i UDP:53053
+lsof -nP -iUDP:53053  # Or your configured port
 ```
 
 #### Docker
@@ -44,7 +43,7 @@ dig @localhost -p 53053 www.example.local
 nslookup www.example.local 127.0.0.1 -port=53053
 
 # Using host
-host www.example.local 127.0.0.1
+host -p 53053 www.example.local 127.0.0.1
 
 # Check SOA record
 dig @localhost -p 53053 example.local SOA
@@ -78,8 +77,7 @@ journalctl -u a-healthy-dns | grep -i "health\|checked ip"
 docker logs a-healthy-dns
 
 # Check if port is already in use
-netstat -uln | grep 53053
-lsof -i UDP:53053
+lsof -nP -iUDP:53053
 ```
 
 #### Solutions
@@ -109,15 +107,18 @@ docker run -d \
 
 **Permission denied (port 53):**
 ```bash
-# Add NET_BIND_SERVICE capability
+# Hardened container binding directly to container port 53: add NET_BIND_SERVICE back
 docker run -d \
   --cap-add=NET_BIND_SERVICE \
+  -p 53:53/udp \
+  -e DNS_PORT="53" \
+  ...
+
+# Or avoid privileged binds inside the container entirely
+docker run -d \
   -p 53:53053/udp \
   -e DNS_PORT="53053" \
   ...
-
-# Or run as root (not recommended)
-docker run -d --user root ...
 ```
 
 ### Issue: DNS Queries Not Responding
@@ -130,7 +131,7 @@ docker run -d --user root ...
 #### Diagnosis
 ```bash
 # Verify server is listening
-netstat -uln | grep 53053
+lsof -nP -iUDP:53053
 
 # Check if firewall is blocking
 sudo iptables -L -n | grep 53053
@@ -234,7 +235,7 @@ dig @localhost -p 53053 www.example.local +short
 
 1. **All IPs unhealthy** → NXDOMAIN (by design)
 2. **Subdomain not in configuration** → NXDOMAIN
-3. **Wrong zone queried** → NXDOMAIN
+3. **Wrong zone queried** → REFUSED
 
 #### Solutions
 
@@ -291,7 +292,7 @@ sudo tcpdump -i any -n port 53053 -c 100
 - Health checks run in separate thread; shouldn't block queries
 - Verify using debug logs:
   ```bash
-  docker logs a-healthy-dns 2>&1 | grep "writer\|reader"
+  docker logs a-healthy-dns 2>&1 | grep -E "Checking A record|Checked IP|Updating zone"
   ```
 
 **Docker networking overhead:**
@@ -304,7 +305,7 @@ sudo tcpdump -i any -n port 53053 -c 100
 
 #### Symptoms
 - DNSSEC-aware resolvers reject responses
-- `dig +dnssec` shows no RRSIG records
+- `dig +dnssec` shows no DNSSEC records (`RRSIG`, `DNSKEY`, `NSEC`)
 - Key loading errors in logs
 
 #### Diagnosis
@@ -530,9 +531,10 @@ docker run -it --entrypoint sh indisoluble/a-healthy-dns
 
 # Inspect filesystem
 ls -la /app
-cat /app/setup.py
+which a-healthy-dns
 
-# Check Python environment
+# Check installed package location and Python environment
+python3 -c "import indisoluble.a_healthy_dns.main as m; print(m.__file__)"
 python3 --version
 pip list
 ```
@@ -540,15 +542,15 @@ pip list
 ### Network Debugging
 
 ```bash
-# Inside container network namespace
-docker exec a-healthy-dns netstat -uln
-docker exec a-healthy-dns ip addr
+# Inspect the container network from the host
+docker inspect a-healthy-dns | jq '.[0].NetworkSettings'
+docker port a-healthy-dns
 
 # Packet capture
 sudo tcpdump -i any -n port 53053 -w dns-traffic.pcap
 
-# Test health check connectivity from container
-docker exec a-healthy-dns nc -zv 192.168.1.100 8080
+# Test health check connectivity from the runtime image using Python
+docker exec a-healthy-dns python3 -c "import socket; socket.create_connection(('192.168.1.100', 8080), 2).close(); print('ok')"
 ```
 
 ### Zone State Inspection

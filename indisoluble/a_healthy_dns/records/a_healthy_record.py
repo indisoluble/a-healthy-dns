@@ -33,7 +33,7 @@ class AHealthyRecord:
 
     def updated_ips(self, updated_ips: List[AHealthyIp]) -> "AHealthyRecord":
         """Return new record with updated IP list if changed."""
-        if updated_ips == self.healthy_ips:
+        if frozenset(updated_ips) == self.healthy_ips:
             return self
 
         return AHealthyRecord(subdomain=self.subdomain, healthy_ips=updated_ips)

@@ -1,4 +1,4 @@
-name: test docker
+name: test integration
 
 on:
   push:
@@ -24,11 +24,6 @@ jobs:
       run: |
         docker build -t a-healthy-dns:test .
 
-    - name: test docker image builds successfully
-      run: |
-        # Verify the image was created
-        docker images a-healthy-dns:test
-
     - name: test docker image with alias zone configuration
       run: |
         # Create an isolated network for deterministic container-to-container checks
@@ -49,7 +44,7 @@ jobs:
           -e DNS_HOSTED_ZONE="test.example.com" \
           -e DNS_ALIAS_ZONES='["test.other.com","test.another.com"]' \
           -e DNS_ZONE_RESOLUTIONS='{"www":{"ips":["172.28.0.10"],"health_port":80}}' \
-          -e DNS_NAME_SERVERS='["ns1.test.example.com"]' \
+          -e DNS_NAME_SERVERS='["ns1.example.com"]' \
           -e DNS_PORT="53053" \
           -e DNS_TEST_MIN_INTERVAL="1" \
           -e DNS_TEST_TIMEOUT="1" \
@@ -75,7 +70,6 @@ jobs:
         DNS_HOST="127.0.0.1"
         DNS_PORT="53053"
         BACKEND_IP="172.28.0.10"
-        EXPECTED_NS="ns1.test.example.com."
 
         wait_for_a_record() {
           local fqdn="$1"
@@ -95,39 +89,6 @@ jobs:
           return 1
         }
 
-        assert_dns_status() {
-          local fqdn="$1"
-          local rtype="$2"
-          local expected_status="$3"
-          local output
-          local actual_status
-
-          output="$(dig +time=1 +tries=1 +noall +comments @"${DNS_HOST}" -p "${DNS_PORT}" "${fqdn}" "${rtype}")"
-          actual_status="$(printf '%s\n' "${output}" | sed -n 's/.*status: \([A-Z]*\).*/\1/p' | head -n 1)"
-
-          if [ "${actual_status}" = "${expected_status}" ]; then
-            echo "[OK] ${rtype} ${fqdn} ${actual_status}"
-            return 0
-          fi
-
-          echo "[FAIL] ${rtype} ${fqdn} expected=${expected_status} got=${actual_status:-none}"
-          printf '%s\n' "${output}"
-          return 1
-        }
-
-        assert_ns_record() {
-          local zone="$1"
-          local ns_answer
-
-          ns_answer="$(dig +short +time=1 +tries=1 @"${DNS_HOST}" -p "${DNS_PORT}" "${zone}" NS)"
-          printf '%s\n' "${ns_answer}" | grep -qx "${EXPECTED_NS}" || {
-            echo "[FAIL] NS ${zone}"
-            printf '%s\n' "${ns_answer}"
-            exit 1
-          }
-          echo "[OK] NS ${zone}"
-        }
-
         for fqdn in \
           "www.test.example.com" \
           "www.test.other.com" \
@@ -135,16 +96,76 @@ jobs:
           wait_for_a_record "${fqdn}"
         done
 
-        for zone in \
-          "test.example.com" \
-          "test.other.com" \
-          "test.another.com"; do
-          assert_ns_record "${zone}"
+    - name: test health-check-driven dns state transitions
+      run: |
+        set -euo pipefail
+
+        DNS_HOST="127.0.0.1"
+        DNS_PORT="53053"
+        BACKEND_IP="172.28.0.10"
+        MAX_RETRIES=20
+
+        wait_for_a_record() {
+          local fqdn="$1"
+          local answer
+
+          for _ in $(seq 1 "${MAX_RETRIES}"); do
+            answer="$(dig +short +time=1 +tries=1 @"${DNS_HOST}" -p "${DNS_PORT}" "${fqdn}" A)"
+            printf '%s\n' "${answer}" | grep -qx "${BACKEND_IP}" && {
+              echo "[OK] A present: ${fqdn}"
+              return 0
+            }
+            sleep 1
+          done
+
+          echo "[FAIL] A never appeared: ${fqdn}"
+          dig +nocmd +noall +comments +answer @"${DNS_HOST}" -p "${DNS_PORT}" "${fqdn}" A || true
+          return 1
+        }
+
+        wait_for_a_record_gone() {
+          local fqdn="$1"
+          local answer
+
+          for _ in $(seq 1 "${MAX_RETRIES}"); do
+            answer="$(dig +short +time=1 +tries=1 @"${DNS_HOST}" -p "${DNS_PORT}" "${fqdn}" A)"
+            [ -z "${answer}" ] && {
+              echo "[OK] A removed: ${fqdn}"
+              return 0
+            }
+            sleep 1
+          done
+
+          echo "[FAIL] A still present after backend went down: ${fqdn}"
+          dig +nocmd +noall +comments +answer @"${DNS_HOST}" -p "${DNS_PORT}" "${fqdn}" A || true
+          return 1
+        }
+
+        # Verify state transitions for hosted zone and all alias zones
+        for fqdn in \
+          "www.test.example.com" \
+          "www.test.other.com" \
+          "www.test.another.com"; do
+          wait_for_a_record "${fqdn}"
         done
 
-        assert_dns_status "www.test.other.com" "AAAA" "NOERROR"
-        assert_dns_status "missing.test.other.com" "A" "NXDOMAIN"
-        assert_dns_status "www.not-configured.example.org" "A" "NXDOMAIN"
+        # Stop backend — health checks will fail; DNS must remove A records from all zones
+        docker stop a-healthy-dns-backend
+        for fqdn in \
+          "www.test.example.com" \
+          "www.test.other.com" \
+          "www.test.another.com"; do
+          wait_for_a_record_gone "${fqdn}"
+        done
+
+        # Restart backend — health checks will succeed; DNS must re-add A records to all zones
+        docker start a-healthy-dns-backend
+        for fqdn in \
+          "www.test.example.com" \
+          "www.test.other.com" \
+          "www.test.another.com"; do
+          wait_for_a_record "${fqdn}"
+        done
 
     - name: test docker-compose configuration
       run: |

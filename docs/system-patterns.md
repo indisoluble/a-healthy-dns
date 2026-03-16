@@ -13,7 +13,7 @@ The system is built around two independent, concurrently-running concerns separa
 │  main.py (_main)                                               │
 │                                                                │
 │  ┌──────────────────────────────┐                              │
-│  │ DnsServerZoneUpdaterThreated │  ← background daemon thread  │
+│  │ DnsServerZoneUpdaterThreaded │  ← background daemon thread  │
 │  │  ┌──────────────────────┐    │                              │
 │  │  │ DnsServerZoneUpdater │    │  ← health check + zone write │
 │  │  └──────────────────────┘    │                              │
@@ -45,7 +45,7 @@ Layer 0 – Entry-point
   indisoluble/a_healthy_dns/main.py
 
 Layer 1 – Server orchestration
-  dns_server_zone_updater_threated.py   (threading wrapper)
+  dns_server_zone_updater_threaded.py   (threading wrapper)
   dns_server_udp_handler.py             (UDP query handler)
 
 Layer 2 – Domain logic
@@ -58,7 +58,7 @@ Layer 3 – Records
   records/a_record.py                   (DNS A rdataset factory)
   records/ns_record.py                  (DNS NS rdataset factory)
   records/soa_record.py                 (DNS SOA rdataset factory)
-  records/dnssec.py                     (RRSIG key + timing)
+  records/dnssec.py                     (DNSSEC signing inputs + timing)
   records/zone_origins.py               (primary + alias zone set)
   records/time.py                       (TTL and signature timing calculations)
 
@@ -119,7 +119,7 @@ _recreate_zone()
        │    ├─ NS record (apex)
        │    ├─ SOA record (apex)
        │    └─ A records (one per healthy subdomain; omitted if all IPs unhealthy)
-       └─ _sign_zone()          — DNSSEC RRSIG (if key is configured)
+       └─ _sign_zone()          — DNSSEC artifacts (if key is configured)
 ```
 
 The `dns.versioned.Zone` writer is used inside a `with` block; the transaction is committed atomically on exit and rolled back on exception.
@@ -173,8 +173,8 @@ Origins are sorted by descending specificity (length) to ensure the most specifi
 
 DNSSEC is an additive, opt-in behaviour controlled by the presence of `DnsServerConfig.ext_private_key`:
 
-- `None` → no signing, no RRSIG records, standard A/NS/SOA responses.
-- set → `_sign_zone()` is called at the end of each zone-recreation transaction.
+- `None` → no signing; the zone contains only the base A/NS/SOA records.
+- set → `_sign_zone()` is called at the end of each zone-recreation transaction, and `dnspython.sign_zone()` adds DNSKEY, NSEC, and corresponding RRSIG datasets to the zone.
 
 RRSIG key rotation timing is managed by `records/dnssec.iter_rrsig_key()`, a stateful generator that yields a new `ExtendedRRSigKey` each time signing is invoked. The zone updater tracks `resign` time and forces a zone recreation before the current signature expires.
 
@@ -197,6 +197,6 @@ RRSIG key rotation timing is managed by `records/dnssec.iter_rrsig_key()`, a sta
 ## 10. Tooling conventions
 
 - **Pure utility functions** belong in `tools/`. They must have no imports from `indisoluble.a_healthy_dns` (no circular dependencies).
-- **Validation functions** (e.g. `is_valid_ip`, `is_valid_subdomain`) return `(bool, Optional[str])` — success flag and an error message.
+- **Validation functions** (e.g. `is_valid_ip`, `is_valid_subdomain`) return `(bool, str)` — success flag and an error message (empty string on success).
 - **Record factories** (e.g. `make_a_record`, `make_ns_record`) are module-level functions, not methods. They take scalar inputs and return `dns.rdataset.Rdataset` (or `None`).
 - **Iterators as stateful generators** are used for sequences requiring internal state (SOA serial increments, RRSIG key rotation) — see `records/soa_record.iter_soa_record()` and `records/dnssec.iter_rrsig_key()`.
