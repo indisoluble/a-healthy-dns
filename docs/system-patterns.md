@@ -197,6 +197,6 @@ RRSIG key rotation timing is managed by `records/dnssec.iter_rrsig_key()`, a sta
 ## 10. Tooling conventions
 
 - **Pure utility functions** belong in `tools/`. They must have no imports from `indisoluble.a_healthy_dns` (no circular dependencies).
-- **Validation functions** (e.g. `is_valid_ip`, `is_valid_subdomain`) return `(bool, Optional[str])` — success flag and an error message.
+- **Validation functions** (e.g. `is_valid_ip`, `is_valid_subdomain`) return `(bool, str)` — success flag and an error message (empty string on success).
 - **Record factories** (e.g. `make_a_record`, `make_ns_record`) are module-level functions, not methods. They take scalar inputs and return `dns.rdataset.Rdataset` (or `None`).
 - **Iterators as stateful generators** are used for sequences requiring internal state (SOA serial increments, RRSIG key rotation) — see `records/soa_record.iter_soa_record()` and `records/dnssec.iter_rrsig_key()`.
