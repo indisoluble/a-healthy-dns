@@ -100,7 +100,7 @@ pytest --cov=indisoluble.a_healthy_dns --cov-report=html
 ### 6.1 Unit tests
 
 - **Framework:** `pytest` with standard fixtures and `unittest.mock`.
-- **Test file location:** must mirror the source path. Example: `indisoluble/a_healthy_dns/records/a_healthy_ip.py` → `tests/indisoluble/a_healthy_dns/records/test_a_healthy_ip.py`.
+- **Test file location:** for module-focused tests, mirror the source path. Example: `indisoluble/a_healthy_dns/records/a_healthy_ip.py` → `tests/indisoluble/a_healthy_dns/records/test_a_healthy_ip.py`. Cross-cutting behavior tests that do not map to a single source module may live at `tests/indisoluble/a_healthy_dns/`.
 - **Test file naming:** `test_<module_name>.py`.
 - **No real network calls in unit tests.** Mock `can_create_connection` or `socket.create_connection` for any test that exercises health logic.
 - **No real time dependencies.** Mock `time.time`, `datetime.datetime.now`, or `uint32_current_time` as needed to keep tests deterministic.

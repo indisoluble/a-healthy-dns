@@ -28,9 +28,10 @@ Level 1 is a deliberately limited scope.  It covers the minimum behaviour requir
 | Query is for a name **inside** a hosted zone but the owner name does not exist | Return **NXDOMAIN** (name does not exist) |
 | Owner name exists but the queried record type is absent | Return **NOERROR** with an empty answer section (a **NODATA** response) |
 | NODATA or NXDOMAIN response | Include the apex **SOA** record in the authority section |
-| Query cannot be parsed or has an invalid structure | Return **FORMERR** where appropriate |
+| Query has malformed wire format with a recoverable DNS header (>= 12 bytes) | Return **FORMERR** |
+| Query payload is shorter than the DNS header (< 12 bytes) | Drop silently (no response) |
 | Query uses an unsupported opcode | Return **NOTIMP** |
-| Query is not for the **IN** (Internet) class | Treat as unsupported |
+| Query is not for the **IN** (Internet) class | Return **REFUSED** |
 | Query has more or fewer than exactly one question | Treat as a format error |
 
 ### What Level 1 does not cover

@@ -218,7 +218,7 @@ def _main(args: Dict[str, Any]):
         format="%(asctime)s - %(levelname)s - %(module)s.%(funcName)s - %(message)s",
     )
 
-    # Copose config
+    # Compose config
     config = make_config(args)
     if not config:
         return
