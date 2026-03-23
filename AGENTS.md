@@ -2,6 +2,8 @@
 
 Non-negotiable rules for any AI coding agent (IDE agents, PR agents, chat agents) working in this repository.
 
+**Canonical source:** https://github.com/indisoluble/AGENTS-spec
+
 **Inspiration / lineage (non-normative):**
 - Robert C. Martin (“Uncle Bob”) *Clean Code* principles.
 - msitarzewski/AGENT-ZERO

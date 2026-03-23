@@ -29,10 +29,10 @@ These documents must be read before proposing or applying changes to this reposi
 
 ### Reference
 
+- [`docs/RFC-conformance.md`](RFC-conformance.md) — RFC conformance reference: minimum RFC set, current coverage per RFC, and broader-than-Level-1 scope limits for the Level 1 authoritative UDP subset
 - [`docs/configuration-reference.md`](configuration-reference.md) — Full CLI and Docker environment variable reference
 - [`docs/docker.md`](docker.md) — Docker deployment guide: image details, Docker Compose, deployment patterns, container management, security hardening, and orchestration
 - [`docs/troubleshooting.md`](troubleshooting.md) — Common issues, debugging, log interpretation, and operational procedures
-- [`docs/RFC-conformance.md`](RFC-conformance.md) — RFC conformance reference: minimum RFC set, current coverage per RFC, and broader-than-Level-1 scope limits for the Level 1 authoritative UDP subset
 
 ---
 
