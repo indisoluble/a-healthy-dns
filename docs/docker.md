@@ -59,8 +59,8 @@ docker run -d \
 - No unnecessary packages or build tools in final image
 
 ### Image Layers
-1. **Builder stage:** Installs build dependencies (gcc, rust compiler)
-2. **Production stage:** Only runtime dependencies (libffi, libssl)
+1. **Builder stage:** Installs build dependencies (gcc, rust compiler, libffi-dev, libssl-dev)
+2. **Production stage:** Runtime dependencies (libffi, libssl, tini for init, libcap2-bin for setcap setup)
 3. **Application layer:** Python packages installed in user directory
 
 ### Exposed Ports

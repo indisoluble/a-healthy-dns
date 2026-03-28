@@ -95,33 +95,33 @@ ENTRYPOINT ["tini", "--", "sh", "-c", "\
     echo 'Error: DNS_NAME_SERVERS environment variable is required'; \
     exit 1; \
     fi; \
-    ARGS=\"--port $DNS_PORT\"; \
+    set -- a-healthy-dns --port \"$DNS_PORT\"; \
     if [ -n \"$DNS_LOG_LEVEL\" ]; then \
-    ARGS=\"$ARGS --log-level $DNS_LOG_LEVEL\"; \
+    set -- \"$@\" --log-level \"$DNS_LOG_LEVEL\"; \
     fi; \
     if [ -n \"$DNS_HOSTED_ZONE\" ]; then \
-    ARGS=\"$ARGS --hosted-zone $DNS_HOSTED_ZONE\"; \
+    set -- \"$@\" --hosted-zone \"$DNS_HOSTED_ZONE\"; \
     fi; \
     if [ -n \"$DNS_ALIAS_ZONES\" ]; then \
-    ARGS=\"$ARGS --alias-zones $DNS_ALIAS_ZONES\"; \
+    set -- \"$@\" --alias-zones \"$DNS_ALIAS_ZONES\"; \
     fi; \
     if [ -n \"$DNS_ZONE_RESOLUTIONS\" ]; then \
-    ARGS=\"$ARGS --zone-resolutions $DNS_ZONE_RESOLUTIONS\"; \
+    set -- \"$@\" --zone-resolutions \"$DNS_ZONE_RESOLUTIONS\"; \
     fi; \
     if [ -n \"$DNS_TEST_MIN_INTERVAL\" ]; then \
-    ARGS=\"$ARGS --test-min-interval $DNS_TEST_MIN_INTERVAL\"; \
+    set -- \"$@\" --test-min-interval \"$DNS_TEST_MIN_INTERVAL\"; \
     fi; \
     if [ -n \"$DNS_TEST_TIMEOUT\" ]; then \
-    ARGS=\"$ARGS --test-timeout $DNS_TEST_TIMEOUT\"; \
+    set -- \"$@\" --test-timeout \"$DNS_TEST_TIMEOUT\"; \
     fi; \
     if [ -n \"$DNS_NAME_SERVERS\" ]; then \
-    ARGS=\"$ARGS --ns $DNS_NAME_SERVERS\"; \
+    set -- \"$@\" --ns \"$DNS_NAME_SERVERS\"; \
     fi; \
     if [ -n \"$DNS_PRIV_KEY_PATH\" ]; then \
-    ARGS=\"$ARGS --priv-key-path $DNS_PRIV_KEY_PATH\"; \
+    set -- \"$@\" --priv-key-path \"$DNS_PRIV_KEY_PATH\"; \
     fi; \
     if [ -n \"$DNS_PRIV_KEY_ALG\" ]; then \
-    ARGS=\"$ARGS --priv-key-alg $DNS_PRIV_KEY_ALG\"; \
+    set -- \"$@\" --priv-key-alg \"$DNS_PRIV_KEY_ALG\"; \
     fi; \
-    echo \"Starting a-healthy-dns with arguments: $ARGS\"; \
-    exec a-healthy-dns $ARGS"]
+    echo \"Starting a-healthy-dns with arguments: $*\"; \
+    exec \"$@\""]

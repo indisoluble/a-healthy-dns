@@ -59,9 +59,10 @@ def test_main_success(
     mock_udp_server.return_value.__enter__.return_value = mock_server_instance
 
     # Call function
-    _main(default_args)
+    exit_code = _main(default_args)
 
     # Assert
+    assert exit_code == 0
     mock_logging.basicConfig.assert_called_once()
 
     mock_make_config.assert_called_once()
@@ -89,9 +90,10 @@ def test_main_with_failed_config(
     mock_make_config.return_value = None
 
     # Call function
-    _main(default_args)
+    exit_code = _main(default_args)
 
     # Assert
+    assert exit_code == 1
     mock_logging.basicConfig.assert_called_once()
 
     mock_make_config.assert_called_once()

@@ -2,7 +2,7 @@ name: release docker
 
 on:
   workflow_run:
-    workflows: ["validate tests"]
+    workflows: ["release version"]
     types:
       - completed
     branches:
@@ -19,6 +19,8 @@ jobs:
     steps:
     - name: checkout code
       uses: actions/checkout@v4
+      with:
+        ref: ${{ github.event.workflow_run.head_sha }}
 
     - name: get version
       id: get-version

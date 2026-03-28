@@ -153,7 +153,7 @@ def test_start_success(
     updater.start()
 
     mock_thread.is_alive.assert_not_called()
-    mock_updater.update.assert_called_once_with(check_ips=False)
+    mock_updater.initialize_zone.assert_called_once_with()
     mock_event.clear.assert_called_once()
     mock_thread_class.assert_called_once_with(
         target=updater._update_zone_loop, name=ANY, daemon=True

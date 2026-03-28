@@ -2,7 +2,10 @@
 
 import pytest
 
-from indisoluble.a_healthy_dns.tools.is_valid_subdomain import is_valid_subdomain
+from indisoluble.a_healthy_dns.tools.is_valid_subdomain import (
+    is_valid_fqdn,
+    is_valid_subdomain,
+)
 
 
 @pytest.mark.parametrize(
@@ -77,5 +80,29 @@ def test_invalid_subdomains(invalid_subdomain, expected_message):
 )
 def test_subdomain_with_whitespace(subdomain, expected_message):
     result, message = is_valid_subdomain(subdomain)
+    assert result is False
+    assert message == expected_message
+
+
+@pytest.mark.parametrize("valid_fqdn", ["ns1.example.com", "sub-domain.example", "a.b"])
+def test_valid_fqdns(valid_fqdn):
+    result, message = is_valid_fqdn(valid_fqdn)
+    assert result is True
+    assert message == ""
+
+
+@pytest.mark.parametrize(
+    "invalid_fqdn,expected_message",
+    [
+        ("ns1", "It must be a fully-qualified hostname"),
+        ("", "It cannot be empty"),
+        (
+            "ns1.example@.com",
+            "Labels must contain only alphanumeric characters or hyphens",
+        ),
+    ],
+)
+def test_invalid_fqdns(invalid_fqdn, expected_message):
+    result, message = is_valid_fqdn(invalid_fqdn)
     assert result is False
     assert message == expected_message

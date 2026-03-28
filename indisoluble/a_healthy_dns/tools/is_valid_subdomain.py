@@ -24,3 +24,15 @@ def is_valid_subdomain(name: Any) -> Tuple[bool, str]:
         return (False, "Labels must contain only alphanumeric characters or hyphens")
 
     return (True, "")
+
+
+def is_valid_fqdn(name: Any) -> Tuple[bool, str]:
+    """Validate a dotted hostname using subdomain validation as a base."""
+    success, error = is_valid_subdomain(name)
+    if not success:
+        return (success, error)
+
+    if "." not in name:
+        return (False, "It must be a fully-qualified hostname")
+
+    return (True, "")

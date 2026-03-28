@@ -86,6 +86,12 @@ If you cannot comply, say so and explain why.
    When introducing a new component/pattern or changing architecture, response must include:  
    **Extends existing pattern:** `path/to/file.ext:line` (or `#AnchorName`).
 
+5) **Enforce single source of truth.**  
+   When the same value or logic is needed in more than one place, reuse an existing definition or extract one shared definition before adding another copy.  
+   Prefer the smallest viable refactor (for example: shared constant, helper, value object, or function) over duplicating literals or logic.  
+   If duplication must remain, response must include:  
+   **Single source of truth:** reused `A` / extracted `B`; could not consolidate `<specific constraint>`.
+
 ---
 
 ## 3) Preferred style

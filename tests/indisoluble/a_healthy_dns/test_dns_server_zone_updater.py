@@ -214,7 +214,7 @@ def test_initialize_zone_creates_zone_with_basic_records(
 ):
     assert len(list(updater_no_dnssec.zone.keys())) == 0
 
-    updater_no_dnssec.update(check_ips=False)
+    updater_no_dnssec.initialize_zone()
 
     assert len(list(updater_no_dnssec.zone.keys())) > 0
 
@@ -245,7 +245,7 @@ def test_initialize_zone_creates_zone_with_basic_and_rrsig_records(
 ):
     assert len(list(updater_with_dnssec.zone.keys())) == 0
 
-    updater_with_dnssec.update(check_ips=False)
+    updater_with_dnssec.initialize_zone()
 
     assert len(list(updater_with_dnssec.zone.keys())) > 0
 
@@ -325,7 +325,7 @@ def test_initialize_zone_with_no_healthy_ips(
     updater = DnsServerZoneUpdater(min_interval=30, connection_timeout=5, config=config)
 
     # Initialize the zone
-    updater.update(check_ips=False)
+    updater.initialize_zone()
 
     # Should have NS and SOA records
     ns_rdataset = updater.zone.get_rdataset(dns.name.empty, dns.rdatatype.NS)
@@ -355,7 +355,7 @@ def test_initialize_zone_twice(
     mock_time.side_effect = timestamps
 
     # Initialize the zone first time
-    updater_no_dnssec.update(check_ips=False)
+    updater_no_dnssec.initialize_zone()
 
     # Verify we have the expected records
     first_ns_rdataset = updater_no_dnssec.zone.get_rdataset(
@@ -386,7 +386,7 @@ def test_initialize_zone_twice(
             assert a_rdataset is None
 
     # Initialize the zone second time
-    updater_no_dnssec.update(check_ips=False)
+    updater_no_dnssec.initialize_zone()
 
     # Verify we have the expected records
     second_ns_rdataset = updater_no_dnssec.zone.get_rdataset(

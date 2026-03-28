@@ -165,14 +165,6 @@ class DnsServerZoneUpdater:
             resign=ext_rrsig_key.resign, iter=self._rrsig_action.iter
         )
 
-    def _recreate_zone(self):
-        with self._zone.writer() as txn:
-            self._clear_zone(txn)
-            self._add_records_to_zone(txn)
-            self._sign_zone(txn)
-
-        self._is_zone_recreated_at_least_once = True
-
     def _is_zone_sign_near_to_expire(self) -> bool:
         return (
             datetime.datetime.now(datetime.timezone.utc) >= self._rrsig_action.resign
@@ -233,7 +225,16 @@ class DnsServerZoneUpdater:
             else RefreshARecordsResult.NO_CHANGES
         )
 
-    def _recreate_zone_after_refresh(self, should_abort: ShouldAbortOp):
+    def initialize_zone(self):
+        with self._zone.writer() as txn:
+            self._clear_zone(txn)
+            self._add_records_to_zone(txn)
+            self._sign_zone(txn)
+
+        self._is_zone_recreated_at_least_once = True
+
+    def update(self, *, should_abort: ShouldAbortOp = lambda: False):
+        """Run health checks and update the zone when IP health status changes."""
         refresh_result = self._refresh_a_recs(should_abort)
         if refresh_result == RefreshARecordsResult.ABORTED:
             logging.info("Zone updater stopped. Keep zone as it is")
@@ -249,13 +250,4 @@ class DnsServerZoneUpdater:
 
         if do_update_zone or not self._is_zone_recreated_at_least_once:
             logging.info("Updating zone...")
-            self._recreate_zone()
-
-    def update(
-        self, *, check_ips: bool = True, should_abort: ShouldAbortOp = lambda: False
-    ):
-        """Update the zone with optional health checking and abort capability."""
-        if check_ips:
-            self._recreate_zone_after_refresh(should_abort)
-        else:
-            self._recreate_zone()
+            self.initialize_zone()

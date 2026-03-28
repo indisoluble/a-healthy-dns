@@ -93,6 +93,8 @@ docker run -it \
   indisoluble/a-healthy-dns
 ```
 
+Invalid configuration is a fail-fast startup error: the process logs the validation issue and exits with a non-zero status without binding the UDP port.
+
 **Port already in use:**
 ```bash
 # Find process using the port

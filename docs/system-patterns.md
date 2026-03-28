@@ -88,7 +88,7 @@ class DnsServerConfig(NamedTuple):
     ext_private_key: Optional[ExtendedPrivateKey]
 ```
 
-The factory validates every field (zone names, IP addresses, ports, DNSSEC algorithm) before constructing the config. If any field is invalid the factory logs the error and returns `None`; `main()` exits without starting a server.
+The factory validates every field (zone names, IP addresses, ports, DNSSEC algorithm) before constructing the config. If any field is invalid the factory logs the error and returns `None`; `main()` exits with a non-zero status without starting a server.
 
 **Convention:** all new configuration fields must be added to `DnsServerConfig` and validated inside `dns_server_config_factory.py`. No ad-hoc parsing elsewhere.
 
@@ -112,7 +112,7 @@ This makes change detection trivially safe: `object is new_object` indicates a c
 The zone is never partially updated. Each refresh cycle follows a write-all-or-nothing approach:
 
 ```
-_recreate_zone()
+initialize_zone()
   └─ zone.writer() (transaction)
        ├─ _clear_zone()         — delete all existing nodes
        ├─ _add_records_to_zone()
@@ -197,6 +197,6 @@ RRSIG key rotation timing is managed by `records/dnssec.iter_rrsig_key()`, a sta
 ## 10. Tooling conventions
 
 - **Pure utility functions** belong in `tools/`. They must have no imports from `indisoluble.a_healthy_dns` (no circular dependencies).
-- **Validation functions** (e.g. `is_valid_ip`, `is_valid_subdomain`) return `(bool, str)` — success flag and an error message (empty string on success).
+- **Validation functions** (e.g. `is_valid_ip`, `is_valid_subdomain`, `is_valid_fqdn`) return `(bool, str)` — success flag and an error message (empty string on success).
 - **Record factories** (e.g. `make_a_record`, `make_ns_record`) are module-level functions, not methods. They take scalar inputs and return `dns.rdataset.Rdataset` (or `None`).
 - **Iterators as stateful generators** are used for sequences requiring internal state (SOA serial increments, RRSIG key rotation) — see `records/soa_record.iter_soa_record()` and `records/dnssec.iter_rrsig_key()`.

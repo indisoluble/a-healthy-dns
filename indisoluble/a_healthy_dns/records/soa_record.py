@@ -26,13 +26,16 @@ from indisoluble.a_healthy_dns.records.time import (
 from indisoluble.a_healthy_dns.tools.uint32_current_time import uint32_current_time
 
 
+_SERIAL_RETRY_WAIT_SECONDS = 1
+
+
 def _iter_soa_serial() -> Iterator[int]:
     last_serial = 0
 
     while True:
         current_serial = uint32_current_time()
         while current_serial == last_serial:
-            time.sleep(1)  # Wait 1 second for timestamp to change
+            time.sleep(_SERIAL_RETRY_WAIT_SECONDS)  # Wait for timestamp to change
             current_serial = uint32_current_time()
 
         last_serial = current_serial

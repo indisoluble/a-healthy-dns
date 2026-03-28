@@ -144,7 +144,7 @@ def live_server():
       SOA  @ (auto-generated via DnsServerZoneUpdater)
       A    www → 192.0.2.1  (RFC 5737 TEST-NET-1)
 
-    IPs are pre-marked healthy so check_ips=False populates the zone
+    IPs are pre-marked healthy so initialize_zone() populates the zone
     immediately without making real TCP connections.
     """
     zone_origins = ZoneOrigins(_ZONE, [])
@@ -163,10 +163,10 @@ def live_server():
 
     # min_interval drives TTL calculations for NS/SOA/A records; 30 s is a
     # reasonable value for tests — it has no effect on timing because
-    # update() is called exactly once with check_ips=False.
+    # initialize_zone() is called exactly once.
     updater = DnsServerZoneUpdater(min_interval=30, connection_timeout=2, config=config)
     # Populate zone without health checks — IPs already marked healthy above
-    updater.update(check_ips=False)
+    updater.initialize_zone()
 
     server = socketserver.UDPServer(("127.0.0.1", 0), DnsServerUdpHandler)
     server.zone = updater.zone

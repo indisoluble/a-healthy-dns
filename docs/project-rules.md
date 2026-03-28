@@ -113,7 +113,7 @@ Component integration tests exercise a production component end-to-end over real
 
 - **Test file location:** same directory as the corresponding unit tests, mirroring the source tree.
 - **Test file naming:** `test_<scope>_integration.py` — the `_integration` suffix distinguishes them from unit tests. Example: `tests/indisoluble/a_healthy_dns/test_dns_server_udp_integration.py`.
-- **No real health-check lifecycle.** Zone state is pre-populated via `DnsServerZoneUpdater.update(check_ips=False)`. Tests that verify dynamic A-record changes driven by TCP health checks belong in `test-integration.yml`.
+- **No real health-check lifecycle.** Zone state is pre-populated via `DnsServerZoneUpdater.initialize_zone()`. Tests that verify dynamic A-record changes driven by TCP health checks belong in `test-integration.yml`.
 - **One assert per test when practical** (same as unit tests).
 
 ### 6.3 Docker end-to-end tests
@@ -147,7 +147,7 @@ All workflows target the `master` branch.
 The `Dockerfile` uses a **multi-stage build**:
 
 1. **Builder stage** (`python:3-slim`) — installs `gcc`, `libffi-dev`, `libssl-dev`, `cargo`, `rustc`; builds the package into `/root/.local`.
-2. **Production stage** (`python:3-slim`) — copies only `/root/.local` from builder; installs runtime libs (`libffi8`, `libssl3`); creates a non-root user `appuser` (uid/gid `10000`); uses `tini` as PID 1.
+2. **Production stage** (`python:3-slim`) — copies only `/root/.local` from builder; installs runtime libs (`libffi8`, `libssl3`) and `libcap2-bin` (used to run `setcap` during stage setup); creates a non-root user `appuser` (uid/gid `10000`); uses `tini` as PID 1.
 
 **Rules:**
 - The container runs as non-root (`appuser`). Do not change this.

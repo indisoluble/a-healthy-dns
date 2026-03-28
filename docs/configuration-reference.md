@@ -20,7 +20,7 @@ The Docker entrypoint maps each `DNS_*` variable to its corresponding CLI flag. 
 
 ## Required parameters
 
-These three must always be provided. The server will not start without them.
+These three must always be provided. The server will not start and exits with a non-zero status without them.
 
 ### Hosted zone
 
@@ -80,7 +80,7 @@ JSON object mapping subdomain names to their IP list and health check port.
 | CLI | `--ns` |
 | Docker | `DNS_NAME_SERVERS` |
 
-JSON array of fully-qualified name server hostnames for the zone's NS record.
+JSON array of fully-qualified name server hostnames for the zone's NS record. Single-label hostnames such as `ns1` are rejected.
 
 ```json
 ["ns1.domain.com", "ns2.domain.com"]

@@ -62,7 +62,7 @@ class DnsServerZoneUpdaterThreaded:
             return
 
         logging.info("Initializing zone...")
-        self._updater.update(check_ips=False)
+        self._updater.initialize_zone()
 
         logging.info("Starting Zone Updater...")
         self._stop_event.clear()

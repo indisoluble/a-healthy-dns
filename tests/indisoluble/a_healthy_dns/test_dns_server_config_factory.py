@@ -155,6 +155,7 @@ def test_make_zone_invalid_alias_zones(invalid_aliases, args):
         json.dumps([]),
         json.dumps([123]),
         json.dumps([""]),
+        json.dumps(["ns1"]),
         json.dumps(["ns1.example@.com"]),
     ],
 )

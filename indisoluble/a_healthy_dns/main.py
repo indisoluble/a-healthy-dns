@@ -221,7 +221,7 @@ def _main(args: Dict[str, Any]):
     # Compose config
     config = make_config(args)
     if not config:
-        return
+        return 1
 
     # Start zone updater
     zone_updater = DnsServerZoneUpdaterThreaded(
@@ -244,7 +244,9 @@ def _main(args: Dict[str, Any]):
     # Stop zone updater
     zone_updater.stop()
 
+    return 0
+
 
 def main():
     args = _make_arg_parser().parse_args()
-    _main(vars(args))
+    return _main(vars(args))

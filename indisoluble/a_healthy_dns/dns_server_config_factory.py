@@ -18,7 +18,10 @@ from typing import Any, Dict, FrozenSet, NamedTuple, Optional
 from indisoluble.a_healthy_dns.records.a_healthy_record import AHealthyRecord
 from indisoluble.a_healthy_dns.records.a_healthy_ip import AHealthyIp
 from indisoluble.a_healthy_dns.records.zone_origins import ZoneOrigins
-from indisoluble.a_healthy_dns.tools.is_valid_subdomain import is_valid_subdomain
+from indisoluble.a_healthy_dns.tools.is_valid_subdomain import (
+    is_valid_fqdn,
+    is_valid_subdomain,
+)
 
 
 class ExtendedPrivateKey(NamedTuple):
@@ -177,7 +180,7 @@ def _make_name_servers(args: Dict[str, Any]) -> Optional[FrozenSet[str]]:
 
     abs_name_servers = []
     for ns in name_servers:
-        success, error = is_valid_subdomain(ns)
+        success, error = is_valid_fqdn(ns)
         if not success:
             logging.error("Name server '%s' is not a valid FQDN: %s", ns, error)
             return None
