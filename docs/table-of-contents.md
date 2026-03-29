@@ -12,7 +12,7 @@ These documents must be read before proposing or applying changes to this reposi
 |---|---|
 | [`README.md`](../README.md) | Quick-start entrypoint: what the project is and how to run it for the first time |
 | [`docs/project-brief.md`](project-brief.md) | Goals, non-goals, constraints, and requirements |
-| [`docs/system-patterns.md`](system-patterns.md) | Architecture patterns and conventions |
+| [`docs/system-patterns.md`](system-patterns.md) | Architecture patterns, structural conventions, and folder hierarchy / codebase layout rules |
 | [`docs/project-rules.md`](project-rules.md) | Language/tool specifics and QA commands |
 | [`docs/RFC-conformance.md`](RFC-conformance.md) | Level 1 authoritative UDP conformance target: scope, minimum RFC set, current coverage per RFC, and broader-than-Level-1 scope limits |
 
@@ -24,7 +24,7 @@ These documents must be read before proposing or applying changes to this reposi
 
 - [`README.md`](../README.md) — Quick-start entrypoint
 - [`docs/project-brief.md`](project-brief.md) — Goals, non-goals, constraints, requirements
-- [`docs/system-patterns.md`](system-patterns.md) — Architecture and design patterns
+- [`docs/system-patterns.md`](system-patterns.md) — Architecture patterns, structural conventions, and folder hierarchy / codebase layout rules
 - [`docs/project-rules.md`](project-rules.md) — Toolchain, conventions, QA workflow
 
 ### Reference

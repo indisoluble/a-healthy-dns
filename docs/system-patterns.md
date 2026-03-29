@@ -154,7 +154,101 @@ All record TTLs are then calculated as multiples of `max_interval` by functions 
 
 ---
 
-## 7. Multi-domain support via ZoneOrigins
+## 7. Folder hierarchy
+
+This section is the canonical reference for physical directory layout and placement rules. Agents must cite it (constraint §6 in `AGENTS.md`) when creating or moving files.
+
+### 7.1 Top-level structure
+
+```
+a-healthy-dns/
+├── .github/workflows/    # CI/CD pipeline definitions (GitHub Actions)
+├── docs/                 # all long-form documentation
+├── indisoluble/          # source package tree (regular Python package)
+├── tests/                # test tree — mirrors indisoluble/ by default
+├── .coveragerc           # coverage measurement exclusions
+├── AGENTS.md             # AI agent contract
+├── docker-compose.example.yml  # example Compose configuration
+├── Dockerfile            # container image definition
+├── README.md             # quick-start entrypoint
+└── setup.py              # packaging, versioning, and dependency declarations
+```
+
+**Convention:** root-level files are project-wide concerns (packaging, containerisation, CI configuration, agent contract). Do not add source modules or tests at the root level.
+
+### 7.2 Source package: `indisoluble/a_healthy_dns/`
+
+```
+indisoluble/              # regular Python package; package root for this repository's code
+└── a_healthy_dns/        # application package root; all source modules live here
+    ├── records/          # DNS record construction and domain value objects (Layer 3)
+    ├── tools/            # pure utility functions with no DNS-specific dependencies (Layer 4)
+    ├── dns_server_*.py   # server orchestration modules (Layers 1–2)
+    └── main.py           # entry-point (Layer 0)
+```
+
+`indisoluble/` is a regular package with an `__init__.py`. The repository does not currently rely on PEP 420 namespace-package behavior.
+
+`indisoluble/a_healthy_dns/` contains an `__init__.py` and is the package boundary for all imports, coverage measurement, and the CLI entry-point.
+
+### 7.3 Subpackage: `records/`
+
+Groups all files responsible for constructing or assembling DNS resource records and related immutable domain value objects.
+
+| File pattern | Belongs here if… |
+|---|---|
+| DNS rdataset factory | it builds an `A`, `NS`, `SOA`, `DNSKEY`, `NSEC`, or `RRSIG` rdataset |
+| Domain value object | it represents health state or record-level data (e.g. `AHealthyIp`, `AHealthyRecord`) |
+| Timing helper | it derives TTL or signature timing from health-check parameters |
+| Zone-origin value | it carries primary or alias zone names |
+
+**Convention:** do not place network I/O, threading, or configuration-parsing logic inside `records/`.
+
+### 7.4 Subpackage: `tools/`
+
+Groups stateless, pure utility functions that have **no DNS-specific knowledge** and no dependencies above Layer 4.
+
+| File pattern | Belongs here if… |
+|---|---|
+| Validation helper | it validates a primitive (IP, port, subdomain) without side effects |
+| Conversion helper | it normalises or converts a primitive value |
+| Time helper | it reads the system clock as a raw value (`uint32_current_time`) |
+| Connectivity probe | it tests a raw TCP connection (`can_create_connection`) |
+
+**Convention:** files in `tools/` must not import from `records/` or any higher layer.
+
+### 7.5 Test tree: `tests/`
+
+```
+tests/
+└── indisoluble/
+    └── a_healthy_dns/      # mirrors indisoluble/a_healthy_dns/ by default
+        ├── records/
+        │   └── test_*.py
+        ├── tools/
+        │   └── test_*.py
+        └── test_*.py
+```
+
+The test tree mirrors the source tree by default. Most source folders have a corresponding test folder, and most source modules `foo.py` should have a mirrored test file `test_foo.py`.
+
+**Convention:** when adding a new source file `indisoluble/a_healthy_dns/X/foo.py`, default to creating its test file at `tests/indisoluble/a_healthy_dns/X/test_foo.py`. Exceptions are allowed when a dedicated mirrored test would be redundant or when behavior is better covered by a higher-level or cross-cutting test, but the exception should be deliberate and justified in the change.
+
+### 7.6 Placement rules for new files
+
+| What you are adding | Where it goes |
+|---|---|
+| New DNS record factory or domain value object | `indisoluble/a_healthy_dns/records/` |
+| New pure utility / primitive helper | `indisoluble/a_healthy_dns/tools/` |
+| New server-level module (orchestration, config, handler) | `indisoluble/a_healthy_dns/` (package root) |
+| Test for any of the above | mirrored path under `tests/indisoluble/a_healthy_dns/` |
+| New documentation file | `docs/` |
+| New CI/CD workflow | `.github/workflows/` |
+| New subpackage (new domain grouping) | inside `indisoluble/a_healthy_dns/`; justify in PR why existing folders are insufficient |
+
+---
+
+## 8. Multi-domain support via ZoneOrigins
 
 `records/zone_origins.ZoneOrigins` holds the primary zone name plus any alias zones. The `DnsServerUdpHandler` relativizes every incoming query name against all known origins.
 
@@ -169,7 +263,7 @@ Origins are sorted by descending specificity (length) to ensure the most specifi
 
 ---
 
-## 8. DNSSEC as an optional, isolated concern
+## 9. DNSSEC as an optional, isolated concern
 
 DNSSEC is an additive, opt-in behaviour controlled by the presence of `DnsServerConfig.ext_private_key`:
 
@@ -182,7 +276,7 @@ RRSIG key rotation timing is managed by `records/dnssec.iter_rrsig_key()`, a sta
 
 ---
 
-## 9. Graceful shutdown pattern
+## 10. Graceful shutdown pattern
 
 `main()` registers `SIGINT` and `SIGTERM` handlers that:
 1. Call `server.shutdown()` in a new thread (avoids deadlock with `serve_forever()`).
@@ -194,7 +288,7 @@ RRSIG key rotation timing is managed by `records/dnssec.iter_rrsig_key()`, a sta
 
 ---
 
-## 10. Tooling conventions
+## 11. Tooling conventions
 
 - **Pure utility functions** belong in `tools/`. They must have no imports from `indisoluble.a_healthy_dns` (no circular dependencies).
 - **Validation functions** (e.g. `is_valid_ip`, `is_valid_subdomain`, `is_valid_fqdn`) return `(bool, str)` — success flag and an error message (empty string on success).

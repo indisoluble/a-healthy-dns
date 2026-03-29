@@ -58,7 +58,7 @@ Requires Python 3.10+.
 |---|---|
 | [docs/table-of-contents.md](docs/table-of-contents.md) | Full documentation index |
 | [docs/project-brief.md](docs/project-brief.md) | Goals, non-goals, constraints, requirements |
-| [docs/system-patterns.md](docs/system-patterns.md) | Architecture and design patterns |
+| [docs/system-patterns.md](docs/system-patterns.md) | Architecture patterns, structural conventions, and folder hierarchy / codebase layout rules |
 | [docs/project-rules.md](docs/project-rules.md) | Toolchain, QA commands, CI/CD workflow, naming conventions |
 | [docs/RFC-conformance.md](docs/RFC-conformance.md) | RFC conformance reference: Level 1 authoritative UDP scope, minimum RFC set, current coverage per RFC, and broader-than-Level-1 scope limits |
 | [docs/configuration-reference.md](docs/configuration-reference.md) | All CLI flags and Docker env vars with defaults and examples |

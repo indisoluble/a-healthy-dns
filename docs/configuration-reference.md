@@ -108,7 +108,7 @@ UDP port the DNS server listens on.
 | CLI | `--log-level` | `info` |
 | Docker | `DNS_LOG_LEVEL` | _(not set — falls back to CLI default)_ |
 
-Log verbosity. Accepted values (case-insensitive): `debug`, `info`, `warning`, `error`, `critical`.
+Log verbosity. Accepted values: `debug`, `info`, `warning`, `error`, `critical`. The CLI parser currently expects these lowercase tokens.
 
 ### Minimum health-check interval
 
@@ -143,7 +143,7 @@ JSON array of additional domain names that resolve to the same records as the ho
 ["sub.domain.net", "sub.domain.org"]
 ```
 
-See [docs/system-patterns.md § 7](system-patterns.md#7-multi-domain-support-via-zoneorigins) for the implementation pattern.
+See [docs/system-patterns.md § 8](system-patterns.md#8-multi-domain-support-via-zoneorigins) for the implementation pattern.
 
 ---
 
