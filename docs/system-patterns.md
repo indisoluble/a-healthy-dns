@@ -2,6 +2,13 @@
 
 Architecture patterns and conventions for **A Healthy DNS**.
 
+This document is the canonical home for:
+- architecture and concurrency patterns,
+- module and package dependency direction,
+- and physical file-placement rules.
+
+It does not own repository workflow, code-style conventions, parameter syntax, or protocol-level DNS behavior. Those topics live in [`docs/project-rules.md`](project-rules.md), [`docs/configuration-reference.md`](configuration-reference.md), and [`docs/RFC-conformance.md`](RFC-conformance.md).
+
 ---
 
 ## 1. High-level architecture
@@ -147,8 +154,9 @@ All record TTLs are then calculated as multiples of `max_interval` by functions 
 | SOA retry | `= A TTL` |
 | SOA expire | `SOA retry × 5` |
 | SOA min TTL | `= A TTL` |
-| DNSKEY TTL | (see `records/time.py`) |
-| RRSIG lifetime | (see `records/time.py`) |
+| DNSKEY TTL | `A TTL × 10` |
+| RRSIG resign | `= DNSKEY TTL` |
+| RRSIG expiration | `2 × SOA refresh + SOA expire + SOA retry` |
 
 **Convention:** do not hardcode TTL values. All timing must be derived via functions in `records/time.py`, taking `max_interval` as input.
 
@@ -232,7 +240,7 @@ tests/
 
 The test tree mirrors the source tree by default. Most source folders have a corresponding test folder, and most source modules `foo.py` should have a mirrored test file `test_foo.py`.
 
-**Convention:** when adding a new source file `indisoluble/a_healthy_dns/X/foo.py`, default to creating its test file at `tests/indisoluble/a_healthy_dns/X/test_foo.py`. Exceptions are allowed when a dedicated mirrored test would be redundant or when behavior is better covered by a higher-level or cross-cutting test, but the exception should be deliberate and justified in the change.
+**Convention:** when adding a new source file `indisoluble/a_healthy_dns/X/foo.py`, default to placing its module-focused test under `tests/indisoluble/a_healthy_dns/X/`. Naming and broader test-convention rules are defined in [`docs/project-rules.md` § 6](project-rules.md#6-test-conventions). Exceptions are allowed when a dedicated mirrored test would be redundant or when behavior is better covered by a higher-level or cross-cutting test, but the exception should be deliberate and justified in the change.
 
 ### 7.6 Placement rules for new files
 
@@ -285,12 +293,3 @@ RRSIG key rotation timing is managed by `records/dnssec.iter_rrsig_key()`, a sta
 `stop()` sets a `threading.Event` to signal the background loop, then `join()`s the thread with a timeout.
 
 **Convention:** any new background thread or resource must be cleanly stopped in the `main()` shutdown sequence following the same `Event + join` pattern.
-
----
-
-## 11. Tooling conventions
-
-- **Pure utility functions** belong in `tools/`. They must have no imports from `indisoluble.a_healthy_dns` (no circular dependencies).
-- **Validation functions** (e.g. `is_valid_ip`, `is_valid_subdomain`, `is_valid_fqdn`) return `(bool, str)` — success flag and an error message (empty string on success).
-- **Record factories** (e.g. `make_a_record`, `make_ns_record`) are module-level functions, not methods. They take scalar inputs and return `dns.rdataset.Rdataset` (or `None`).
-- **Iterators as stateful generators** are used for sequences requiring internal state (SOA serial increments, RRSIG key rotation) — see `records/soa_record.iter_soa_record()` and `records/dnssec.iter_rrsig_key()`.

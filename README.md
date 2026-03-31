@@ -5,11 +5,15 @@
 [![Codecov](https://codecov.io/gh/indisoluble/a-healthy-dns/branch/master/graph/badge.svg)](https://codecov.io/gh/indisoluble/a-healthy-dns)
 [![Docker Hub](https://img.shields.io/docker/v/indisoluble/a-healthy-dns?label=docker%20hub&logo=docker)](https://hub.docker.com/r/indisoluble/a-healthy-dns)
 
-An authoritative DNS server that continuously health-checks backend IPs via TCP and automatically removes unhealthy endpoints from DNS responses — no external orchestration required.
+An authoritative UDP DNS server that continuously health-checks backend IPs via TCP and serves only healthy A records.
+
+When every backend for a subdomain is unhealthy, that name fails closed with `NXDOMAIN` until at least one backend recovers.
 
 ## Quick start
 
 ### Option A: Docker (recommended)
+
+This quick start keeps the container on a high port so local testing does not require binding host port `53`.
 
 ```bash
 docker run -d \
@@ -25,11 +29,14 @@ docker run -d \
 Verify it is running:
 
 ```bash
-dig @localhost -p 53053 www.example.local
-docker logs a-healthy-dns
+dig @localhost -p 53053 example.local SOA
+dig @localhost -p 53053 www.example.local A
+docker logs --tail 50 a-healthy-dns
 ```
 
-### Option B: Python (from source)
+For Compose usage, port-53 deployment, DNSSEC key mounts, and hardening, use [docs/docker.md](docs/docker.md).
+
+### Option B: Python CLI (from source)
 
 ```bash
 git clone https://github.com/indisoluble/a-healthy-dns.git
@@ -44,7 +51,7 @@ a-healthy-dns \
 
 Requires Python 3.10+.
 
-## How it works
+## Behavior at a glance
 
 - Health checks run in the background, testing TCP connectivity to each `(ip, health_port)` pair at a configurable interval.
 - When an IP becomes unhealthy it is removed from DNS A record responses immediately on the next zone update.
@@ -54,13 +61,15 @@ Requires Python 3.10+.
 
 ## Documentation
 
+Start with [docs/table-of-contents.md](docs/table-of-contents.md) for the minimum reading set and the canonical owner of each documentation topic.
+
 | Document | Contents |
 |---|---|
-| [docs/table-of-contents.md](docs/table-of-contents.md) | Full documentation index |
+| [docs/table-of-contents.md](docs/table-of-contents.md) | Full documentation index, minimum reading set, and canonical topic ownership |
 | [docs/project-brief.md](docs/project-brief.md) | Goals, non-goals, constraints, requirements |
 | [docs/system-patterns.md](docs/system-patterns.md) | Architecture patterns, structural conventions, and folder hierarchy / codebase layout rules |
-| [docs/project-rules.md](docs/project-rules.md) | Toolchain, QA commands, CI/CD workflow, naming conventions |
-| [docs/RFC-conformance.md](docs/RFC-conformance.md) | RFC conformance reference: Level 1 authoritative UDP scope, minimum RFC set, current coverage per RFC, and broader-than-Level-1 scope limits |
-| [docs/configuration-reference.md](docs/configuration-reference.md) | All CLI flags and Docker env vars with defaults and examples |
-| [docs/docker.md](docs/docker.md) | Docker deployment: image details, Compose, deployment patterns, container management, security, and orchestration |
-| [docs/troubleshooting.md](docs/troubleshooting.md) | Common issues, debugging, and operational procedures |
+| [docs/project-rules.md](docs/project-rules.md) | Toolchain, QA workflow, CI/release rules, and repository-specific code conventions |
+| [docs/RFC-conformance.md](docs/RFC-conformance.md) | Wire-level authoritative UDP behavior, response semantics, and RFC scope boundaries |
+| [docs/configuration-reference.md](docs/configuration-reference.md) | CLI flags and Docker environment variables with defaults and examples |
+| [docs/docker.md](docs/docker.md) | Docker deployment guide: quick start, Compose, DNSSEC mounts, hardening, and upgrades |
+| [docs/troubleshooting.md](docs/troubleshooting.md) | Runtime diagnosis, log interpretation, live debugging, monitoring, and incident handoff |

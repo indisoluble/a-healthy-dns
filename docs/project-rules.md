@@ -2,6 +2,14 @@
 
 Language/tool specifics, conventions, and QA workflow for **A Healthy DNS**.
 
+This document is the canonical home for:
+- runtime and dependency rules tied to the repository,
+- local setup and QA workflow,
+- CI and release workflow rules,
+- and repository-specific code conventions that future changes should follow.
+
+It does not own architecture and file-placement guidance, parameter reference material, deployment procedures, or troubleshooting playbooks. Those topics live in [`docs/system-patterns.md`](system-patterns.md), [`docs/configuration-reference.md`](configuration-reference.md), [`docs/docker.md`](docker.md), and [`docs/troubleshooting.md`](troubleshooting.md).
+
 ---
 
 ## 1. Language and runtime
@@ -58,13 +66,15 @@ pip install pytest pytest-cov
 
 ## 5. QA commands
 
-Run these before merging any change. All must pass.
+Use **5.2** as the CI-equivalent local check before merge. The other commands in this section are narrower or optional helpers for local iteration.
 
 ### 5.1 Run all tests
 
 ```bash
 pytest
 ```
+
+Useful for a fast local pass when you do not need coverage output.
 
 ### 5.2 Run tests with coverage (matches CI exactly)
 
@@ -74,24 +84,9 @@ pytest --cov=indisoluble.a_healthy_dns --cov-report=term --cov-report=xml
 
 Coverage is measured over `indisoluble.a_healthy_dns` only (`setup.py` and `tests/` are excluded). See `.coveragerc` for the full exclusion list.
 
-### 5.3 Run a single test file
+This is the primary pre-merge local QA command because it matches the `test python code` workflow.
 
-```bash
-pytest tests/indisoluble/a_healthy_dns/records/test_a_healthy_ip.py
-```
-
-### 5.4 Run tests with verbose output
-
-```bash
-pytest -v
-```
-
-### 5.5 Generate an HTML coverage report (optional, local only)
-
-```bash
-pytest --cov=indisoluble.a_healthy_dns --cov-report=html
-# Report written to coverage_html_report/
-```
+Other helpers: `pytest tests/.../test_foo.py` (single file), `pytest -v` (verbose), `pytest --cov=indisoluble.a_healthy_dns --cov-report=html` (local HTML report in `coverage_html_report/`).
 
 ---
 
@@ -138,25 +133,26 @@ All workflows target the `master` branch.
 
 **Rule:** never push directly to `master` from a branch that hasn't passed all three gate workflows.
 
+**Rule:** workflow names are part of the automation contract. If you rename a workflow's `name:`, update every dependent `workflow_run` reference in the repository.
+
+**Gate scope:** `security scan` is important, but it is not part of the three-workflow `validate tests` gate. The release chain depends on `test python code`, `test integration`, and `test version` only.
+
 **`validate tests` trigger model:** GitHub Actions `workflow_run` fires each time *any one* of the listed upstream workflows completes — not once after all three are done. This means `validate tests` may run before the other two upstream workflows have finished; early runs that fail because a sibling workflow hasn't completed yet are expected and not the final picture. The meaningful result is the run that executes after all three required workflows for the same commit SHA have completed. This is an implementation detail of the current `workflow_run` model; the intended policy (all three must pass) is unchanged.
 
 ---
 
-## 8. Docker conventions
+## 8. Repository-owned container conventions
 
-The `Dockerfile` uses a **multi-stage build**:
+See [docs/docker.md](docker.md) for deployment procedures, Compose usage, runtime hardening, and orchestrator notes.
 
-1. **Builder stage** (`python:3-slim`) — installs `gcc`, `libffi-dev`, `libssl-dev`, `cargo`, `rustc`; builds the package into `/root/.local`.
-2. **Production stage** (`python:3-slim`) — copies only `/root/.local` from builder; installs runtime libs (`libffi8`, `libssl3`) and `libcap2-bin` (used to run `setcap` during stage setup); creates a non-root user `appuser` (uid/gid `10000`); uses `tini` as PID 1.
+This section owns only the repository-side rules for changes to `Dockerfile`, `docker-compose.example.yml`, and Docker-related CI workflows.
 
-**Rules:**
-- The container runs as non-root (`appuser`). Do not change this.
-- DNSSEC keys are mounted into `/app/keys` (mode `700`, owned by `appuser`).
-- The Python binary is granted `CAP_NET_BIND_SERVICE` via `setcap` to allow binding to port 53 without root.
-- If a deployment hardens the container with `cap_drop: [ALL]` or equivalent, it must add back `NET_BIND_SERVICE` explicitly for port 53 binds.
-- Entrypoint variables are the `DNS_*` environment variables (see [docs/configuration-reference.md](configuration-reference.md)).
-
-Docker end-to-end tests in CI use an isolated `172.28.0.0/24` bridge network with a real `nginx:alpine` backend so health checks exercise an actual TCP connection.
+**Rules for container-build changes:**
+- The final image runs as the non-root `appuser` user. Do not change this casually.
+- `/app/keys` remains the mount point for DNSSEC private keys, owned by `appuser` with restrictive permissions.
+- The Python interpreter keeps `CAP_NET_BIND_SERVICE` via `setcap` so the process can bind port `53` without running as root.
+- The image entrypoint continues to translate `DNS_*` environment variables into CLI flags. Parameter semantics belong in [docs/configuration-reference.md](configuration-reference.md), not here.
+- Docker end-to-end coverage continues to use an isolated bridge network with a real backend container so health checks exercise an actual TCP connection.
 
 ---
 
@@ -187,3 +183,123 @@ No manual tagging or Docker Hub pushes are required.
 | CLI argument names | `kebab-case` (e.g. `--hosted-zone`) |
 | `argparse` dest / internal keys | `snake_case` (matches `ARG_*` constants in `dns_server_config_factory.py`) |
 | Docker environment variables | `DNS_` prefix + `UPPER_SNAKE_CASE` |
+
+---
+
+## 11. Code conventions
+
+The repository is consistent on import grouping, validator signatures, class member layout, `NamedTuple` usage for immutable data bags, `%s`-style logging, and type annotations on all function signatures. Module headers are normalized for executable modules; package `__init__.py` files remain empty when they exist only to mark package boundaries.
+
+### 11.1 Import ordering
+
+Each source module organizes imports into five groups, each separated by a blank line:
+
+1. Standard-library direct imports (`import X`)
+2. Third-party direct imports (`import X`)
+3. Standard-library from-imports (`from X import Y`)
+4. Third-party from-imports (`from X import Y`)
+5. Local imports (`from indisoluble.a_healthy_dns... import Y`)
+
+```python
+# test_dns_server_config_factory.py (representative example)
+import json
+
+import dns.dnssectypes
+import dns.name
+import pytest
+
+from unittest.mock import patch
+
+from dns.dnssecalgs.rsa import PrivateRSASHA256
+
+from indisoluble.a_healthy_dns import dns_server_config_factory as dscf
+from indisoluble.a_healthy_dns.records.a_healthy_ip import AHealthyIp
+```
+
+Skip groups that are not needed; do not collapse remaining groups together. Local imports normally use `from ... import ...`; aliasing the imported symbol or submodule is acceptable when repeated constant access would otherwise add noise. Test files follow the same rule.
+
+### 11.2 Module headers
+
+Executable source modules start with the shebang line and, unless the file is an intentionally empty package `__init__.py`, immediately follow it with a module-level docstring:
+
+```python
+#!/usr/bin/env python3
+
+"""Short description of what this module provides.
+
+Optional longer explanation of scope and design intent.
+"""
+```
+
+Test files include the shebang (`#!/usr/bin/env python3`) but omit the module docstring. Empty `__init__.py` files are the deliberate exception on the source side.
+
+### 11.3 Validation function signature
+
+Utility functions in `tools/` that validate a primitive value return `Tuple[bool, str]`: `(True, "")` on success and `(False, error_message)` on failure. Input type is `Any` to safely handle unvalidated external input.
+
+```python
+from typing import Any, Tuple
+
+def is_valid_ip(ip: Any) -> Tuple[bool, str]:
+    if not isinstance(ip, str):
+        return (False, "It must be a string")
+    ...
+    return (True, "")
+```
+
+### 11.4 Class member layout
+
+Class members are declared in this order: `@property` accessors → `__init__` → public methods → dunder methods (`__eq__`, `__hash__`, `__repr__`).
+
+```python
+class AHealthyIp:
+    @property
+    def ip(self) -> str: ...
+
+    @property
+    def health_port(self) -> int: ...
+
+    def __init__(self, ip: Any, health_port: Any, is_healthy: bool): ...
+
+    def updated_status(self, is_healthy: bool) -> "AHealthyIp": ...
+
+    def __eq__(self, other): ...
+    def __hash__(self): ...
+    def __repr__(self): ...
+```
+
+### 11.5 NamedTuple for immutable data bags
+
+`NamedTuple` is used for immutable containers that hold related fields with no behavior beyond construction (e.g. config, key container, signature timing). Classes are used when objects carry behavior (`AHealthyIp`, `AHealthyRecord`, `ZoneOrigins`).
+
+```python
+class DnsServerConfig(NamedTuple):
+    zone_origins: ZoneOrigins
+    name_servers: FrozenSet[str]
+    a_records: FrozenSet[AHealthyRecord]
+    ext_private_key: Optional[ExtendedPrivateKey]
+```
+
+### 11.6 Logging format
+
+Use `%s`-style format strings with `logging` calls — not f-strings or `str.format()`:
+
+```python
+logging.error("Invalid IP address '%s': %s", ip, error)
+logging.debug("Created A record with ttl: %d, and IPs: %s", ttl, ips)
+```
+
+### 11.7 Type annotations
+
+All function and method signatures include parameter type annotations and return type annotations. Use `Any` only where the function intentionally accepts unvalidated external input (e.g. validator parameters).
+
+```python
+def is_valid_ip(ip: Any) -> Tuple[bool, str]:
+    ...
+
+def make_a_record(max_interval: int, ips: FrozenSet[str]) -> Optional[dns.rdataset.Rdataset]:
+    ...
+
+def updated_status(self, is_healthy: bool) -> "AHealthyIp":
+    ...
+```

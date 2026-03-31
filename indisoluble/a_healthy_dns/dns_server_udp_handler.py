@@ -9,8 +9,6 @@ zone, and returns appropriate DNS responses with authoritative answers.
 import logging
 import socketserver
 
-from typing import List
-
 import dns.exception
 import dns.flags
 import dns.message
@@ -22,6 +20,8 @@ import dns.rdatatype
 import dns.rrset
 import dns.versioned
 import dns.zone
+
+from typing import List
 
 from indisoluble.a_healthy_dns.records.zone_origins import ZoneOrigins
 

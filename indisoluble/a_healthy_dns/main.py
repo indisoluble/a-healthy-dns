@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 
+"""CLI entry point and process wiring for A Healthy DNS."""
+
 import argparse
 import json
 import logging

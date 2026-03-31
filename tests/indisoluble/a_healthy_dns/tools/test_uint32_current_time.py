@@ -2,10 +2,9 @@
 
 import pytest
 
-import indisoluble.a_healthy_dns.tools.uint32_current_time as u32_module
-
 from unittest.mock import patch
 
+from indisoluble.a_healthy_dns.tools import uint32_current_time as u32_module
 from indisoluble.a_healthy_dns.tools.uint32_current_time import uint32_current_time
 
 

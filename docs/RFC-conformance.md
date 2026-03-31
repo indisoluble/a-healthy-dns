@@ -2,6 +2,13 @@
 
 RFC conformance reference for **A Healthy DNS** — Level 1 authoritative UDP subset.
 
+This document is the canonical home for:
+- authoritative UDP scope,
+- wire-level response behavior within the supported subset,
+- and current RFC coverage status for that subset.
+
+It does not own product scope, configuration syntax, deployment procedures, or troubleshooting guidance. Those topics live in [`docs/project-brief.md`](project-brief.md), [`docs/configuration-reference.md`](configuration-reference.md), [`docs/docker.md`](docker.md), and [`docs/troubleshooting.md`](troubleshooting.md).
+
 ---
 
 ## 1. General purpose and scope
@@ -14,9 +21,7 @@ This document describes RFC conformance for the current implementation scope.  I
 
 ### What "RFC conformance" means here
 
-DNS behaviour is standardised in a series of documents called RFCs (Request For Comments), published by the IETF.  A conformant DNS server must produce responses that match the requirements in those RFCs.  Failing to do so can cause resolvers, monitoring tools, or other servers to misinterpret or reject responses.
-
-For this project "RFC conformance" means producing wire-correct responses for every query type within the documented Level 1 scope.
+RFC conformance here means producing wire-correct responses for every query type within the documented Level 1 scope. Deviations cause resolvers, monitoring tools, or other servers to misinterpret or reject responses.
 
 ### What Level 1 covers
 
@@ -53,8 +58,6 @@ Level 1 is a deliberately limited scope.  It covers the minimum behaviour requir
 | **SOA in authority** | For negative responses (NXDOMAIN and NODATA) the server includes the zone's Start of Authority record in the authority section so that negative caching behaviour is well-defined |
 | **REFUSED** | The server refuses to answer because the query is for a zone it does not serve |
 | **FORMERR** | "Format Error" — the server cannot interpret the query because it is malformed |
-| **Opcode** | A 4-bit field in the DNS message header indicating the type of operation (e.g. standard query, inverse query, notify) |
-| **QCLASS / IN** | The class field in a DNS question; IN (Internet, value 1) is the only class used in modern DNS practice |
 
 ---
 
@@ -79,9 +82,7 @@ The assessments below reflect the current implementation in `indisoluble/a_healt
 
 ### 3.1 RFC 1034 — Domain Names: Concepts and Facilities
 
-RFC 1034 establishes the conceptual model for authoritative DNS servers: a server is authoritative for one or more zones, answers queries about names in those zones with the AA flag set, and uses defined response codes for names that are absent or that fall outside its zones.
-
-RFC 1034 §6.2 — https://www.rfc-editor.org/rfc/rfc1034 describes the algorithm an authoritative server uses to process a query.
+RFC 1034 §6.2 — https://www.rfc-editor.org/rfc/rfc1034 defines the authoritative server model: zones, AA flag, NXDOMAIN, and NOERROR semantics.
 
 | Behaviour | Status | Notes |
 |---|---|---|
@@ -96,11 +97,7 @@ RFC 1034 §6.2 — https://www.rfc-editor.org/rfc/rfc1034 describes the algorith
 
 ### 3.2 RFC 1035 — Domain Names: Implementation and Specification
 
-RFC 1035 defines the DNS wire format: the message header structure (including the QDCOUNT field and opcode field), all standard record types, and the FORMERR and NOTIMP response codes.
-
-- RFC 1035 §4.1.1 defines the header format, including QDCOUNT and OPCODE — https://www.rfc-editor.org/rfc/rfc1035
-- RFC 1035 §4.1.2 defines the question section format
-- RFC 1035 §4.1.3 defines answer, authority, and additional section formats
+RFC 1035 — https://www.rfc-editor.org/rfc/rfc1035: wire format (header §4.1.1 including QDCOUNT and OPCODE, question §4.1.2, answer/authority §4.1.3) and response codes (FORMERR, NOTIMP).
 
 | Behaviour | Status | Notes |
 |---|---|---|
@@ -112,17 +109,13 @@ RFC 1035 defines the DNS wire format: the message header structure (including th
 | Wire serialisation of responses | **Implemented** | `response.to_wire()` is called before every `sendto()` |
 | A, SOA, NS record types in responses | **Implemented** | All three record types are populated by the zone updater |
 
-Note on malformed-wire inputs: to reply to a malformed query the server needs the transaction ID from the DNS message header, which occupies the first two bytes of every DNS packet (RFC 1035 §4.1.1).  If the payload is shorter than the 12-byte DNS header those bytes are not present, so no reply is possible — the packet is dropped silently.  If the payload is at least 12 bytes long, the transaction ID is readable even when the rest of the message is corrupt; in that case the server replies with a minimal FORMERR, preserving the original transaction ID so the client can match the response to its request.
-
-The two code paths are distinguished by the exception that dnspython raises.  `dns.message.ShortHeader` is raised exclusively for payloads shorter than 12 bytes — the silent-drop case.  Any other `dns.exception.DNSException` subclass (`FormError`, `BadPointer`, etc.) means the header was present but the body was malformed — the FORMERR case.  Both paths are confirmed by `test_handle_malformed_wire_input_drops_silently` and `test_handle_malformed_wire_with_recoverable_header_returns_formerr` in `tests/indisoluble/a_healthy_dns/test_dns_server_udp_handler.py`; the FORMERR path is also validated by `TestMalformedWireInput` in the component integration tests.
+Note on malformed-wire inputs: replying requires the DNS transaction ID (bytes 0–1, RFC 1035 §4.1.1). Payloads shorter than 12 bytes raise `dns.message.ShortHeader` and are dropped silently. Any other `dns.exception.DNSException` subclass (`FormError`, `BadPointer`, etc.) means the header was readable; the server replies with FORMERR using the extracted transaction ID. Both paths are confirmed by unit tests in `test_dns_server_udp_handler.py` and by `TestMalformedWireInput` in the component integration tests.
 
 ---
 
 ### 3.3 RFC 2181 — Clarifications to the DNS Specification
 
-RFC 2181 corrects and tightens several ambiguities in RFC 1035.  The requirement most relevant to Level 1 is found in §5.1: a DNS query must contain exactly one question; a server receiving a message with QDCOUNT ≠ 1 should return FORMERR — https://www.rfc-editor.org/rfc/rfc2181.
-
-RFC 2181 §4 also clarifies that the AA flag applies to the entire response when the server is authoritative.
+RFC 2181 — https://www.rfc-editor.org/rfc/rfc2181: §5.1 requires exactly one question (QDCOUNT = 1), FORMERR otherwise; §4 clarifies AA applies to the entire response.
 
 | Behaviour | Status | Notes |
 |---|---|---|
@@ -135,11 +128,7 @@ No remaining Level 1 gaps in RFC 2181 coverage.
 
 ### 3.4 RFC 2308 — Negative Caching of DNS Queries
 
-RFC 2308 defines how negative responses (NXDOMAIN and NODATA) must be structured so that resolvers can cache them correctly.  Both response types must include the zone's apex SOA record in the authority section — RFC 2308 §3 (NXDOMAIN) and RFC 2308 §2.1 (NODATA/NOERROR) — https://www.rfc-editor.org/rfc/rfc2308.
-
-Without the SOA in the authority section, resolvers either cannot cache the negative result or cache it with an undefined TTL, leading to repeated unnecessary queries.
-
-RFC 2308 §5 defines the SOA minimum TTL field as the negative caching TTL; this project populates `SOA MINIMUM` via `calculate_soa_min_ttl()` in `records/time.py`.
+RFC 2308 — https://www.rfc-editor.org/rfc/rfc2308: NXDOMAIN (§3) and NODATA/NOERROR (§2.1) responses must include the apex SOA in the authority section for correct negative caching. §5 defines `SOA MINIMUM` as the negative caching TTL; populated here via `calculate_soa_min_ttl()` in `records/time.py`.
 
 | Behaviour | Status | Notes |
 |---|---|---|

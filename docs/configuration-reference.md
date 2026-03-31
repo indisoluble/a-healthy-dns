@@ -2,6 +2,8 @@
 
 Full parameter reference for **A Healthy DNS**, covering both the CLI (`a-healthy-dns`) and Docker environment variables.
 
+This document is the canonical home for CLI flags, Docker environment variables, default values, and configuration examples. It does not own deployment procedures, architecture details, or troubleshooting runbooks. Those topics live in [`docs/docker.md`](docker.md), [`docs/system-patterns.md`](system-patterns.md), and [`docs/troubleshooting.md`](troubleshooting.md).
+
 > **Quick-start:** see [`README.md`](../README.md).  
 > **Parameter behaviour details** (TTL derivation, DNSSEC timing): see [`docs/system-patterns.md`](system-patterns.md).
 
@@ -203,34 +205,6 @@ a-healthy-dns \
   --hosted-zone sub.domain.com \
   --zone-resolutions '{"www":{"ips":["192.168.1.100"],"health_port":8080}}' \
   --ns '["ns1.domain.com"]'
-```
-
-### CLI — with DNSSEC and tuned intervals
-
-```bash
-a-healthy-dns \
-  --hosted-zone sub.domain.com \
-  --zone-resolutions '{"www":{"ips":["192.168.1.100","192.168.1.101"],"health_port":80},"api":{"ips":["192.168.1.200"],"health_port":8000}}' \
-  --ns '["ns1.domain.com","ns2.domain.com"]' \
-  --alias-zones '["sub.domain.net"]' \
-  --port 53 \
-  --test-min-interval 10 \
-  --test-timeout 2 \
-  --log-level info \
-  --priv-key-path /etc/dns/private.pem \
-  --priv-key-alg RSASHA256
-```
-
-### Docker — minimal
-
-```bash
-docker run -d \
-  -p 53053:53053/udp \
-  -e DNS_HOSTED_ZONE="sub.domain.com" \
-  -e DNS_ZONE_RESOLUTIONS='{"www":{"ips":["192.168.1.100"],"health_port":8080}}' \
-  -e DNS_NAME_SERVERS='["ns1.domain.com"]' \
-  -e DNS_PORT="53053" \
-  indisoluble/a-healthy-dns
 ```
 
 ### Docker — with DNSSEC

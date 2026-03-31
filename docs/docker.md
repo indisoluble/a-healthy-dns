@@ -1,586 +1,230 @@
 # Docker Deployment Guide
 
-Docker is the recommended deployment method for A Healthy DNS. The official image is available on [Docker Hub](https://hub.docker.com/r/indisoluble/a-healthy-dns) and includes all dependencies, security hardening, and production-ready configuration.
+This document is the canonical home for Docker-specific deployment guidance for **A Healthy DNS**.
 
-> **Quick start:** see [`README.md`](../README.md).  
-> **Configuration reference:** see [`docs/configuration-reference.md`](configuration-reference.md) for all parameters.  
-> **Troubleshooting:** see [`docs/troubleshooting.md`](troubleshooting.md) for Docker-specific issues and operational procedures.
+It owns:
+- how to run the published image or build a local image,
+- how to use the repository Compose example,
+- the runtime container contract that operators need to preserve,
+- and Docker-focused deployment patterns and hardening guidance.
+
+It does not own parameter-by-parameter reference material, repository-side container build rules, or troubleshooting procedures. Those topics live in [`docs/configuration-reference.md`](configuration-reference.md), [`docs/project-rules.md`](project-rules.md), and [`docs/troubleshooting.md`](troubleshooting.md).
+
+Commands below use `docker compose` syntax. If you use the legacy standalone binary, replace it with `docker-compose`.
 
 ---
 
-## Quick Start
+## 1. Runtime contract
 
-### Using Pre-Built Image
+The published image and the repository `Dockerfile` expose a few operator-visible behaviors that deployment configs should preserve.
+
+| Aspect | Runtime behavior |
+|---|---|
+| Base image | Multi-stage build based on `python:3-slim` |
+| Process model | `tini` runs as PID 1 and launches `a-healthy-dns` |
+| Runtime user | Non-root `appuser` with uid/gid `10000` |
+| Default container port | `53/udp` (`DNS_PORT=53` by default inside the image) |
+| Configuration surface | `DNS_*` environment variables are translated into CLI flags by the entrypoint |
+| DNSSEC key mount | `/app/keys` is the expected mount point for private keys |
+| Privileged bind strategy | The Python interpreter has `CAP_NET_BIND_SERVICE` via `setcap` so the process can bind port `53` without running as root |
+| Image footprint | The runtime image is intentionally slim; use the troubleshooting guide for diagnostics rather than expecting general debug tools inside the container |
+
+---
+
+## 2. Quick start
+
+### Published image
+
+This startup pattern keeps the container on a high port so local testing does not require binding host port `53`.
 
 ```bash
 docker run -d \
   --name a-healthy-dns \
   -p 53053:53053/udp \
-  -e DNS_HOSTED_ZONE="sub.domain.com" \
-  -e DNS_ZONE_RESOLUTIONS='{"www":{"ips":["192.168.1.100"],"health_port":8080}}' \
-  -e DNS_NAME_SERVERS='["ns1.domain.com"]' \
+  -e DNS_HOSTED_ZONE="example.local" \
+  -e DNS_ZONE_RESOLUTIONS='{"www":{"ips":["192.168.1.100","192.168.1.101"],"health_port":8080}}' \
+  -e DNS_NAME_SERVERS='["ns1.example.local"]' \
   -e DNS_PORT="53053" \
   indisoluble/a-healthy-dns
 ```
 
-### Building Local Image
+### Build a local image from this repository
 
 ```bash
-# Clone repository
-git clone https://github.com/indisoluble/a-healthy-dns.git
-cd a-healthy-dns
-
-# Build image
 docker build -t a-healthy-dns:local .
 
-# Run container
 docker run -d \
-  --name a-healthy-dns \
+  --name a-healthy-dns-local \
   -p 53053:53053/udp \
-  -e DNS_HOSTED_ZONE="sub.domain.com" \
+  -e DNS_HOSTED_ZONE="example.local" \
   -e DNS_ZONE_RESOLUTIONS='{"www":{"ips":["192.168.1.100"],"health_port":8080}}' \
-  -e DNS_NAME_SERVERS='["ns1.domain.com"]' \
+  -e DNS_NAME_SERVERS='["ns1.example.local"]' \
   -e DNS_PORT="53053" \
   a-healthy-dns:local
 ```
 
-## Docker Image Details
+### Basic verification
 
-### Base Image
-- **Base:** `python:3-slim` (Debian-based)
-- **Multi-stage build** for minimal image size
-- **Non-root user** (UID/GID: 10000) for security
-
-### Security Features
-- Runs as non-root user (`appuser`)
-- Minimal attack surface (slim base, minimal dependencies)
-- File capability on the Python binary for port-53 binds; hardened runtimes that drop all capabilities must add back `NET_BIND_SERVICE`
-- Tini init system for proper signal handling
-- No unnecessary packages or build tools in final image
-
-### Image Layers
-1. **Builder stage:** Installs build dependencies (gcc, rust compiler, libffi-dev, libssl-dev)
-2. **Production stage:** Runtime dependencies (libffi, libssl, tini for init, libcap2-bin for setcap setup)
-3. **Application layer:** Python packages installed in user directory
-
-### Exposed Ports
-- **53/udp** — DNS (exposed but configurable via `DNS_PORT`)
-
-### Volumes
-- **/app/keys** — Optional volume for DNSSEC private keys
-
-## Environment Variables
-
-Configuration is provided via environment variables. For the full parameter reference — including defaults, accepted values, and CLI flag equivalents — see [docs/configuration-reference.md](configuration-reference.md).
-
-Required: `DNS_HOSTED_ZONE`, `DNS_ZONE_RESOLUTIONS`, `DNS_NAME_SERVERS`.  
-Optional: `DNS_PORT`, `DNS_LOG_LEVEL`, `DNS_TEST_MIN_INTERVAL`, `DNS_TEST_TIMEOUT`, `DNS_ALIAS_ZONES`, `DNS_PRIV_KEY_PATH`, `DNS_PRIV_KEY_ALG`.
-
-## Docker Compose
-
-### Basic Setup
-
-Create `docker-compose.yml`:
-
-```yaml
-version: '3.8'
-
-services:
-  a-healthy-dns:
-    image: indisoluble/a-healthy-dns
-    ports:
-      - "53053:53053/udp"
-    environment:
-      DNS_HOSTED_ZONE: "sub.domain.com"
-      DNS_ZONE_RESOLUTIONS: '{"www":{"ips":["192.168.1.100","192.168.1.101"],"health_port":8080}}'
-      DNS_NAME_SERVERS: '["ns1.domain.com", "ns2.domain.com"]'
-      DNS_PORT: "53053"
-    restart: unless-stopped
-```
-
-Deploy:
 ```bash
-docker-compose up -d
+dig @localhost -p 53053 www.example.local
+docker ps --filter name=a-healthy-dns
+docker logs --tail 50 a-healthy-dns
 ```
 
-### Production Setup with Security
+For parameter semantics, defaults, and all accepted `DNS_*` variables, use [`docs/configuration-reference.md`](configuration-reference.md).
 
-Use the provided [docker-compose.example.yml](../docker-compose.example.yml) as a template:
+---
+
+## 3. Using Compose
+
+The repository ships with [`docker-compose.example.yml`](../docker-compose.example.yml) as the baseline Compose deployment.
 
 ```bash
 cp docker-compose.example.yml docker-compose.yml
-# Edit docker-compose.yml with your configuration
-docker-compose up -d
+# Edit the DNS_* values for your environment
+docker compose up -d
 ```
 
-Key security features in example:
-- **Security options:** `no-new-privileges:true`
-- **Capability dropping:** Drop all, add only `NET_BIND_SERVICE`
-- **User specification:** Explicit UID/GID (10000:10000)
-- **Resource limits:** Memory and CPU constraints
-- **Network isolation:** Custom bridge network
+The example file already demonstrates the main deployment choices this project expects:
+- explicit UDP port mapping,
+- `DNS_*` environment-variable configuration,
+- a dedicated bridge network,
+- non-root execution as `10000:10000`,
+- `no-new-privileges`,
+- `cap_drop: [ALL]` plus `NET_BIND_SERVICE`,
+- and memory/CPU limits.
 
-### DNSSEC Setup
+By default the example builds the image from the local repository (`build: .`). If you want to deploy the published image instead, replace `build: .` with `image: indisoluble/a-healthy-dns:<version>`.
 
-**Directory structure:**
-```
-.
-├── docker-compose.yml
-└── keys/
-    └── private.pem  (chmod 600)
-```
+---
 
-**docker-compose.yml:**
-```yaml
-version: '3.8'
+## 4. DNSSEC deployment
 
-services:
-  a-healthy-dns:
-    image: indisoluble/a-healthy-dns
-    ports:
-      - "53053:53053/udp"
-    environment:
-      DNS_HOSTED_ZONE: "sub.domain.com"
-      DNS_ZONE_RESOLUTIONS: '{"www":{"ips":["192.168.1.100"],"health_port":8080}}'
-      DNS_NAME_SERVERS: '["ns1.domain.com"]'
-      DNS_PORT: "53053"
-      DNS_PRIV_KEY_PATH: "/app/keys/private.pem"
-      DNS_PRIV_KEY_ALG: "RSASHA256"
-    volumes:
-      - ./keys:/app/keys:ro
-    restart: unless-stopped
-```
+DNSSEC remains optional. To enable it in Docker:
+1. Mount the private-key directory into `/app/keys` as read-only.
+2. Set `DNS_PRIV_KEY_PATH` to the mounted file path.
+3. Set `DNS_PRIV_KEY_ALG` when you need a non-default algorithm.
 
-**Deploy:**
-```bash
-# Ensure key permissions
-chmod 600 keys/private.pem
-
-# Start service
-docker-compose up -d
-
-# Verify DNSSEC signing
-docker logs a-healthy-dns 2>&1 | grep -i "sign"
-```
-
-## Deployment Patterns
-
-### Single-Node Deployment
-
-**Scenario:** Single DNS server handling all queries.
+Example:
 
 ```bash
 docker run -d \
-  --name a-healthy-dns \
+  --name a-healthy-dns-dnssec \
   -p 53:53/udp \
-  --cap-add=NET_BIND_SERVICE \
-  --user 10000:10000 \
-  --memory="256m" \
-  --cpus="0.5" \
-  --restart=unless-stopped \
-  -e DNS_HOSTED_ZONE="sub.domain.com" \
-  -e DNS_ZONE_RESOLUTIONS='{"www":{"ips":["10.0.1.100","10.0.1.101"],"health_port":80}}' \
-  -e DNS_NAME_SERVERS='["ns1.domain.com","ns2.domain.com"]' \
-  -e DNS_PORT="53" \
-  indisoluble/a-healthy-dns
-```
-
-### Multi-Instance Deployment
-
-**Scenario:** Multiple instances for redundancy (different servers).
-
-**Server 1 (ns1.domain.com):**
-```bash
-docker run -d \
-  --name a-healthy-dns-ns1 \
-  -p 53:53/udp \
-  -e DNS_HOSTED_ZONE="sub.domain.com" \
-  -e DNS_ZONE_RESOLUTIONS='{"www":{"ips":["10.0.1.100","10.0.1.101"],"health_port":80}}' \
-  -e DNS_NAME_SERVERS='["ns1.domain.com","ns2.domain.com"]' \
-  -e DNS_PORT="53" \
-  indisoluble/a-healthy-dns
-```
-
-**Server 2 (ns2.domain.com):**
-```bash
-# Same configuration on different physical/virtual server
-docker run -d \
-  --name a-healthy-dns-ns2 \
-  -p 53:53/udp \
-  -e DNS_HOSTED_ZONE="sub.domain.com" \
-  -e DNS_ZONE_RESOLUTIONS='{"www":{"ips":["10.0.1.100","10.0.1.101"],"health_port":80}}' \
-  -e DNS_NAME_SERVERS='["ns1.domain.com","ns2.domain.com"]' \
-  -e DNS_PORT="53" \
-  indisoluble/a-healthy-dns
-```
-
-**Note:** Health checks are independent on each instance; no state synchronization.
-
-### Development Setup
-
-**Scenario:** Local testing with debug logging and high port.
-
-```bash
-docker run -d \
-  --name a-healthy-dns-dev \
-  -p 53053:53053/udp \
-  -e DNS_HOSTED_ZONE="example.local" \
-  -e DNS_ZONE_RESOLUTIONS='{"www":{"ips":["127.0.0.1"],"health_port":8080}}' \
-  -e DNS_NAME_SERVERS='["ns1.example.local"]' \
-  -e DNS_PORT="53053" \
-  -e DNS_LOG_LEVEL="debug" \
-  -e DNS_TEST_MIN_INTERVAL="10" \
-  indisoluble/a-healthy-dns
-
-# Follow logs
-docker logs -f a-healthy-dns-dev
-```
-
-### Host Networking (Performance)
-
-**Scenario:** Maximum performance, reduced isolation.
-
-```bash
-docker run -d \
-  --name a-healthy-dns \
-  --network host \
-  -e DNS_HOSTED_ZONE="sub.domain.com" \
+  -v "$(pwd)/keys:/app/keys:ro" \
+  -e DNS_HOSTED_ZONE="example.com" \
   -e DNS_ZONE_RESOLUTIONS='{"www":{"ips":["192.168.1.100"],"health_port":8080}}' \
-  -e DNS_NAME_SERVERS='["ns1.domain.com"]' \
-  -e DNS_PORT="53" \
+  -e DNS_NAME_SERVERS='["ns1.example.com"]' \
+  -e DNS_PRIV_KEY_PATH="/app/keys/private.pem" \
+  -e DNS_PRIV_KEY_ALG="RSASHA256" \
   indisoluble/a-healthy-dns
 ```
 
-**Trade-offs:**
-- **Pros:** Lower latency, no port mapping overhead
-- **Cons:** Less isolation, binds directly to host port
+Keep key files restrictive on the host side. The runtime image expects `/app/keys` to be private to `appuser`.
 
-## Container Management
+For exact parameter semantics, use [`docs/configuration-reference.md`](configuration-reference.md). For DNSSEC design boundaries, use [`docs/system-patterns.md`](system-patterns.md).
 
-### Lifecycle Operations
+---
 
-```bash
-# Start container
-docker start a-healthy-dns
+## 5. Deployment patterns
 
-# Stop container (graceful shutdown)
-docker stop a-healthy-dns
+### High-port local or lab deployment
 
-# Restart container
-docker restart a-healthy-dns
+Use a non-privileged host port such as `53053` when you do not need the service to answer on host port `53`. This is the safest default for local testing and avoids privileged host binds.
 
-# Remove container
-docker rm a-healthy-dns
+### Direct port-53 deployment
 
-# Remove container and volumes
-docker rm -v a-healthy-dns
-```
-
-### Viewing Logs
+For a production-style deployment on the standard DNS port, run the container on `53/udp`:
 
 ```bash
-# Last 100 lines
-docker logs --tail 100 a-healthy-dns
-
-# Follow logs in real-time
-docker logs -f a-healthy-dns
-
-# Logs since timestamp
-docker logs --since 2026-03-07T10:00:00 a-healthy-dns
-
-# Logs with timestamps
-docker logs -t a-healthy-dns
-```
-
-### Inspecting Container
-
-```bash
-# Container details
-docker inspect a-healthy-dns
-
-# Resource usage
-docker stats a-healthy-dns
-
-# Network settings
-docker inspect a-healthy-dns | jq '.[0].NetworkSettings'
-
-# Environment variables
-docker inspect a-healthy-dns | jq '.[0].Config.Env'
-```
-
-### Executing Commands in Container
-
-```bash
-# Get shell access
-docker exec -it a-healthy-dns sh
-
-# Locate the installed CLI and package
-docker exec a-healthy-dns which a-healthy-dns
-docker exec a-healthy-dns python3 -c "import indisoluble.a_healthy_dns.main as m; print(m.__file__)"
-
-# Test health check connectivity using the Python runtime already in the image
-docker exec a-healthy-dns python3 -c "import socket; socket.create_connection(('192.168.1.100', 8080), 2).close(); print('ok')"
-
-# View Python packages
-docker exec a-healthy-dns pip list
-```
-
-## Resource Management
-
-### Memory Limits
-
-```bash
-# Set memory limit
 docker run -d \
   --name a-healthy-dns \
-  --memory="256m" \
-  --memory-reservation="128m" \
-  ... \
+  -p 53:53/udp \
+  -e DNS_HOSTED_ZONE="example.com" \
+  -e DNS_ZONE_RESOLUTIONS='{"www":{"ips":["10.0.1.100","10.0.1.101"],"health_port":80}}' \
+  -e DNS_NAME_SERVERS='["ns1.example.com","ns2.example.com"]' \
   indisoluble/a-healthy-dns
 ```
 
-**Guideline:**
-- **Small zones (1-10 IPs):** 128-256 MB
-- **Medium zones (10-50 IPs):** 256-512 MB
-- **Large zones (50+ IPs):** 512 MB - 1 GB
-
-### CPU Limits
+If your runtime drops all Linux capabilities, add back `NET_BIND_SERVICE` explicitly to preserve port-53 binding:
 
 ```bash
-# Set CPU limit (0.5 = 50% of one core)
-docker run -d \
-  --name a-healthy-dns \
-  --cpus="0.5" \
-  ... \
-  indisoluble/a-healthy-dns
-```
-
-**Guideline:**
-- **Light load (<100 QPS):** 0.25-0.5 CPU
-- **Moderate load (100-500 QPS):** 0.5-1.0 CPU
-- **Heavy load (500+ QPS):** 1.0-2.0 CPU
-- **DNSSEC enabled:** Add 0.25-0.5 CPU
-
-### Monitoring Resource Usage
-
-```bash
-# Real-time stats
-docker stats a-healthy-dns
-
-# Check memory spikes
-docker stats --no-stream a-healthy-dns
-
-# View multiple containers
-docker stats
-```
-
-## Networking
-
-### Port Mapping
-
-```bash
-# Map host port 53 to container port 53
-docker run -d -p 53:53/udp ...
-
-# Map host port 53053 to container port 53
-docker run -d -p 53053:53/udp -e DNS_PORT="53" ...
-
-# Bind to specific interface
-docker run -d -p 192.168.1.10:53:53/udp ...
-```
-
-### Network Modes
-
-**Bridge (default):**
-```bash
-docker run -d ... indisoluble/a-healthy-dns
-```
-- Isolated network namespace
-- Requires port mapping
-- Better isolation
-
-**Host:**
-```bash
-docker run -d --network host ... indisoluble/a-healthy-dns
-```
-- Shares host network stack
-- No port mapping needed
-- Lower latency, less isolation
-
-**Custom bridge:**
-```yaml
-# docker-compose.yml
-networks:
-  dns-network:
-    driver: bridge
-    ipam:
-      config:
-        - subnet: 172.20.0.0/16
-```
-
-### DNS Resolution from Container
-
-The container needs to reach backend IPs for health checks. The production image intentionally omits troubleshooting tools such as `ping`, `nc`, `nslookup`, and `netstat`, so use host-side Docker inspection plus the bundled Python runtime for connectivity checks:
-
-```bash
-# Inspect the container network from the host
-docker inspect a-healthy-dns | jq '.[0].NetworkSettings'
-
-# Test backend connectivity from inside the container
-docker exec a-healthy-dns python3 -c "import socket; socket.create_connection(('192.168.1.100', 8080), 2).close(); print('ok')"
-```
-
-## Security Hardening
-
-### Run as Non-Root
-
-Built into image (UID/GID 10000):
-```bash
-# User already configured in image
-docker run ... indisoluble/a-healthy-dns
-
-# Or override if needed
-docker run --user 10000:10000 ... indisoluble/a-healthy-dns
-```
-
-### Capability Management
-
-```bash
-# Minimal capabilities
 docker run -d \
   --cap-drop=ALL \
   --cap-add=NET_BIND_SERVICE \
   -p 53:53/udp \
-  -e DNS_PORT="53" \
   ... \
   indisoluble/a-healthy-dns
 ```
 
-Use the extra `NET_BIND_SERVICE` capability only when you intentionally harden the runtime with `--cap-drop=ALL` (or equivalent) and still want the process to bind container port `53`. With Docker's default capability bounding set, the image's built-in `setcap` is sufficient for a non-root bind to port `53`.
+### Redundant authoritative nodes
 
-### Read-Only Root Filesystem
+Run the same zone configuration on more than one host and publish all nodes in the NS set. Health checks remain local to each instance; there is no cross-node health-state synchronization or zone replication.
+
+### Host networking
+
+`--network host` is a valid deployment option when your environment prefers direct host networking over bridge networking. The tradeoff is lower network isolation in exchange for simpler port handling and lower network overhead.
+
+---
+
+## 6. Runtime hardening
+
+Use the image defaults as the baseline, then add only the hardening controls your environment requires.
+
+Recommended controls:
+- keep the container non-root; the image already does this by default,
+- use `--cap-drop=ALL` and add back only `NET_BIND_SERVICE` when binding container port `53`,
+- prefer read-only key mounts (`/app/keys:ro`),
+- use `--security-opt=no-new-privileges:true`,
+- and consider `--read-only` plus `--tmpfs /tmp:rw,noexec,nosuid` in hardened environments.
+
+Example hardened run:
 
 ```bash
-# Make root filesystem read-only
 docker run -d \
+  --name a-healthy-dns \
+  --user 10000:10000 \
+  --cap-drop=ALL \
+  --cap-add=NET_BIND_SERVICE \
   --read-only \
   --tmpfs /tmp:rw,noexec,nosuid \
-  ... \
-  indisoluble/a-healthy-dns
-```
-
-### Security Options
-
-```bash
-docker run -d \
   --security-opt=no-new-privileges:true \
-  --security-opt=apparmor=docker-default \
-  ... \
+  -p 53:53/udp \
+  -e DNS_HOSTED_ZONE="example.com" \
+  -e DNS_ZONE_RESOLUTIONS='{"www":{"ips":["10.0.1.100"],"health_port":80}}' \
+  -e DNS_NAME_SERVERS='["ns1.example.com"]' \
   indisoluble/a-healthy-dns
 ```
 
-### DNSSEC Key Security
+The repository Compose example already demonstrates a conservative hardened baseline.
+
+---
+
+## 7. Versioning and upgrades
+
+For production deployments, pin a specific image tag instead of `latest`.
 
 ```bash
-# Restrict key file permissions
-chmod 600 keys/private.pem
-chown 10000:10000 keys/private.pem
-
-# Mount as read-only
-docker run -d \
-  -v ./keys:/app/keys:ro \
-  ... \
-  indisoluble/a-healthy-dns
-```
-
-## Troubleshooting
-
-For Docker-specific issues — container exits immediately, port binding failures, health check connectivity, and resource limits — see [docs/troubleshooting.md](troubleshooting.md).
-
-## Image Maintenance
-
-### Pulling Updates
-
-```bash
-# Pull latest image
-docker pull indisoluble/a-healthy-dns:latest
-
-# Pull specific version
 docker pull indisoluble/a-healthy-dns:<version>
-```
-
-### Version Pinning
-
-```bash
-# Pin to specific version (recommended for production)
 docker run -d ... indisoluble/a-healthy-dns:<version>
-
-# Use latest (for development)
-docker run -d ... indisoluble/a-healthy-dns:latest
 ```
 
-### Image Cleanup
+Use `latest` only for development or when you explicitly want the newest published image without pinning.
 
-```bash
-# Remove unused images
-docker image prune -a
+When upgrading:
+1. pull the target image tag,
+2. recreate the container or Compose stack,
+3. run the same DNS query checks you use for post-deploy verification.
 
-# Remove specific image
-docker rmi indisoluble/a-healthy-dns:<version>
+---
 
-# Remove dangling images
-docker image prune
-```
+## 8. Orchestrator notes
 
-## Integration with Orchestrators
+If you deploy through Kubernetes, Swarm, Nomad, or another orchestrator, preserve the same container contract:
+- UDP exposure for the DNS listener,
+- the `DNS_*` environment-variable interface,
+- non-root execution as uid/gid `10000`,
+- `/app/keys` for DNSSEC key mounts,
+- and `NET_BIND_SERVICE` only when the runtime drops capabilities and still needs port `53`.
 
-### Kubernetes
-
-Example pod spec:
-```yaml
-apiVersion: v1
-kind: Pod
-metadata:
-  name: a-healthy-dns
-spec:
-  containers:
-  - name: dns
-    image: indisoluble/a-healthy-dns:latest
-    ports:
-    - containerPort: 53
-      protocol: UDP
-    env:
-    - name: DNS_HOSTED_ZONE
-      value: "sub.domain.com"
-    - name: DNS_ZONE_RESOLUTIONS
-      value: '{"www":{"ips":["192.168.1.100"],"health_port":8080}}'
-    - name: DNS_NAME_SERVERS
-      value: '["ns1.domain.com"]'
-    - name: DNS_PORT
-      value: "53"
-    resources:
-      limits:
-        memory: "256Mi"
-        cpu: "500m"
-    securityContext:
-      runAsNonRoot: true
-      runAsUser: 10000
-      capabilities:
-        drop: ["ALL"]
-        add: ["NET_BIND_SERVICE"]
-```
-
-### Docker Swarm
-
-```bash
-docker service create \
-  --name a-healthy-dns \
-  --publish 53:53/udp \
-  --replicas 3 \
-  --env DNS_HOSTED_ZONE="sub.domain.com" \
-  --env DNS_ZONE_RESOLUTIONS='{"www":{"ips":["192.168.1.100"],"health_port":8080}}' \
-  --env DNS_NAME_SERVERS='["ns1.domain.com"]' \
-  --limit-memory 256m \
-  --limit-cpu 0.5 \
-  indisoluble/a-healthy-dns
-```
+This document does not provide full orchestrator manifests. Keep the orchestrator config aligned with the runtime contract above and with the repository's Dockerfile.

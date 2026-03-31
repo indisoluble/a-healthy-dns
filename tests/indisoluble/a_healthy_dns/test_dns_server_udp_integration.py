@@ -1,10 +1,5 @@
 #!/usr/bin/env python3
 
-"""Component integration tests for the authoritative UDP serving layer.
-
-See docs/RFC-conformance.md §4 for the full test coverage mapping.
-"""
-
 import socket
 import socketserver
 import threading

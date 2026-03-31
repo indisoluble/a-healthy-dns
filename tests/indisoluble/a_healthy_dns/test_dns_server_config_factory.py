@@ -6,12 +6,11 @@ import dns.dnssectypes
 import dns.name
 import pytest
 
-import indisoluble.a_healthy_dns.dns_server_config_factory as dscf
-
 from unittest.mock import patch
 
 from dns.dnssecalgs.rsa import PrivateRSASHA256
 
+from indisoluble.a_healthy_dns import dns_server_config_factory as dscf
 from indisoluble.a_healthy_dns.records.a_healthy_ip import AHealthyIp
 from indisoluble.a_healthy_dns.records.zone_origins import ZoneOrigins
 
