@@ -12,13 +12,11 @@ from unittest.mock import ANY, Mock, patch
 
 from dns.dnssecalgs.rsa import PrivateRSASHA256
 
-from indisoluble.a_healthy_dns.dns_server_config_factory import (
-    DnsServerConfig,
-    ExtendedPrivateKey,
-)
+from indisoluble.a_healthy_dns.dns_server_config_factory import DnsServerConfig
 from indisoluble.a_healthy_dns.dns_server_zone_updater import DnsServerZoneUpdater
 from indisoluble.a_healthy_dns.records.a_healthy_ip import AHealthyIp
 from indisoluble.a_healthy_dns.records.a_healthy_record import AHealthyRecord
+from indisoluble.a_healthy_dns.records.dnssec import ExtendedPrivateKey
 from indisoluble.a_healthy_dns.records.zone_origins import ZoneOrigins
 
 

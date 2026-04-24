@@ -90,4 +90,4 @@ Use this table to identify which docs beyond the minimum reading set are relevan
 
 ## Agent Contract
 
-- [`AGENTS.md`](../AGENTS.md) — Non-negotiable rules for all AI coding agents working in this repository
+- [`AGENTS.md`](../AGENTS.md) — Canonical repository agent contract; applies to planning, implementation, refactoring, review, and documentation work

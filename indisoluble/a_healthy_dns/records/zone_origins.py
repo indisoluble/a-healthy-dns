@@ -25,7 +25,7 @@ class ZoneOrigins:
         """Get the primary zone origin."""
         return self._primary
 
-    def __init__(self, primary: Any, aliases: List[Any]):
+    def __init__(self, primary: Any, aliases: List[Any]) -> None:
         """Initialize zone origins with a primary and alias set."""
         self._primary = _to_abs_name(primary)
 

@@ -15,20 +15,14 @@ import dns.name
 
 from typing import Any, Dict, FrozenSet, NamedTuple, Optional
 
-from indisoluble.a_healthy_dns.records.a_healthy_record import AHealthyRecord
 from indisoluble.a_healthy_dns.records.a_healthy_ip import AHealthyIp
+from indisoluble.a_healthy_dns.records.a_healthy_record import AHealthyRecord
+from indisoluble.a_healthy_dns.records.dnssec import ExtendedPrivateKey
 from indisoluble.a_healthy_dns.records.zone_origins import ZoneOrigins
 from indisoluble.a_healthy_dns.tools.is_valid_subdomain import (
     is_valid_fqdn,
     is_valid_subdomain,
 )
-
-
-class ExtendedPrivateKey(NamedTuple):
-    """Extended private key containing both the private key and DNSKEY record."""
-
-    private_key: dns.dnssec.PrivateKey
-    dnskey: dns.dnssec.DNSKEY
 
 
 class DnsServerConfig(NamedTuple):

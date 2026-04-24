@@ -26,7 +26,7 @@ class AHealthyRecord:
         """Get the set of healthy IP addresses for this record."""
         return self._healthy_ips
 
-    def __init__(self, subdomain: dns.name.Name, healthy_ips: List[AHealthyIp]):
+    def __init__(self, subdomain: dns.name.Name, healthy_ips: List[AHealthyIp]) -> None:
         """Initialize healthy A record with subdomain and IP list."""
         self._subdomain = subdomain
         self._healthy_ips = frozenset(healthy_ips)
@@ -38,16 +38,16 @@ class AHealthyRecord:
 
         return AHealthyRecord(subdomain=self.subdomain, healthy_ips=updated_ips)
 
-    def __eq__(self, other):
+    def __eq__(self, other: object) -> bool:
         if not isinstance(other, AHealthyRecord):
             return False
 
         return self.subdomain == other.subdomain
 
-    def __hash__(self):
+    def __hash__(self) -> int:
         return hash(self.subdomain)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         ips_str = ", ".join(f"{ip}" for ip in self.healthy_ips)
 
         return f"AHealthyRecord(subdomain={self.subdomain}, healthy_ips=[{ips_str}])"

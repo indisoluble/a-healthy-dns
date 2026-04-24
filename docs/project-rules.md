@@ -99,7 +99,7 @@ Other helpers: `pytest tests/.../test_foo.py` (single file), `pytest -v` (verbos
 - **Test file naming:** `test_<module_name>.py`.
 - **No real network calls in unit tests.** Mock `can_create_connection` or `socket.create_connection` for any test that exercises health logic.
 - **No real time dependencies.** Mock `time.time`, `datetime.datetime.now`, or `uint32_current_time` as needed to keep tests deterministic.
-- **One assert per test when practical** (AGENTS.md §5.9).
+- **One assert per test when practical.**
 - **Coverage exclusions** (`.coveragerc`) include: `__repr__`, `raise NotImplementedError`, `raise ImportError`, `if __name__ == '__main__'`, `pass`, and `pragma: no cover` markers.
 
 ### 6.2 Component integration tests

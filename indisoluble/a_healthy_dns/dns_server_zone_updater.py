@@ -76,7 +76,7 @@ class DnsServerZoneUpdater:
 
     def __init__(
         self, min_interval: int, connection_timeout: int, config: DnsServerConfig
-    ):
+    ) -> None:
         """Initialize zone updater with configuration and timing parameters."""
         if min_interval <= 0:
             raise ValueError("Minimum interval must be positive")
@@ -112,7 +112,7 @@ class DnsServerZoneUpdater:
         self._zone = dns.versioned.Zone(config.zone_origins.primary)
         self._is_zone_recreated_at_least_once = False
 
-    def _clear_zone(self, txn: dns.transaction.Transaction):
+    def _clear_zone(self, txn: dns.transaction.Transaction) -> None:
         logging.debug("Clearing zone...")
 
         for name in list(txn.iterate_names()):
@@ -123,7 +123,7 @@ class DnsServerZoneUpdater:
 
     def _add_a_record_to_zone(
         self, a_record: AHealthyRecord, txn: dns.transaction.Transaction
-    ):
+    ) -> None:
         dataset = self._make_a_record(a_record)
         if dataset:
             txn.add(a_record.subdomain, dataset)
@@ -131,7 +131,7 @@ class DnsServerZoneUpdater:
         else:
             logging.debug("A record %s skipped", a_record.subdomain)
 
-    def _add_records_to_zone(self, txn: dns.transaction.Transaction):
+    def _add_records_to_zone(self, txn: dns.transaction.Transaction) -> None:
         logging.debug("Adding records to zone...")
 
         txn.add(dns.name.empty, self._ns_rec)
@@ -145,7 +145,7 @@ class DnsServerZoneUpdater:
 
         logging.debug("Records added to zone")
 
-    def _sign_zone(self, txn: dns.transaction.Transaction):
+    def _sign_zone(self, txn: dns.transaction.Transaction) -> None:
         if not self._rrsig_action:
             return
 
@@ -225,7 +225,7 @@ class DnsServerZoneUpdater:
             else RefreshARecordsResult.NO_CHANGES
         )
 
-    def initialize_zone(self):
+    def initialize_zone(self) -> None:
         with self._zone.writer() as txn:
             self._clear_zone(txn)
             self._add_records_to_zone(txn)
@@ -233,7 +233,7 @@ class DnsServerZoneUpdater:
 
         self._is_zone_recreated_at_least_once = True
 
-    def update(self, *, should_abort: ShouldAbortOp = lambda: False):
+    def update(self, *, should_abort: ShouldAbortOp = lambda: False) -> None:
         """Run health checks and update the zone when IP health status changes."""
         refresh_result = self._refresh_a_recs(should_abort)
         if refresh_result == RefreshARecordsResult.ABORTED:

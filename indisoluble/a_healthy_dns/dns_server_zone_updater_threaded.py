@@ -29,7 +29,7 @@ class DnsServerZoneUpdaterThreaded:
 
     def __init__(
         self, min_interval: int, connection_timeout: int, config: DnsServerConfig
-    ):
+    ) -> None:
         """Initialize threaded zone updater with timing and configuration."""
         try:
             self._updater = DnsServerZoneUpdater(
@@ -44,7 +44,7 @@ class DnsServerZoneUpdaterThreaded:
         self._stop_event = threading.Event()
         self._updater_thread = None
 
-    def _update_zone_loop(self):
+    def _update_zone_loop(self) -> None:
         while not self._stop_event.is_set():
             start_time = time.time()
 
@@ -55,7 +55,7 @@ class DnsServerZoneUpdaterThreaded:
             if sleep_time > 0.0 and not self._stop_event.wait(sleep_time):
                 logging.debug("Completed sleep between connectivity tests")
 
-    def start(self):
+    def start(self) -> None:
         """Start the background zone updater thread."""
         if self._updater_thread and self._updater_thread.is_alive():
             logging.warning("Zone Updater is already running")

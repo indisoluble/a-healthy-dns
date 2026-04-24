@@ -58,7 +58,7 @@ def _update_response(
     query_type: dns.rdatatype.RdataType,
     zone: dns.versioned.Zone,
     zone_origins: ZoneOrigins,
-):
+) -> None:
     relative_name = zone_origins.relativize(query_name)
     if relative_name is None:
         logging.warning(
@@ -98,7 +98,7 @@ def _update_response(
 class DnsServerUdpHandler(socketserver.BaseRequestHandler):
     """UDP request handler for DNS queries with health-aware responses."""
 
-    def handle(self):
+    def handle(self) -> None:
         """Handle incoming DNS query and send appropriate response."""
         data, sock = self.request
 

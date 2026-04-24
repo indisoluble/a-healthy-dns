@@ -31,7 +31,7 @@ class AHealthyIp:
         """Get the current health status."""
         return self._is_healthy
 
-    def __init__(self, ip: Any, health_port: Any, is_healthy: bool):
+    def __init__(self, ip: Any, health_port: Any, is_healthy: bool) -> None:
         """Initialize healthy IP with validation of IP address and port."""
         success, error = is_valid_ip(ip)
         if not success:
@@ -54,7 +54,7 @@ class AHealthyIp:
             ip=self.ip, health_port=self.health_port, is_healthy=is_healthy
         )
 
-    def __eq__(self, other):
+    def __eq__(self, other: object) -> bool:
         if not isinstance(other, AHealthyIp):
             return False
 
@@ -64,10 +64,10 @@ class AHealthyIp:
             and self.is_healthy == other.is_healthy
         )
 
-    def __hash__(self):
+    def __hash__(self) -> int:
         return hash((self.ip, self.health_port, self.is_healthy))
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return (
             f"AHealthyIp(ip='{self.ip}', "
             f"health_port={self.health_port}, "

@@ -205,14 +205,14 @@ Example usage
     return parser
 
 
-def _signal_handler(server: socketserver.UDPServer, signum: int, frame: Any):
+def _signal_handler(server: socketserver.UDPServer, signum: int, frame: Any) -> None:
     signal_name = signal.Signals(signum).name
     logging.info("Received %s signal, shutting down DNS server...", signal_name)
 
     threading.Thread(target=server.shutdown).start()
 
 
-def _main(args: Dict[str, Any]):
+def _main(args: Dict[str, Any]) -> int:
     # Set up logging
     numeric_level = getattr(logging, args[_ARG_LOG_LEVEL].upper())
     logging.basicConfig(
@@ -249,6 +249,6 @@ def _main(args: Dict[str, Any]):
     return 0
 
 
-def main():
+def main() -> int:
     args = _make_arg_parser().parse_args()
     return _main(vars(args))

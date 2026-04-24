@@ -5,8 +5,7 @@ import unittest.mock
 
 import dns.dnssec
 
-from indisoluble.a_healthy_dns.dns_server_config_factory import ExtendedPrivateKey
-from indisoluble.a_healthy_dns.records.dnssec import iter_rrsig_key
+from indisoluble.a_healthy_dns.records.dnssec import ExtendedPrivateKey, iter_rrsig_key
 
 
 @unittest.mock.patch("indisoluble.a_healthy_dns.records.dnssec.datetime")

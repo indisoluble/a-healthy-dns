@@ -164,25 +164,32 @@ All record TTLs are then calculated as multiples of `max_interval` by functions 
 
 ## 7. Folder hierarchy
 
-This section is the canonical reference for physical directory layout and placement rules. Agents must cite it (constraint §6 in `AGENTS.md`) when creating or moving files.
+This section is the canonical reference for physical directory layout and placement rules. Agents must consult it, consistent with `AGENTS.md` required context rules, when creating or moving files.
 
 ### 7.1 Top-level structure
 
 ```
 a-healthy-dns/
-├── .github/workflows/    # CI/CD pipeline definitions (GitHub Actions)
+├── .github/              # GitHub-specific automation and IDE bridge files
+│   ├── copilot-instructions.md  # minimal bridge back to AGENTS.md
+│   └── workflows/        # CI/CD pipeline definitions (GitHub Actions)
 ├── docs/                 # all long-form documentation
 ├── indisoluble/          # source package tree (regular Python package)
 ├── tests/                # test tree — mirrors indisoluble/ by default
 ├── .coveragerc           # coverage measurement exclusions
+├── .dockerignore         # Docker build-context exclusions
+├── .gitignore            # local/generated file exclusions
 ├── AGENTS.md             # AI agent contract
-├── docker-compose.example.yml  # example Compose configuration
 ├── Dockerfile            # container image definition
+├── LICENSE               # project license
 ├── README.md             # quick-start entrypoint
+├── docker-compose.example.yml  # example Compose configuration
 └── setup.py              # packaging, versioning, and dependency declarations
 ```
 
-**Convention:** root-level files are project-wide concerns (packaging, containerisation, CI configuration, agent contract). Do not add source modules or tests at the root level.
+This tree lists tracked, project-owned files and directories. Local generated artifacts such as virtual environments, caches, coverage output, and IDE state are ignored and are not part of the repository layout.
+
+**Convention:** root-level files are project-wide concerns (packaging, containerisation, CI configuration, agent contract, license, and ignore rules). Do not add source modules or tests at the root level.
 
 ### 7.2 Source package: `indisoluble/a_healthy_dns/`
 

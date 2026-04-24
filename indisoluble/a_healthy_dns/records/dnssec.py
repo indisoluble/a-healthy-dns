@@ -13,11 +13,17 @@ import dns.dnssec
 
 from typing import Iterator, List, NamedTuple, Tuple
 
-from indisoluble.a_healthy_dns.dns_server_config_factory import ExtendedPrivateKey
 from indisoluble.a_healthy_dns.records.time import (
     calculate_dnskey_ttl,
     calculate_rrsig_lifetime,
 )
+
+
+class ExtendedPrivateKey(NamedTuple):
+    """Extended private key containing both the private key and DNSKEY record."""
+
+    private_key: dns.dnssec.PrivateKey
+    dnskey: dns.dnssec.DNSKEY
 
 
 class RRSigKey(NamedTuple):
