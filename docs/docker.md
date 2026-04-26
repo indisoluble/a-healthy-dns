@@ -43,7 +43,7 @@ docker run -d \
   -p 53053:53053/udp \
   -e DNS_HOSTED_ZONE="example.local" \
   -e DNS_ZONE_RESOLUTIONS='{"www":{"ips":["192.168.1.100","192.168.1.101"],"health_port":8080}}' \
-  -e DNS_NAME_SERVERS='["ns1.example.local"]' \
+  -e DNS_NAME_SERVERS='["ns1.dns.example.net"]' \
   -e DNS_PORT="53053" \
   indisoluble/a-healthy-dns
 ```
@@ -58,7 +58,7 @@ docker run -d \
   -p 53053:53053/udp \
   -e DNS_HOSTED_ZONE="example.local" \
   -e DNS_ZONE_RESOLUTIONS='{"www":{"ips":["192.168.1.100"],"health_port":8080}}' \
-  -e DNS_NAME_SERVERS='["ns1.example.local"]' \
+  -e DNS_NAME_SERVERS='["ns1.dns.example.net"]' \
   -e DNS_PORT="53053" \
   a-healthy-dns:local
 ```
@@ -114,7 +114,7 @@ docker run -d \
   -v "$(pwd)/keys:/app/keys:ro" \
   -e DNS_HOSTED_ZONE="example.com" \
   -e DNS_ZONE_RESOLUTIONS='{"www":{"ips":["192.168.1.100"],"health_port":8080}}' \
-  -e DNS_NAME_SERVERS='["ns1.example.com"]' \
+  -e DNS_NAME_SERVERS='["ns1.dns.example.net"]' \
   -e DNS_PRIV_KEY_PATH="/app/keys/private.pem" \
   -e DNS_PRIV_KEY_ALG="RSASHA256" \
   indisoluble/a-healthy-dns
@@ -142,7 +142,7 @@ docker run -d \
   -p 53:53/udp \
   -e DNS_HOSTED_ZONE="example.com" \
   -e DNS_ZONE_RESOLUTIONS='{"www":{"ips":["10.0.1.100","10.0.1.101"],"health_port":80}}' \
-  -e DNS_NAME_SERVERS='["ns1.example.com","ns2.example.com"]' \
+  -e DNS_NAME_SERVERS='["ns1.dns.example.net","ns2.dns.example.net"]' \
   indisoluble/a-healthy-dns
 ```
 
@@ -192,7 +192,7 @@ docker run -d \
   -p 53:53/udp \
   -e DNS_HOSTED_ZONE="example.com" \
   -e DNS_ZONE_RESOLUTIONS='{"www":{"ips":["10.0.1.100"],"health_port":80}}' \
-  -e DNS_NAME_SERVERS='["ns1.example.com"]' \
+  -e DNS_NAME_SERVERS='["ns1.dns.example.net"]' \
   indisoluble/a-healthy-dns
 ```
 

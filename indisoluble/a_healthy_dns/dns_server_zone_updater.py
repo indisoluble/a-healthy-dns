@@ -92,7 +92,7 @@ class DnsServerZoneUpdater:
 
         self._ns_rec = make_ns_record(max_interval, config.name_servers)
         self._soa_rec = iter_soa_record(
-            max_interval, config.zone_origins.primary, next(iter(config.name_servers))
+            max_interval, config.zone_origins.primary, config.primary_name_server
         )
         self._rrsig_action = (
             RRSigAction(

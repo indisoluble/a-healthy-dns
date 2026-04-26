@@ -20,7 +20,9 @@ def args():
     return {
         dscf.ARG_HOSTED_ZONE: "dev.example.com",
         dscf.ARG_ALIAS_ZONES: json.dumps(["dev.alias-one.com", "dev.alias-two.com"]),
-        dscf.ARG_NAME_SERVERS: json.dumps(["ns1.example.com", "ns2.example.com"]),
+        dscf.ARG_NAME_SERVERS: json.dumps(
+            ["ns1.dns.example.net", "ns2.dns.example.net"]
+        ),
         dscf.ARG_ZONE_RESOLUTIONS: json.dumps(
             {
                 "www": {
@@ -66,7 +68,10 @@ def test_make_config_success(args):
     )
 
     # Check name servers
-    assert config.name_servers == frozenset(["ns1.example.com.", "ns2.example.com."])
+    assert config.name_servers == frozenset(
+        ["ns1.dns.example.net.", "ns2.dns.example.net."]
+    )
+    assert config.primary_name_server == "ns1.dns.example.net."
 
     # Check A records
     assert len(config.a_records) == 4
@@ -150,7 +155,7 @@ def test_make_zone_invalid_alias_zones(invalid_aliases, args):
     "invalid_ns",
     [
         "invalid json",
-        json.dumps({"ns": "ns1.example.com"}),
+        json.dumps({"ns": "ns1.dns.example.net"}),
         json.dumps([]),
         json.dumps([123]),
         json.dumps([""]),

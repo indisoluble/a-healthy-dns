@@ -90,9 +90,12 @@ Examples:
 {_GRP_NS_RECORDS}
 {len(_GRP_NS_RECORDS) * '-'}
 --{_NAME_NAME_SERVERS}: Name servers responsible for this zone (JSON array).
+Prefer out-of-zone hostnames for delegated child zones. This setting publishes
+the apex NS RRset and SOA primary nameserver only; it does not create address
+records for the nameserver hostnames.
 
 Examples:
-    --{_NAME_NAME_SERVERS} '["ns1.example.com", "ns2.example.com"]'
+    --{_NAME_NAME_SERVERS} '["ns1.dns.example.net", "ns2.dns.example.net"]'
 
 {_GRP_DNSSEC_PARAMS}
 {len(_GRP_DNSSEC_PARAMS) * '-'}
@@ -104,7 +107,7 @@ Example usage
 %(prog)s \\
     --{_NAME_HOSTED_ZONE} example.com \\
     --{_NAME_ZONE_RESOLUTIONS} '{{"www":{{"ips":["192.168.1.100"],"health_port":8080}}}}' \\
-    --{_NAME_NAME_SERVERS} '["ns1.example.com"]' \\
+    --{_NAME_NAME_SERVERS} '["ns1.dns.example.net"]' \\
     --{_NAME_PORT} 53053
 """
     parser = argparse.ArgumentParser(
@@ -180,7 +183,10 @@ Example usage
         type=str,
         required=True,
         dest=ARG_NAME_SERVERS,
-        help="Name servers as JSON string (ex. [fqdn1, fqdn2, ...])",
+        help=(
+            "Name servers for the zone apex NS RRset as a JSON string "
+            "(ex. [fqdn1, fqdn2, ...]); address records are not created"
+        ),
     )
     dnssec_group = parser.add_argument_group(_GRP_DNSSEC_PARAMS)
     dnssec_group.add_argument(

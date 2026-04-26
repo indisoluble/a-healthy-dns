@@ -21,7 +21,7 @@ docker run -d \
   -p 53053:53053/udp \
   -e DNS_HOSTED_ZONE="example.local" \
   -e DNS_ZONE_RESOLUTIONS='{"www":{"ips":["192.168.1.100","192.168.1.101"],"health_port":8080}}' \
-  -e DNS_NAME_SERVERS='["ns1.example.local"]' \
+  -e DNS_NAME_SERVERS='["ns1.dns.example.net"]' \
   -e DNS_PORT="53053" \
   indisoluble/a-healthy-dns
 ```
@@ -46,7 +46,7 @@ pip install .
 a-healthy-dns \
   --hosted-zone example.local \
   --zone-resolutions '{"www":{"ips":["192.168.1.100","192.168.1.101"],"health_port":8080}}' \
-  --ns '["ns1.example.local"]'
+  --ns '["ns1.dns.example.net"]'
 ```
 
 Requires Python 3.10+.

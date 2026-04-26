@@ -275,6 +275,7 @@ class AHealthyIp:
 ```python
 class DnsServerConfig(NamedTuple):
     zone_origins: ZoneOrigins
+    primary_name_server: str
     name_servers: FrozenSet[str]
     a_records: FrozenSet[AHealthyRecord]
     ext_private_key: Optional[ExtendedPrivateKey]

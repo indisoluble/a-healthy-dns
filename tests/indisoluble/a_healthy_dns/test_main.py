@@ -24,7 +24,7 @@ def default_args() -> Dict[str, Any]:
         dscf.ARG_ZONE_RESOLUTIONS: '{"www": {"ips": ["192.168.1.1"], "health_port": 8080}}',
         _ARG_MIN_TEST_INTERVAL: 1,
         _ARG_CONNECTION_TIMEOUT: 2,
-        dscf.ARG_NAME_SERVERS: '["ns1.example.com", "ns2.example.com"]',
+        dscf.ARG_NAME_SERVERS: '["ns1.dns.example.net", "ns2.dns.example.net"]',
         dscf.ARG_DNSSEC_PRIVATE_KEY_PATH: None,
         dscf.ARG_DNSSEC_ALGORITHM: "RSASHA256",
     }

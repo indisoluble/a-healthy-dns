@@ -125,6 +125,8 @@ Use `--log-level debug` or `DNS_LOG_LEVEL=debug` when you need the per-IP or per
 
 **Backend check:** `nc -zv 192.168.1.100 8080`. When all IPs are unhealthy, look for `A record <name> skipped` after `Updating zone...`.
 
+**Nameserver address queries:** `DNS_NAME_SERVERS` / `--ns` creates `NS` records only. It does not create `A` records for the nameserver hostnames, so address queries for out-of-zone nameserver names may return `REFUSED`, and in-zone nameserver names require separate glue/address planning. Do not add nameserver hostnames to `zone-resolutions` unless they are real health-checked service records with a reachable TCP `health_port`. See [`docs/configuration-reference.md#name-servers`](configuration-reference.md#name-servers) for the canonical nameserver guidance.
+
 ### 2.4 DNSSEC responses are missing or rejected
 
 **Symptoms:** `dig +dnssec` shows no `RRSIG`, `DNSKEY`, or `NSEC` data; startup fails loading the key; validating resolver rejects the response.

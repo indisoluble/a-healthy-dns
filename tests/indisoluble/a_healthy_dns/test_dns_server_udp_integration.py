@@ -151,6 +151,7 @@ def live_server():
 
     config = DnsServerConfig(
         zone_origins=zone_origins,
+        primary_name_server=_NS,
         name_servers=frozenset([_NS]),
         a_records=frozenset([a_record]),
         ext_private_key=None,

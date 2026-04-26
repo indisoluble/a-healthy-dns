@@ -13,7 +13,7 @@ import dns.dnssec
 import dns.dnssecalgs
 import dns.name
 
-from typing import Any, Dict, FrozenSet, NamedTuple, Optional
+from typing import Any, Dict, FrozenSet, NamedTuple, Optional, Tuple
 
 from indisoluble.a_healthy_dns.records.a_healthy_ip import AHealthyIp
 from indisoluble.a_healthy_dns.records.a_healthy_record import AHealthyRecord
@@ -29,6 +29,7 @@ class DnsServerConfig(NamedTuple):
     """DNS server configuration containing zone data and security settings."""
 
     zone_origins: ZoneOrigins
+    primary_name_server: str
     name_servers: FrozenSet[str]
     a_records: FrozenSet[AHealthyRecord]
     ext_private_key: Optional[ExtendedPrivateKey]
@@ -155,7 +156,7 @@ def _make_a_records(
     return frozenset(a_records)
 
 
-def _make_name_servers(args: Dict[str, Any]) -> Optional[FrozenSet[str]]:
+def _make_name_servers(args: Dict[str, Any]) -> Optional[Tuple[str, FrozenSet[str]]]:
     try:
         name_servers = json.loads(args[ARG_NAME_SERVERS])
     except json.JSONDecodeError as ex:
@@ -181,7 +182,7 @@ def _make_name_servers(args: Dict[str, Any]) -> Optional[FrozenSet[str]]:
 
         abs_name_servers.append(f"{ns}.")
 
-    return frozenset(abs_name_servers)
+    return (abs_name_servers[0], frozenset(abs_name_servers))
 
 
 def _load_dnssec_private_key(key_path: str) -> Optional[bytes]:
@@ -222,9 +223,10 @@ def make_config(args: Dict[str, Any]) -> Optional[DnsServerConfig]:
     if a_records is None:
         return None
 
-    name_servers = _make_name_servers(args)
-    if name_servers is None:
+    name_servers_result = _make_name_servers(args)
+    if name_servers_result is None:
         return None
+    primary_name_server, name_servers = name_servers_result
 
     ext_private_key = None
     if args[ARG_DNSSEC_PRIVATE_KEY_PATH]:
@@ -234,6 +236,7 @@ def make_config(args: Dict[str, Any]) -> Optional[DnsServerConfig]:
 
     return DnsServerConfig(
         zone_origins=zone_origins,
+        primary_name_server=primary_name_server,
         name_servers=name_servers,
         a_records=a_records,
         ext_private_key=ext_private_key,

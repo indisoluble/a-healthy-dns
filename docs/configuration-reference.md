@@ -82,11 +82,51 @@ JSON object mapping subdomain names to their IP list and health check port.
 | CLI | `--ns` |
 | Docker | `DNS_NAME_SERVERS` |
 
-JSON array of fully-qualified name server hostnames for the zone's NS record. Single-label hostnames such as `ns1` are rejected.
+JSON array of fully-qualified name server hostnames for the zone's apex `NS` record. Single-label hostnames such as `ns1` are rejected. Provide names without a trailing root dot; the server normalizes them to absolute DNS names internally.
 
 ```json
-["ns1.domain.com", "ns2.domain.com"]
+["ns1.dns.example.net", "ns2.dns.example.net"]
 ```
+
+This parameter publishes only two pieces of data inside the configured hosted zone:
+
+- the zone apex `NS` RRset,
+- and the SOA primary nameserver value, using the first hostname in the JSON array.
+
+It does not create `A` records for the nameserver hostnames.
+
+#### Recommended nameserver naming
+
+For delegated subzones, prefer nameserver hostnames outside the delegated child zone. The nameserver hostname usually lives in the parent zone or in another DNS zone you operate.
+
+Example:
+
+| Role | Example |
+|---|---|
+| Parent / operator zone | `example.test` |
+| Delegated hosted zone served by this project | `app.example.test` |
+| Recommended nameserver hostname | `ns-192-0-2-53.example.test` |
+| Less convenient in-zone nameserver hostname | `ns-192-0-2-53.app.example.test` |
+
+With the recommended out-of-zone pattern:
+
+- the `app.example.test` zone publishes `NS ns-192-0-2-53.example.test.`,
+- the `A` record for `ns-192-0-2-53.example.test` is served by the authoritative DNS for `example.test`,
+- and this `app.example.test` server does not need to serve an address record for its own nameserver hostname.
+
+If you query this server directly for `ns-192-0-2-53.example.test A`, the name is outside its hosted zone. A `REFUSED` response is expected and matches this project's authoritative-only behavior.
+
+#### In-zone nameserver names
+
+An in-zone nameserver name such as `ns-192-0-2-53.app.example.test` is DNS-valid, but it is more operationally demanding:
+
+- the parent delegation needs glue for that hostname,
+- the child zone should also serve authoritative address data for that same hostname,
+- and this project does not currently provide a separate static address-record surface for nameserver glue.
+
+`zone-resolutions` is for health-checked service `A` records. Every entry needs a real TCP `health_port` that is reachable from the DNS server process. Do not add a nameserver hostname to `zone-resolutions` only to satisfy glue or delegation metadata, and do not use a fake health port for it.
+
+Use an in-zone nameserver hostname only when that owner name is also a real, health-checkable service record. Otherwise, use an out-of-zone nameserver hostname.
 
 ---
 
@@ -204,7 +244,7 @@ Algorithm used to sign the zone. Accepted values are the DNSSEC algorithm names 
 a-healthy-dns \
   --hosted-zone sub.domain.com \
   --zone-resolutions '{"www":{"ips":["192.168.1.100"],"health_port":8080}}' \
-  --ns '["ns1.domain.com"]'
+  --ns '["ns1.dns.example.net"]'
 ```
 
 ### Docker — with DNSSEC
@@ -215,7 +255,7 @@ docker run -d \
   -v "$(pwd)/keys:/app/keys:ro" \
   -e DNS_HOSTED_ZONE="sub.domain.com" \
   -e DNS_ZONE_RESOLUTIONS='{"www":{"ips":["192.168.1.100"],"health_port":8080}}' \
-  -e DNS_NAME_SERVERS='["ns1.domain.com"]' \
+  -e DNS_NAME_SERVERS='["ns1.dns.example.net"]' \
   -e DNS_PRIV_KEY_PATH="/app/keys/private.pem" \
   -e DNS_PRIV_KEY_ALG="RSASHA256" \
   indisoluble/a-healthy-dns

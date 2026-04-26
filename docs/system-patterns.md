@@ -90,12 +90,15 @@ All validated runtime configuration is assembled once at startup by `dns_server_
 # dns_server_config_factory.py
 class DnsServerConfig(NamedTuple):
     zone_origins: ZoneOrigins
+    primary_name_server: str
     name_servers: FrozenSet[str]
     a_records: FrozenSet[AHealthyRecord]
     ext_private_key: Optional[ExtendedPrivateKey]
 ```
 
 The factory validates every field (zone names, IP addresses, ports, DNSSEC algorithm) before constructing the config. If any field is invalid the factory logs the error and returns `None`; `main()` exits with a non-zero status without starting a server.
+
+The NS RRset is stored as a set because DNS RRset ordering is not meaningful. The SOA primary nameserver is stored separately as `primary_name_server`, derived from the first configured nameserver so SOA generation remains deterministic.
 
 **Convention:** all new configuration fields must be added to `DnsServerConfig` and validated inside `dns_server_config_factory.py`. No ad-hoc parsing elsewhere.
 

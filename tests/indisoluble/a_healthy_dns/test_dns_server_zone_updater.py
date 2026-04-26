@@ -55,7 +55,7 @@ def a_record_ip_unhealthy(zone_origins):
 
 @pytest.fixture
 def name_servers():
-    return ["ns1.example.com", "ns2.example.com"]
+    return ["ns1.dns.example.net", "ns2.dns.example.net"]
 
 
 @pytest.fixture
@@ -72,6 +72,7 @@ def basic_config(
 ):
     return DnsServerConfig(
         zone_origins=zone_origins,
+        primary_name_server=name_servers[0],
         name_servers=frozenset(name_servers),
         a_records=frozenset((a_record_all_ips_healthy, a_record_ip_unhealthy)),
         ext_private_key=None,
@@ -88,6 +89,7 @@ def config_with_dnssec(
 ):
     return DnsServerConfig(
         zone_origins=zone_origins,
+        primary_name_server=name_servers[0],
         name_servers=frozenset(name_servers),
         a_records=frozenset((a_record_all_ips_healthy, a_record_ip_unhealthy)),
         ext_private_key=ext_private_key,
@@ -106,6 +108,7 @@ def config_with_mock_dnssec(
 
     return DnsServerConfig(
         zone_origins=zone_origins,
+        primary_name_server=name_servers[0],
         name_servers=frozenset(name_servers),
         a_records=frozenset((a_record_all_ips_healthy, a_record_ip_unhealthy)),
         ext_private_key=ext_private_key,
@@ -166,7 +169,9 @@ def test_init_success_without_dnssec(
     assert updater.zone.origin == basic_config.zone_origins.primary
     assert len(list(updater.zone.keys())) == 0
     mock_make_ns_record.assert_called_once_with(ANY, basic_config.name_servers)
-    mock_iter_soa_record.assert_called_once_with(ANY, basic_config.zone_origins.primary, ANY)
+    mock_iter_soa_record.assert_called_once_with(
+        ANY, basic_config.zone_origins.primary, basic_config.primary_name_server
+    )
     mock_iter_rrsig_key.assert_not_called()
 
 
@@ -200,7 +205,9 @@ def test_init_success_with_dnssec(
         ANY, config_with_mock_dnssec.name_servers
     )
     mock_iter_soa_record.assert_called_once_with(
-        ANY, config_with_mock_dnssec.zone_origins.primary, ANY
+        ANY,
+        config_with_mock_dnssec.zone_origins.primary,
+        config_with_mock_dnssec.primary_name_server,
     )
     mock_iter_rrsig_key.assert_called_once_with(
         ANY, config_with_mock_dnssec.ext_private_key
@@ -315,6 +322,7 @@ def test_initialize_zone_with_no_healthy_ips(
 ):
     config = DnsServerConfig(
         zone_origins=zone_origins,
+        primary_name_server=name_servers[0],
         name_servers=frozenset(name_servers),
         a_records=frozenset([a_record_ip_unhealthy]),
         ext_private_key=None,

@@ -35,7 +35,8 @@ def mock_config(mock_zone_origins):
 
     return DnsServerConfig(
         zone_origins=mock_zone_origins,
-        name_servers=frozenset(["ns1.example.com", "ns2.example.com"]),
+        primary_name_server="ns1.dns.example.net",
+        name_servers=frozenset(["ns1.dns.example.net", "ns2.dns.example.net"]),
         a_records=frozenset([a_record]),
         ext_private_key=None,
     )
