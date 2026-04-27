@@ -59,7 +59,7 @@ def _calculate_max_interval(
         _DELTA_PER_RECORD_SIGN if do_sign else 0
     )
     max_loop_duration = sum(
-        sum(1 for ip in record.healthy_ips if ip.health_port is not None)
+        len([ip for ip in record.healthy_ips if ip.health_port is not None])
         * connection_timeout
         + delta_per_record
         for record in a_records

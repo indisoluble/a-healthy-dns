@@ -19,7 +19,6 @@ from indisoluble.a_healthy_dns.records.a_healthy_ip import AHealthyIp
 from indisoluble.a_healthy_dns.records.a_healthy_record import AHealthyRecord
 from indisoluble.a_healthy_dns.records.dnssec import ExtendedPrivateKey
 from indisoluble.a_healthy_dns.records.zone_origins import ZoneOrigins
-from indisoluble.a_healthy_dns.tools.is_valid_port import is_valid_port
 from indisoluble.a_healthy_dns.tools.is_valid_subdomain import (
     is_valid_fqdn,
     is_valid_subdomain,
@@ -81,11 +80,9 @@ def _make_healthy_a_record(
     subdomain_name = dns.name.from_text(subdomain, origin=origin_name)
 
     if isinstance(sub_config, list):
-        # Always-on IPs: bare IP list, no health check.
         ip_list = sub_config
         health_port = None
     elif isinstance(sub_config, dict):
-        # Health-checked IPs: dict with both 'ips' and 'health_port' required.
         ip_list = sub_config.get(ARG_SUBDOMAIN_IP_LIST)
         if ip_list is None:
             logging.error(
@@ -112,13 +109,11 @@ def _make_healthy_a_record(
             return None
 
         health_port = sub_config[ARG_SUBDOMAIN_HEALTH_PORT]
-        success, error = is_valid_port(health_port)
-        if not success:
+        if health_port is None:
             logging.error(
-                "Zone resolution for '%s' has invalid '%s': %s",
+                "Zone resolution for '%s' has invalid '%s': must not be null",
                 subdomain,
                 ARG_SUBDOMAIN_HEALTH_PORT,
-                error,
             )
             return None
     else:
