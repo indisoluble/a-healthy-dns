@@ -59,7 +59,9 @@ def _calculate_max_interval(
         _DELTA_PER_RECORD_SIGN if do_sign else 0
     )
     max_loop_duration = sum(
-        len(record.healthy_ips) * connection_timeout + delta_per_record
+        sum(1 for ip in record.healthy_ips if ip.health_port is not None)
+        * connection_timeout
+        + delta_per_record
         for record in a_records
     )
 
@@ -185,6 +187,8 @@ class DnsServerZoneUpdater:
 
             checked_ip = health_ip.updated_status(
                 self._can_create_connection(health_ip.ip, health_ip.health_port)
+                if health_ip.health_port is not None
+                else True
             )
             logging.debug(
                 "Checked IP %s on port %s: from %s to %s",

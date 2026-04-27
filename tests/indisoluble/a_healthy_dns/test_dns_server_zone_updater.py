@@ -570,3 +570,29 @@ def test_update_with_sign_near_to_expire_recreates_zone(
     assert dnskey_rdataset is not None
     assert len(dnskey_rdataset) == 1
     assert len(dnskey_rrsig_rdatasets) == 1
+
+
+@patch("indisoluble.a_healthy_dns.dns_server_zone_updater.can_create_connection")
+def test_always_on_ips_skip_health_check_and_remain_healthy(
+    mock_can_create_connection, zone_origins, name_servers
+):
+    subdomain = dns.name.from_text("static", origin=zone_origins.primary)
+    always_on_ip = AHealthyIp(ip="10.0.0.1", health_port=None, is_healthy=True)
+    a_record = AHealthyRecord(subdomain=subdomain, healthy_ips=[always_on_ip])
+
+    config = DnsServerConfig(
+        zone_origins=zone_origins,
+        primary_name_server=name_servers[0],
+        name_servers=frozenset(name_servers),
+        a_records=frozenset([a_record]),
+        ext_private_key=None,
+    )
+
+    updater = DnsServerZoneUpdater(min_interval=30, connection_timeout=5, config=config)
+    updater.update()
+
+    mock_can_create_connection.assert_not_called()
+
+    a_rdataset = updater.zone.get_rdataset(subdomain, dns.rdatatype.A)
+    assert a_rdataset is not None
+    assert len(a_rdataset) == 1

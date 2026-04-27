@@ -45,7 +45,6 @@ def test_invalid_ip(invalid_ip):
     "invalid_port",
     [
         "8080",
-        None,
         1.5,
         [],
         {},
@@ -57,6 +56,26 @@ def test_invalid_ip(invalid_ip):
 def test_invalid_port(invalid_port):
     with pytest.raises(ValueError):
         AHealthyIp("192.168.1.1", invalid_port, True)
+
+
+def test_none_health_port_is_valid():
+    ip = AHealthyIp("192.168.1.1", None, True)
+    assert ip.health_port is None
+    assert ip.is_healthy is True
+
+
+def test_none_health_port_equality():
+    ip1 = AHealthyIp("192.168.1.1", None, True)
+    ip2 = AHealthyIp("192.168.1.1", None, True)
+    ip3 = AHealthyIp("192.168.1.1", 8080, True)
+
+    assert ip1 == ip2
+    assert ip1 != ip3
+
+
+def test_none_health_port_repr():
+    ip = AHealthyIp("192.168.1.1", None, True)
+    assert repr(ip) == "AHealthyIp(ip='192.168.1.1', health_port=None, is_healthy=True)"
 
 
 def test_equality():

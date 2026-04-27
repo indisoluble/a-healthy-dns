@@ -44,7 +44,7 @@ The domain name for which this server is authoritative.
 | CLI | `--zone-resolutions` |
 | Docker | `DNS_ZONE_RESOLUTIONS` |
 
-JSON object mapping subdomain names to their IP list and health check port.
+JSON object mapping subdomain names to their IP list and optional health check port.
 
 **Schema:**
 ```json
@@ -56,7 +56,9 @@ JSON object mapping subdomain names to their IP list and health check port.
 }
 ```
 
-**Example:**
+`health_port` is optional. Omitting it marks all IPs for that subdomain as **always-on**: no TCP health check is performed and the IPs are assumed permanently healthy.
+
+**Example — mixed health-checked and always-on subdomains:**
 ```json
 {
   "www": {
@@ -66,14 +68,18 @@ JSON object mapping subdomain names to their IP list and health check port.
   "api": {
     "ips": ["192.168.1.102"],
     "health_port": 8000
+  },
+  "static": {
+    "ips": ["192.168.1.200"]
   }
 }
 ```
 
 - Each `<subdomain>` is relative to the hosted zone (e.g. `www` → `www.sub.domain.com`).
 - `ips` must be valid IPv4 addresses (IPv6/AAAA is not supported).
-- `health_port` is the TCP port used for health checks.
-- All IPs for a subdomain share the same health port.
+- `health_port` is the TCP port used for health checks. When omitted, the IPs are always-on.
+- All IPs for a subdomain share the same health port (or are all always-on together).
+- Setting `health_port` to `null` explicitly is rejected; omit the key entirely for always-on behaviour.
 
 ### Name servers
 
@@ -124,9 +130,9 @@ An in-zone nameserver name such as `ns-192-0-2-53.app.example.test` is DNS-valid
 - the child zone should also serve authoritative address data for that same hostname,
 - and this project does not currently provide a separate static address-record surface for nameserver glue.
 
-`zone-resolutions` is for health-checked service `A` records. Every entry needs a real TCP `health_port` that is reachable from the DNS server process. Do not add a nameserver hostname to `zone-resolutions` only to satisfy glue or delegation metadata, and do not use a fake health port for it.
+`zone-resolutions` is the surface for `A` records. Entries with a `health_port` are health-checked; entries without one are always-on. Do not add a nameserver hostname to `zone-resolutions` only to satisfy glue or delegation metadata.
 
-Use an in-zone nameserver hostname only when that owner name is also a real, health-checkable service record. Otherwise, use an out-of-zone nameserver hostname.
+Use an in-zone nameserver hostname only when that owner name is also a real service record (health-checked or always-on). Otherwise, use an out-of-zone nameserver hostname.
 
 ---
 

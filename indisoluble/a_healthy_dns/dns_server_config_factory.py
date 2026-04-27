@@ -19,6 +19,7 @@ from indisoluble.a_healthy_dns.records.a_healthy_ip import AHealthyIp
 from indisoluble.a_healthy_dns.records.a_healthy_record import AHealthyRecord
 from indisoluble.a_healthy_dns.records.dnssec import ExtendedPrivateKey
 from indisoluble.a_healthy_dns.records.zone_origins import ZoneOrigins
+from indisoluble.a_healthy_dns.tools.is_valid_port import is_valid_port
 from indisoluble.a_healthy_dns.tools.is_valid_subdomain import (
     is_valid_fqdn,
     is_valid_subdomain,
@@ -106,17 +107,25 @@ def _make_healthy_a_record(
         logging.error("IP list for '%s' cannot be empty", subdomain)
         return None
 
-    health_port = sub_config.get(ARG_SUBDOMAIN_HEALTH_PORT)
-    if health_port is None:
-        logging.error(
-            "Zone resolution for '%s' must include '%s' key",
-            subdomain,
-            ARG_SUBDOMAIN_HEALTH_PORT,
-        )
-        return None
+    if ARG_SUBDOMAIN_HEALTH_PORT in sub_config:
+        health_port = sub_config[ARG_SUBDOMAIN_HEALTH_PORT]
 
+        success, error = is_valid_port(health_port)
+        if not success:
+            logging.error(
+                "Zone resolution for '%s' has invalid '%s': %s",
+                subdomain,
+                ARG_SUBDOMAIN_HEALTH_PORT,
+                error,
+            )
+            return None
+    else:
+        health_port = None
+
+    # Always-on IPs (no health_port) start healthy; health-checked IPs start unhealthy.
+    initial_healthy = health_port is None
     try:
-        healthy_ips = [AHealthyIp(ip, health_port, False) for ip in ip_list]
+        healthy_ips = [AHealthyIp(ip, health_port, initial_healthy) for ip in ip_list]
     except ValueError as ex:
         logging.error("Invalid IP/port address in '%s': %s", subdomain, ex)
         return None

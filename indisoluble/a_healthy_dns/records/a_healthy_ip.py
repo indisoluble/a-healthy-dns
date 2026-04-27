@@ -6,7 +6,7 @@ Provides an IP address class that tracks health status and port information
 for use in health-aware DNS A records.
 """
 
-from typing import Any
+from typing import Any, Optional
 
 from indisoluble.a_healthy_dns.tools.is_valid_ip import is_valid_ip
 from indisoluble.a_healthy_dns.tools.is_valid_port import is_valid_port
@@ -14,7 +14,11 @@ from indisoluble.a_healthy_dns.tools.normalize_ip import normalize_ip
 
 
 class AHealthyIp:
-    """IP address with health status and port for health checking."""
+    """IP address with health status and optional port for health checking.
+
+    When ``health_port`` is ``None`` the IP is treated as always-on: no TCP
+    health check is performed and the IP is assumed permanently healthy.
+    """
 
     @property
     def ip(self) -> str:
@@ -22,8 +26,8 @@ class AHealthyIp:
         return self._ip
 
     @property
-    def health_port(self) -> int:
-        """Get the health check port number."""
+    def health_port(self) -> Optional[int]:
+        """Get the health check port number, or None for always-on IPs."""
         return self._health_port
 
     @property
@@ -31,15 +35,22 @@ class AHealthyIp:
         """Get the current health status."""
         return self._is_healthy
 
-    def __init__(self, ip: Any, health_port: Any, is_healthy: bool) -> None:
-        """Initialize healthy IP with validation of IP address and port."""
+    def __init__(self, ip: Any, health_port: Optional[Any], is_healthy: bool) -> None:
+        """Initialize healthy IP with validation of IP address and optional port.
+
+        Args:
+            ip: IPv4 address string.
+            health_port: TCP port for health checks, or None for always-on IPs.
+            is_healthy: Initial health status.
+        """
         success, error = is_valid_ip(ip)
         if not success:
             raise ValueError(f"Invalid IP address: {error}")
 
-        success, error = is_valid_port(health_port)
-        if not success:
-            raise ValueError(f"Invalid port: {error}")
+        if health_port is not None:
+            success, error = is_valid_port(health_port)
+            if not success:
+                raise ValueError(f"Invalid port: {error}")
 
         self._ip = normalize_ip(ip)
         self._health_port = health_port
