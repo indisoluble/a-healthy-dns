@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="a_healthy_dns",
-    version="0.1.36",
+    version="0.1.37",
     description="A healthy DNS project",
     packages=find_packages(),
     python_requires=">=3.10",
