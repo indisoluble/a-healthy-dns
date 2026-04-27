@@ -32,13 +32,7 @@ class AHealthyIp:
         return self._is_healthy
 
     def __init__(self, ip: Any, health_port: Optional[Any], is_healthy: bool) -> None:
-        """Initialize healthy IP with validation of IP address and optional port.
-
-        Args:
-            ip: IPv4 address string.
-            health_port: TCP port for health checks, or None.
-            is_healthy: Initial health status.
-        """
+        """Initialize healthy IP with validation of IP address and optional port."""
         success, error = is_valid_ip(ip)
         if not success:
             raise ValueError(f"Invalid IP address: {error}")
