@@ -75,4 +75,8 @@ class AHealthyIp:
         return hash((self.ip, self.health_port, self.is_healthy))
 
     def __repr__(self) -> str:
-        return f"AHealthyIp(ip='{self._ip}', {'' if self._health_port is None else f'health_port={self._health_port}, '}is_healthy={self._is_healthy})"
+        return (
+            f"AHealthyIp(ip='{self.ip}', "
+            f"{'' if self.health_port is None else f'health_port={self.health_port}, '}"
+            f"is_healthy={self.is_healthy})"
+        )
