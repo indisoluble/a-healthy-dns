@@ -59,9 +59,9 @@ def test_invalid_port(invalid_port):
 
 
 def test_none_health_port_is_valid():
-    ip = AHealthyIp("192.168.1.1", None, True)
+    ip = AHealthyIp("192.168.1.1", None, False)
     assert ip.health_port is None
-    assert ip.is_healthy is True
+    assert ip.is_healthy is False
 
 
 def test_none_health_port_equality():
@@ -75,7 +75,16 @@ def test_none_health_port_equality():
 
 def test_none_health_port_repr():
     ip = AHealthyIp("192.168.1.1", None, True)
-    assert repr(ip) == "AHealthyIp(ip='192.168.1.1', is_healthy=True)"
+    assert repr(ip) == "AHealthyIp(ip='192.168.1.1', health_port=None, is_healthy=True)"
+
+
+def test_none_health_port_status_can_be_updated():
+    ip = AHealthyIp("192.168.1.1", None, True)
+    updated_ip = ip.updated_status(False)
+
+    assert updated_ip is not ip
+    assert updated_ip.health_port is None
+    assert updated_ip.is_healthy is False
 
 
 def test_equality():

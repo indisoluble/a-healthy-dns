@@ -6,7 +6,7 @@ It is the canonical home for goals, non-goals, constraints, and high-level requi
 
 ## What it is
 
-**A Healthy DNS** is an authoritative DNS server that performs continuous TCP health checks on configured backend IP addresses and automatically updates DNS answers to reflect current backend health. Only healthy endpoints are advertised; unhealthy endpoints are withheld until they recover.
+**A Healthy DNS** is an authoritative DNS server that performs continuous TCP health checks on configured backend IP addresses and automatically updates DNS answers to reflect current backend health. It can also publish configured always-on IPs that are not TCP health-checked. Healthy endpoints and always-on entries are advertised after the updater refreshes the in-memory zone; unhealthy endpoints are withheld until they recover.
 
 ## Why it exists
 
@@ -16,9 +16,9 @@ Traditional authoritative DNS returns static records. When a backend becomes una
 
 1. **Automatic failover** — remove unhealthy IP addresses from DNS responses without manual intervention.
 2. **Authoritative DNS** — serve one hosted zone plus any configured alias zones as an authoritative UDP DNS server.
-3. **Multi-domain support** — let multiple domain aliases reuse the same health-checked records without duplicating health-check state.
+3. **Multi-domain support** — let multiple domain aliases reuse the same records without duplicating health-check state.
 4. **Optional DNSSEC** — sign the zone when a private key is provided and publish the generated DNSSEC artifacts alongside the base records.
-5. **Configurable health checking** — allow operators to tune check interval, TCP timeout, and health port per subdomain.
+5. **Configurable health checking** — allow operators to tune check interval, TCP timeout, and health port per health-checked subdomain.
 6. **Operational simplicity** — run as a single Python process or Docker container with startup-time configuration only.
 
 ## Non-goals
@@ -37,7 +37,7 @@ Traditional authoritative DNS returns static records. When a backend becomes una
 | Runtime target | Python 3.10+ |
 | Network role | Authoritative DNS server for one hosted zone plus optional alias zones |
 | Transport | UDP only |
-| Health check protocol | TCP connectivity checks against configured backend IPs and ports |
+| Health check protocol | TCP connectivity checks against configured backend IPs and ports; bare-list IP entries are always-on |
 | Record scope | Base records: A, SOA, and NS; when DNSSEC is enabled, generated DNSKEY, NSEC, and RRSIG data are also published |
 | Deployment modes | Direct CLI process and Docker container |
 
@@ -46,10 +46,10 @@ Traditional authoritative DNS returns static records. When a backend becomes una
 ### Functional
 
 - **R1** For each configured subdomain, maintain a list of backend IP addresses and their current health state.
-- **R2** Periodically test TCP connectivity to each configured `(ip, health_port)` pair.
+- **R2** Periodically test TCP connectivity to each configured `(ip, health_port)` pair; entries without a health port are not probed and are treated as healthy by updater refreshes.
 - **R3** Update the in-memory DNS zone when backend health state changes.
-- **R4** Return only currently healthy IP addresses in DNS A-record responses.
-- **R5** Return `NXDOMAIN` when all configured IPs for a subdomain are unhealthy.
+- **R4** Return only currently healthy or always-on IP addresses in DNS A-record responses.
+- **R5** Return `NXDOMAIN` when a configured subdomain has no currently healthy or always-on IPs.
 - **R6** Support alias zones that resolve identically to the primary zone without separate health-check state.
 - **R7** Compute SOA timing values from health-check parameters so DNS timing stays aligned with refresh behavior.
 - **R8** When a DNSSEC private key is provided, sign the zone and publish the generated DNSSEC artifacts alongside the base A, NS, and SOA data.

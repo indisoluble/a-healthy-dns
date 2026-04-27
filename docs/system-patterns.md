@@ -96,7 +96,7 @@ class DnsServerConfig(NamedTuple):
     ext_private_key: Optional[ExtendedPrivateKey]
 ```
 
-The factory validates every field (zone names, IP addresses, ports, DNSSEC algorithm) before constructing the config. If any field is invalid the factory logs the error and returns `None`; `main()` exits with a non-zero status without starting a server.
+The factory validates every field (zone names, IP addresses, optional ports, DNSSEC algorithm) before constructing the config. If any field is invalid the factory logs the error and returns `None`; `main()` exits with a non-zero status without starting a server.
 
 The NS RRset is stored as a set because DNS RRset ordering is not meaningful. The SOA primary nameserver is stored separately as `primary_name_server`, derived from the first configured nameserver so SOA generation remains deterministic.
 
@@ -113,6 +113,8 @@ Health state is propagated through **immutable value objects** rather than mutat
 
 This makes change detection trivially safe: `object is new_object` indicates a change occurred.
 
+`AHealthyIp` is a passive value object: it validates and stores `ip`, `health_port`, and `is_healthy`, but it does not infer health state from the port value. Configuration parsing constructs all IPs with an initial unhealthy state. `DnsServerZoneUpdater` is the single source of truth for runtime health interpretation: it performs TCP checks for IPs with a `health_port` and treats `health_port is None` as healthy during refresh cycles.
+
 **Convention:** domain state objects must remain immutable. Produce updated copies instead of mutating in place.
 
 ---
@@ -128,11 +130,13 @@ initialize_zone()
        ├─ _add_records_to_zone()
        │    ├─ NS record (apex)
        │    ├─ SOA record (apex)
-       │    └─ A records (one per healthy subdomain; omitted if all IPs unhealthy)
+       │    └─ A records (one per subdomain with currently healthy IPs)
        └─ _sign_zone()          — DNSSEC artifacts (if key is configured)
 ```
 
 The `dns.versioned.Zone` writer is used inside a `with` block; the transaction is committed atomically on exit and rolled back on exception.
+
+`DnsServerZoneUpdaterThreaded.start()` initializes the zone once from the current health state before starting the refresh loop. Because configuration-created IPs start unhealthy, bare-list always-on entries become healthy on the first updater refresh rather than during raw configuration parsing.
 
 **Convention:** all zone modifications must go through a single writer transaction. Partial writes are not allowed.
 
@@ -143,7 +147,7 @@ The `dns.versioned.Zone` writer is used inside a `with` block; the transaction i
 TTLs and timing values are derived consistently from a single source of truth: the **effective max interval**, calculated in `dns_server_zone_updater.py:_calculate_max_interval()`:
 
 ```
-max_interval = max(min_interval, sum(per-IP connection_timeout + per-record delta))
+max_interval = max(min_interval, sum(per-health-checked-IP connection_timeout + per-record delta))
 ```
 
 All record TTLs are then calculated as multiples of `max_interval` by functions in `records/time.py`:

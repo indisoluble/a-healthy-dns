@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 
-"""Healthy IP address representation with health checking capabilities.
+"""Healthy IP address value representation.
 
-Provides an IP address class that tracks health status and port information
-for use in health-aware DNS A records.
+Provides an IP address value object that stores a normalized address, optional
+health port, and health status for use in health-aware DNS A records.
 """
 
 from typing import Any, Optional
@@ -14,7 +14,7 @@ from indisoluble.a_healthy_dns.tools.normalize_ip import normalize_ip
 
 
 class AHealthyIp:
-    """IP address with health status and optional port for health checking."""
+    """IP address value object with health status and optional health port."""
 
     @property
     def ip(self) -> str:
@@ -23,7 +23,7 @@ class AHealthyIp:
 
     @property
     def health_port(self) -> Optional[int]:
-        """Get the health check port number."""
+        """Get the optional health check port number."""
         return self._health_port
 
     @property
@@ -31,7 +31,7 @@ class AHealthyIp:
         """Get the current health status."""
         return self._is_healthy
 
-    def __init__(self, ip: Any, health_port: Optional[Any], is_healthy: bool) -> None:
+    def __init__(self, ip: Any, health_port: Any, is_healthy: bool) -> None:
         """Initialize healthy IP with validation of IP address and optional port."""
         success, error = is_valid_ip(ip)
         if not success:
@@ -70,7 +70,6 @@ class AHealthyIp:
 
     def __repr__(self) -> str:
         return (
-            f"AHealthyIp(ip='{self.ip}', "
-            f"{'' if self.health_port is None else f'health_port={self.health_port}, '}"
+            f"AHealthyIp(ip='{self.ip}', health_port={self.health_port}, "
             f"is_healthy={self.is_healthy})"
         )
