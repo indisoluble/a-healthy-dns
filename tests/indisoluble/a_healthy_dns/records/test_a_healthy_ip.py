@@ -75,7 +75,7 @@ def test_none_health_port_equality():
 
 def test_none_health_port_repr():
     ip = AHealthyIp("192.168.1.1", None, True)
-    assert repr(ip) == "AHealthyIp(ip='192.168.1.1', health_port=None, is_healthy=True)"
+    assert repr(ip) == "AHealthyIp(ip='192.168.1.1', is_healthy=True)"
 
 
 def test_equality():

@@ -14,11 +14,7 @@ from indisoluble.a_healthy_dns.tools.normalize_ip import normalize_ip
 
 
 class AHealthyIp:
-    """IP address with health status and optional port for health checking.
-
-    When ``health_port`` is ``None`` the IP is treated as always-on: no TCP
-    health check is performed and the IP is assumed permanently healthy.
-    """
+    """IP address with health status and optional port for health checking."""
 
     @property
     def ip(self) -> str:
@@ -27,7 +23,7 @@ class AHealthyIp:
 
     @property
     def health_port(self) -> Optional[int]:
-        """Get the health check port number, or None for always-on IPs."""
+        """Get the health check port number."""
         return self._health_port
 
     @property
@@ -40,7 +36,7 @@ class AHealthyIp:
 
         Args:
             ip: IPv4 address string.
-            health_port: TCP port for health checks, or None for always-on IPs.
+            health_port: TCP port for health checks, or None.
             is_healthy: Initial health status.
         """
         success, error = is_valid_ip(ip)
@@ -79,6 +75,8 @@ class AHealthyIp:
         return hash((self.ip, self.health_port, self.is_healthy))
 
     def __repr__(self) -> str:
+        if self._health_port is None:
+            return f"AHealthyIp(ip='{self.ip}', is_healthy={self.is_healthy})"
         return (
             f"AHealthyIp(ip='{self.ip}', "
             f"health_port={self.health_port}, "
