@@ -46,7 +46,9 @@ The domain name for which this server is authoritative.
 
 JSON object mapping subdomain names to their IP list and optional health check port.
 
-**Schema:**
+There are two formats for each subdomain entry:
+
+**Health-checked** — provide a dict with both `ips` and `health_port`:
 ```json
 {
   "<subdomain>": {
@@ -56,9 +58,16 @@ JSON object mapping subdomain names to their IP list and optional health check p
 }
 ```
 
-`health_port` is optional. Omitting it marks all IPs for that subdomain as **always-on**: no TCP health check is performed and the IPs are assumed permanently healthy.
+**Always-on** — provide a bare list of IPs (no health check is performed):
+```json
+{
+  "<subdomain>": ["<ip1>", "<ip2>"]
+}
+```
 
-**Example — mixed health-checked and always-on subdomains:**
+Both formats can be mixed in the same configuration.
+
+**Example:**
 ```json
 {
   "www": {
@@ -69,17 +78,15 @@ JSON object mapping subdomain names to their IP list and optional health check p
     "ips": ["192.168.1.102"],
     "health_port": 8000
   },
-  "static": {
-    "ips": ["192.168.1.200"]
-  }
+  "static": ["192.168.1.200"]
 }
 ```
 
 - Each `<subdomain>` is relative to the hosted zone (e.g. `www` → `www.sub.domain.com`).
 - `ips` must be valid IPv4 addresses (IPv6/AAAA is not supported).
-- `health_port` is the TCP port used for health checks. When omitted, the IPs are always-on.
-- All IPs for a subdomain share the same health port (or are all always-on together).
-- Setting `health_port` to `null` explicitly is rejected; omit the key entirely for always-on behaviour.
+- `health_port` is the TCP port used for health checks. It is required when using the dict format.
+- All IPs for a subdomain share the same health port.
+- Always-on IPs (bare list format) are never health-checked and are always included in DNS responses.
 
 ### Name servers
 

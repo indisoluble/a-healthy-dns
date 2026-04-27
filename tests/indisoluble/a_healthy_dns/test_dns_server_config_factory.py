@@ -109,13 +109,9 @@ def test_make_config_success(args):
     )
 
 
-def test_make_config_without_health_port_starts_ips_healthy(args):
+def test_make_config_with_always_on_ips(args):
     args[dscf.ARG_ZONE_RESOLUTIONS] = json.dumps(
-        {
-            "always-on": {
-                dscf.ARG_SUBDOMAIN_IP_LIST: ["10.0.0.1", "10.0.0.2"],
-            }
-        }
+        {"always-on": ["10.0.0.1", "10.0.0.2"]}
     )
     config = dscf.make_config(args)
     assert config is not None
@@ -126,7 +122,7 @@ def test_make_config_without_health_port_starts_ips_healthy(args):
 
     for ip in healthy_ips_by_subdomain[always_on_name]:
         assert ip.health_port is None
-        assert ip.is_healthy is True
+        assert ip.is_healthy is False
 
 
 @patch("indisoluble.a_healthy_dns.dns_server_config_factory._load_dnssec_private_key")
@@ -248,6 +244,16 @@ def test_make_zone_invalid_json_name_servers(invalid_ns, args):
                 "www": {
                     dscf.ARG_SUBDOMAIN_IP_LIST: ["192.168.1.1"],
                     dscf.ARG_SUBDOMAIN_HEALTH_PORT: None,
+                }
+            }
+        ),
+        # always-on list format: empty list
+        json.dumps({"www": []}),
+        # dict without health_port is invalid (use a list for always-on IPs)
+        json.dumps(
+            {
+                "www": {
+                    dscf.ARG_SUBDOMAIN_IP_LIST: ["192.168.1.1"],
                 }
             }
         ),

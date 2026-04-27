@@ -577,7 +577,7 @@ def test_always_on_ips_skip_health_check_and_remain_healthy(
     mock_can_create_connection, zone_origins, name_servers
 ):
     subdomain = dns.name.from_text("static", origin=zone_origins.primary)
-    always_on_ip = AHealthyIp(ip="10.0.0.1", health_port=None, is_healthy=True)
+    always_on_ip = AHealthyIp(ip="10.0.0.1", health_port=None, is_healthy=False)
     a_record = AHealthyRecord(subdomain=subdomain, healthy_ips=[always_on_ip])
 
     config = DnsServerConfig(
