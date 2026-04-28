@@ -58,7 +58,7 @@ There are two formats for each subdomain entry:
 }
 ```
 
-**Always-on** — provide a bare list of IPs (no health check is performed):
+**No health check** — provide a bare list of IPs; no TCP probe is performed and the IPs are always included in DNS responses:
 ```json
 {
   "<subdomain>": ["<ip1>", "<ip2>"]
@@ -86,7 +86,7 @@ Both formats can be mixed in the same configuration.
 - `ips` must be valid IPv4 addresses (IPv6/AAAA is not supported).
 - `health_port` is the TCP port used for health checks. It is required when using the dict format.
 - All IPs for a subdomain share the same health port.
-- Always-on IPs (bare list format) are never TCP health-checked; the zone updater treats them as healthy during refresh cycles.
+- IPs configured as a bare list are not TCP health-checked; the zone updater treats them as healthy during refresh cycles.
 
 ### Name servers
 
@@ -137,9 +137,9 @@ An in-zone nameserver name such as `ns-192-0-2-53.app.example.test` is DNS-valid
 - the child zone should also serve authoritative address data for that same hostname,
 - and this project does not currently provide a separate static address-record surface for nameserver glue.
 
-`zone-resolutions` is the surface for `A` records. Dict entries with a `health_port` are health-checked; bare-list entries are always-on. Do not add a nameserver hostname to `zone-resolutions` only to satisfy glue or delegation metadata.
+`zone-resolutions` is the surface for `A` records. Dict entries with a `health_port` are health-checked; bare-list entries skip the health check and are always included in responses. Do not add a nameserver hostname to `zone-resolutions` only to satisfy glue or delegation metadata.
 
-Use an in-zone nameserver hostname only when that owner name is also a real service record (health-checked or always-on). Otherwise, use an out-of-zone nameserver hostname.
+Use an in-zone nameserver hostname only when that owner name is also a real service record (health-checked or bare-list). Otherwise, use an out-of-zone nameserver hostname.
 
 ---
 

@@ -572,13 +572,17 @@ def test_update_with_sign_near_to_expire_recreates_zone(
     assert len(dnskey_rrsig_rdatasets) == 1
 
 
+@pytest.mark.parametrize("ip_addresses", [
+    ["10.0.0.1"],
+    ["10.0.0.1", "10.0.0.2"],
+])
 @patch("indisoluble.a_healthy_dns.dns_server_zone_updater.can_create_connection")
-def test_always_on_ips_skip_health_check_and_remain_healthy(
-    mock_can_create_connection, zone_origins, name_servers
+def test_ips_without_health_port_skip_tcp_check_and_appear_in_zone(
+    mock_can_create_connection, ip_addresses, zone_origins, name_servers
 ):
     subdomain = dns.name.from_text("static", origin=zone_origins.primary)
-    always_on_ip = AHealthyIp(ip="10.0.0.1", health_port=None, is_healthy=False)
-    a_record = AHealthyRecord(subdomain=subdomain, healthy_ips=[always_on_ip])
+    ips = [AHealthyIp(ip=addr, health_port=None, is_healthy=False) for addr in ip_addresses]
+    a_record = AHealthyRecord(subdomain=subdomain, healthy_ips=ips)
 
     config = DnsServerConfig(
         zone_origins=zone_origins,
@@ -595,4 +599,4 @@ def test_always_on_ips_skip_health_check_and_remain_healthy(
 
     a_rdataset = updater.zone.get_rdataset(subdomain, dns.rdatatype.A)
     assert a_rdataset is not None
-    assert len(a_rdataset) == 1
+    assert len(a_rdataset) == len(ip_addresses)

@@ -136,7 +136,7 @@ initialize_zone()
 
 The `dns.versioned.Zone` writer is used inside a `with` block; the transaction is committed atomically on exit and rolled back on exception.
 
-`DnsServerZoneUpdaterThreaded.start()` initializes the zone once from the current health state before starting the refresh loop. Because configuration-created IPs start unhealthy, bare-list always-on entries become healthy on the first updater refresh rather than during raw configuration parsing.
+`DnsServerZoneUpdaterThreaded.start()` initializes the zone once from the current health state before starting the refresh loop. Because configuration-created IPs start unhealthy, bare-list entries (IPs with no health check) become healthy on the first updater refresh rather than during raw configuration parsing.
 
 **Convention:** all zone modifications must go through a single writer transaction. Partial writes are not allowed.
 

@@ -185,18 +185,22 @@ class DnsServerZoneUpdater:
                 logging.debug("Abort record check. Keep A record as it is")
                 return None
 
-            checked_ip = health_ip.updated_status(
+            is_healthy = (
                 True
                 if health_ip.health_port is None
                 else self._can_create_connection(health_ip.ip, health_ip.health_port)
             )
-            logging.debug(
-                "Checked IP %s on port %s: from %s to %s",
-                checked_ip.ip,
-                checked_ip.health_port,
-                health_ip.is_healthy,
-                checked_ip.is_healthy,
-            )
+            checked_ip = health_ip.updated_status(is_healthy)
+            if health_ip.health_port is None:
+                logging.debug("IP %s has no health port, assumed healthy", checked_ip.ip)
+            else:
+                logging.debug(
+                    "Checked IP %s on port %s: from %s to %s",
+                    checked_ip.ip,
+                    checked_ip.health_port,
+                    health_ip.is_healthy,
+                    checked_ip.is_healthy,
+                )
 
             updated_ips.append(checked_ip)
 

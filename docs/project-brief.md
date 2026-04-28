@@ -6,7 +6,7 @@ It is the canonical home for goals, non-goals, constraints, and high-level requi
 
 ## What it is
 
-**A Healthy DNS** is an authoritative DNS server that performs continuous TCP health checks on configured backend IP addresses and automatically updates DNS answers to reflect current backend health. It can also publish configured always-on IPs that are not TCP health-checked. Healthy endpoints and always-on entries are advertised after the updater refreshes the in-memory zone; unhealthy endpoints are withheld until they recover.
+**A Healthy DNS** is an authoritative DNS server that performs continuous TCP health checks on configured backend IP addresses and automatically updates DNS answers to reflect current backend health. It can also publish IPs that skip the health check (configured as a bare list). Healthy endpoints and bare-list entries are advertised after the updater refreshes the in-memory zone; unhealthy endpoints are withheld until they recover.
 
 ## Why it exists
 
@@ -37,7 +37,7 @@ Traditional authoritative DNS returns static records. When a backend becomes una
 | Runtime target | Python 3.10+ |
 | Network role | Authoritative DNS server for one hosted zone plus optional alias zones |
 | Transport | UDP only |
-| Health check protocol | TCP connectivity checks against configured backend IPs and ports; bare-list IP entries are always-on |
+| Health check protocol | TCP connectivity checks against configured backend IPs and ports; bare-list IP entries skip the health check |
 | Record scope | Base records: A, SOA, and NS; when DNSSEC is enabled, generated DNSKEY, NSEC, and RRSIG data are also published |
 | Deployment modes | Direct CLI process and Docker container |
 
@@ -48,8 +48,8 @@ Traditional authoritative DNS returns static records. When a backend becomes una
 - **R1** For each configured subdomain, maintain a list of backend IP addresses and their current health state.
 - **R2** Periodically test TCP connectivity to each configured `(ip, health_port)` pair; entries without a health port are not probed and are treated as healthy by updater refreshes.
 - **R3** Update the in-memory DNS zone when backend health state changes.
-- **R4** Return only currently healthy or always-on IP addresses in DNS A-record responses.
-- **R5** Return `NXDOMAIN` when a configured subdomain has no currently healthy or always-on IPs.
+- **R4** Return only currently healthy or bare-list IP addresses in DNS A-record responses.
+- **R5** Return `NXDOMAIN` when a configured subdomain has no currently healthy or bare-list IPs.
 - **R6** Support alias zones that resolve identically to the primary zone without separate health-check state.
 - **R7** Compute SOA timing values from health-check parameters so DNS timing stays aligned with refresh behavior.
 - **R8** When a DNSSEC private key is provided, sign the zone and publish the generated DNSSEC artifacts alongside the base A, NS, and SOA data.
