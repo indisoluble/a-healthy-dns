@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 
-"""Healthy IP address representation with health checking capabilities.
+"""Healthy IP address value representation.
 
-Provides an IP address class that tracks health status and port information
-for use in health-aware DNS A records.
+Provides an IP address value object that stores a normalized address, optional
+health port, and health status for use in health-aware DNS A records.
 """
 
-from typing import Any
+from typing import Any, Optional
 
 from indisoluble.a_healthy_dns.tools.is_valid_ip import is_valid_ip
 from indisoluble.a_healthy_dns.tools.is_valid_port import is_valid_port
@@ -14,7 +14,7 @@ from indisoluble.a_healthy_dns.tools.normalize_ip import normalize_ip
 
 
 class AHealthyIp:
-    """IP address with health status and port for health checking."""
+    """IP address value object with health status and optional health port."""
 
     @property
     def ip(self) -> str:
@@ -22,8 +22,8 @@ class AHealthyIp:
         return self._ip
 
     @property
-    def health_port(self) -> int:
-        """Get the health check port number."""
+    def health_port(self) -> Optional[int]:
+        """Get the optional health check port number."""
         return self._health_port
 
     @property
@@ -32,14 +32,15 @@ class AHealthyIp:
         return self._is_healthy
 
     def __init__(self, ip: Any, health_port: Any, is_healthy: bool) -> None:
-        """Initialize healthy IP with validation of IP address and port."""
+        """Initialize healthy IP with validation of IP address and optional port."""
         success, error = is_valid_ip(ip)
         if not success:
             raise ValueError(f"Invalid IP address: {error}")
 
-        success, error = is_valid_port(health_port)
-        if not success:
-            raise ValueError(f"Invalid port: {error}")
+        if health_port is not None:
+            success, error = is_valid_port(health_port)
+            if not success:
+                raise ValueError(f"Invalid port: {error}")
 
         self._ip = normalize_ip(ip)
         self._health_port = health_port
@@ -69,7 +70,6 @@ class AHealthyIp:
 
     def __repr__(self) -> str:
         return (
-            f"AHealthyIp(ip='{self.ip}', "
-            f"health_port={self.health_port}, "
+            f"AHealthyIp(ip='{self.ip}', health_port={self.health_port}, "
             f"is_healthy={self.is_healthy})"
         )

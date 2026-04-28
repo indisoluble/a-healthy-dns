@@ -75,16 +75,16 @@ Argument details
 {len(_GRP_ZONE_RESOLUTIONS) * '-'}
 --{_NAME_HOSTED_ZONE}: The domain name for which this DNS server is authoritative.
 --{_NAME_ALIAS_ZONES}: Additional domain names that resolve to the same records.
---{_NAME_ZONE_RESOLUTIONS}: JSON configuration defining subdomains, their IP addresses, and health check ports.
+--{_NAME_ZONE_RESOLUTIONS}: JSON configuration defining subdomains, their IP addresses, and optional health check ports.
 
 Examples:
     --{_NAME_HOSTED_ZONE} example.com
     --{_NAME_ALIAS_ZONES} '["alias1.com", "alias2.com"]'
-    --{_NAME_ZONE_RESOLUTIONS} '{{"www":{{"ips":["192.168.1.100","192.168.1.101"],"health_port":8080}},"api":{{"ips":["192.168.1.102"],"health_port":8000}}}}'
+    --{_NAME_ZONE_RESOLUTIONS} '{{"www":{{"ips":["192.168.1.100","192.168.1.101"],"health_port":8080}},"static":["192.168.1.200"]}}'
 
 {_GRP_CONNECTIVITY_TESTS}
 {len(_GRP_CONNECTIVITY_TESTS) * '-'}
---{_NAME_TEST_MIN_INTERVAL}: Minimum interval between tests of a given IP (in seconds).
+--{_NAME_TEST_MIN_INTERVAL}: Minimum interval between tests of a given health-checked IP (in seconds).
 --{_NAME_TEST_TIMEOUT}: Maximum time to wait for a health check response (in seconds).
 
 {_GRP_NS_RECORDS}
@@ -106,7 +106,7 @@ Example usage
 =============
 %(prog)s \\
     --{_NAME_HOSTED_ZONE} example.com \\
-    --{_NAME_ZONE_RESOLUTIONS} '{{"www":{{"ips":["192.168.1.100"],"health_port":8080}}}}' \\
+    --{_NAME_ZONE_RESOLUTIONS} '{{"www":{{"ips":["192.168.1.100"],"health_port":8080}},"static":["192.168.1.200"]}}' \\
     --{_NAME_NAME_SERVERS} '["ns1.dns.example.net"]' \\
     --{_NAME_PORT} 53053
 """
@@ -157,9 +157,9 @@ Example usage
         required=True,
         dest=ARG_ZONE_RESOLUTIONS,
         help=(
-            f"Subdomains with IPs and health ports as JSON string "
+            f"Subdomains with IPs and optional health ports as JSON string "
             f"(ex. {{sd1: {{'{ARG_SUBDOMAIN_IP_LIST}': [ip1, ip2, ...], "
-            f"'{ARG_SUBDOMAIN_HEALTH_PORT}': port}}, ...}})"
+            f"'{ARG_SUBDOMAIN_HEALTH_PORT}': port}}, sd2: [ip3, ...]}})"
         ),
     )
     conn_group = parser.add_argument_group(_GRP_CONNECTIVITY_TESTS)
@@ -168,7 +168,7 @@ Example usage
         type=int,
         default=_VAL_MIN_TEST_INTERVAL,
         dest=_ARG_MIN_TEST_INTERVAL,
-        help=f"Minimum interval between connectivity tests (default: {_VAL_MIN_TEST_INTERVAL} seconds)",
+        help=f"Minimum interval between zone update cycles (default: {_VAL_MIN_TEST_INTERVAL} seconds)",
     )
     conn_group.add_argument(
         f"--{_NAME_TEST_TIMEOUT}",

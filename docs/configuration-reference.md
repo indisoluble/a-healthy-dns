@@ -44,9 +44,11 @@ The domain name for which this server is authoritative.
 | CLI | `--zone-resolutions` |
 | Docker | `DNS_ZONE_RESOLUTIONS` |
 
-JSON object mapping subdomain names to their IP list and health check port.
+JSON object mapping subdomain names to their IP list and optional health check port.
 
-**Schema:**
+There are two formats for each subdomain entry:
+
+**Health-checked** — provide a dict with both `ips` and `health_port`:
 ```json
 {
   "<subdomain>": {
@@ -55,6 +57,15 @@ JSON object mapping subdomain names to their IP list and health check port.
   }
 }
 ```
+
+**No health check** — provide a bare list of IPs; no TCP probe is performed and the IPs are always included in DNS responses:
+```json
+{
+  "<subdomain>": ["<ip1>", "<ip2>"]
+}
+```
+
+Both formats can be mixed in the same configuration.
 
 **Example:**
 ```json
@@ -66,14 +77,16 @@ JSON object mapping subdomain names to their IP list and health check port.
   "api": {
     "ips": ["192.168.1.102"],
     "health_port": 8000
-  }
+  },
+  "static": ["192.168.1.200"]
 }
 ```
 
 - Each `<subdomain>` is relative to the hosted zone (e.g. `www` → `www.sub.domain.com`).
 - `ips` must be valid IPv4 addresses (IPv6/AAAA is not supported).
-- `health_port` is the TCP port used for health checks.
+- `health_port` is the TCP port used for health checks. It is required when using the dict format.
 - All IPs for a subdomain share the same health port.
+- IPs configured as a bare list are not TCP health-checked; the zone updater treats them as healthy during refresh cycles.
 
 ### Name servers
 
@@ -124,9 +137,9 @@ An in-zone nameserver name such as `ns-192-0-2-53.app.example.test` is DNS-valid
 - the child zone should also serve authoritative address data for that same hostname,
 - and this project does not currently provide a separate static address-record surface for nameserver glue.
 
-`zone-resolutions` is for health-checked service `A` records. Every entry needs a real TCP `health_port` that is reachable from the DNS server process. Do not add a nameserver hostname to `zone-resolutions` only to satisfy glue or delegation metadata, and do not use a fake health port for it.
+`zone-resolutions` is the surface for `A` records. Dict entries with a `health_port` are health-checked; bare-list entries skip the health check and are always included in responses. Do not add a nameserver hostname to `zone-resolutions` only to satisfy glue or delegation metadata.
 
-Use an in-zone nameserver hostname only when that owner name is also a real, health-checkable service record. Otherwise, use an out-of-zone nameserver hostname.
+Use an in-zone nameserver hostname only when that owner name is also a real service record (health-checked or bare-list). Otherwise, use an out-of-zone nameserver hostname.
 
 ---
 
@@ -159,9 +172,9 @@ Log verbosity. Accepted values: `debug`, `info`, `warning`, `error`, `critical`.
 | CLI | `--test-min-interval` | `30` |
 | Docker | `DNS_TEST_MIN_INTERVAL` | _(not set — falls back to CLI default)_ |
 
-Minimum seconds between consecutive TCP health checks for a given IP address.
+Minimum seconds between consecutive zone update cycles. Entries with `health_port` are TCP health-checked during these cycles; bare-list entries are treated as healthy without a TCP probe.
 
-The effective interval is `max(test-min-interval, sum of per-IP timeout × count + per-record overhead)`. See [docs/system-patterns.md § 6](system-patterns.md#6-interval-calculation-pattern) for the full formula.
+The effective interval is `max(test-min-interval, sum of per-health-checked-IP timeout × count + per-record overhead)`. See [docs/system-patterns.md § 6](system-patterns.md#6-interval-calculation-pattern) for the full formula.
 
 ### Health-check timeout
 

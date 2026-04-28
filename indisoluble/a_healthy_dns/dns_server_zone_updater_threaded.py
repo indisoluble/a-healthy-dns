@@ -53,7 +53,7 @@ class DnsServerZoneUpdaterThreaded:
             elapsed = time.time() - start_time
             sleep_time = max(0.0, self._min_interval - elapsed)
             if sleep_time > 0.0 and not self._stop_event.wait(sleep_time):
-                logging.debug("Completed sleep between connectivity tests")
+                logging.debug("Completed sleep between zone updates")
 
     def start(self) -> None:
         """Start the background zone updater thread."""

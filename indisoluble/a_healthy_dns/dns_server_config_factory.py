@@ -79,40 +79,53 @@ def _make_healthy_a_record(
 
     subdomain_name = dns.name.from_text(subdomain, origin=origin_name)
 
-    if not isinstance(sub_config, dict):
+    if isinstance(sub_config, list):
+        ip_list = sub_config
+        health_port = None
+    elif isinstance(sub_config, dict):
+        ip_list = sub_config.get(ARG_SUBDOMAIN_IP_LIST)
+        if ip_list is None:
+            logging.error(
+                "Zone resolution for '%s' must include '%s' key",
+                subdomain,
+                ARG_SUBDOMAIN_IP_LIST,
+            )
+            return None
+
+        if not isinstance(ip_list, list):
+            logging.error(
+                "IP list for '%s' must be a list, got %s",
+                subdomain,
+                type(ip_list).__name__,
+            )
+            return None
+
+        if ARG_SUBDOMAIN_HEALTH_PORT not in sub_config:
+            logging.error(
+                "Zone resolution for '%s' must include '%s' key",
+                subdomain,
+                ARG_SUBDOMAIN_HEALTH_PORT,
+            )
+            return None
+
+        health_port = sub_config[ARG_SUBDOMAIN_HEALTH_PORT]
+        if health_port is None:
+            logging.error(
+                "Zone resolution for '%s' has invalid '%s': must not be null",
+                subdomain,
+                ARG_SUBDOMAIN_HEALTH_PORT,
+            )
+            return None
+    else:
         logging.error(
-            "Zone resolution for '%s' must be a dictionary, got %s",
+            "Zone resolution for '%s' must be a list or a dictionary, got %s",
             subdomain,
             type(sub_config).__name__,
         )
         return None
 
-    ip_list = sub_config.get(ARG_SUBDOMAIN_IP_LIST)
-    if ip_list is None:
-        logging.error(
-            "Zone resolution for '%s' must include '%s' key",
-            subdomain,
-            ARG_SUBDOMAIN_IP_LIST,
-        )
-        return None
-
-    if not isinstance(ip_list, list):
-        logging.error(
-            "IP list for '%s' must be a list, got %s", subdomain, type(ip_list).__name__
-        )
-        return None
-
     if not ip_list:
         logging.error("IP list for '%s' cannot be empty", subdomain)
-        return None
-
-    health_port = sub_config.get(ARG_SUBDOMAIN_HEALTH_PORT)
-    if health_port is None:
-        logging.error(
-            "Zone resolution for '%s' must include '%s' key",
-            subdomain,
-            ARG_SUBDOMAIN_HEALTH_PORT,
-        )
         return None
 
     try:
