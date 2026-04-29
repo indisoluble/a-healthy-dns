@@ -121,11 +121,11 @@ docker logs --tail 200 a-healthy-dns | grep -E "Checked IP|has no health port|A 
 ```
 Use `--log-level debug` or `DNS_LOG_LEVEL=debug` when you need the per-IP or per-record lines (`Checked IP`, `has no health port`, `Added A record`, `A record ... skipped`).
 
-**Common causes:** wrong zone → `REFUSED`; unconfigured subdomain → `NXDOMAIN`; all health-checked backend IPs unhealthy → A record skipped → `NXDOMAIN`; record type not published (e.g. `AAAA`) → `NOERROR` empty answer; backend health changed and answer set reflects the new state. IPs configured as a bare list are marked healthy by updater refreshes and do not make TCP connection attempts.
+**Common causes:** wrong zone → `REFUSED`; unconfigured subdomain → `NXDOMAIN`; all health-checked backend IPs unhealthy → A record skipped → `NXDOMAIN`; record type not published (e.g. `AAAA`) → `NOERROR` empty answer; backend health changed and answer set reflects the new state. Standard static entries are published without TCP connection attempts.
 
-**Backend check:** `nc -zv 192.168.1.100 8080`. When all health-checked IPs are unhealthy, look for `A record <name> skipped` after `Updating zone...`. For bare-list entries, wait for the first `Updating zone...` after `Starting Zone Updater...` before treating a startup-time `NXDOMAIN` as persistent.
+**Backend check:** `nc -zv 192.168.1.100 8080`. When all health-checked IPs are unhealthy, look for `A record <name> skipped` after `Updating zone...`. For standard static entries, wait for the first `Updating zone...` after `Starting Zone Updater...` before treating a startup-time `NXDOMAIN` as persistent.
 
-**Nameserver address queries:** `DNS_NAME_SERVERS` / `--ns` creates `NS` records only. It does not create `A` records for the nameserver hostnames, so address queries for out-of-zone nameserver names may return `REFUSED`, and in-zone nameserver names require separate glue/address planning. Do not add nameserver hostnames to `zone-resolutions` unless they are real service records, either health-checked or configured as a bare list. See [`docs/configuration-reference.md#name-servers`](configuration-reference.md#name-servers) for the canonical nameserver guidance.
+**Nameserver address queries:** `DNS_NAME_SERVERS` / `--ns` creates `NS` records only. It does not create `A` records for the nameserver hostnames, so address queries for out-of-zone nameserver names may return `REFUSED`, and in-zone nameserver names require separate glue/address planning. Do not add nameserver hostnames to `zone-resolutions` unless they are real service records, either health-checked or standard static. See [`docs/configuration-reference.md#name-servers`](configuration-reference.md#name-servers) for the canonical nameserver guidance.
 
 ### 2.4 DNSSEC responses are missing or rejected
 
@@ -184,7 +184,7 @@ These fragments span `info`, `warning`, and `debug`. Use `--log-level debug` or 
 | `Starting Zone Updater...` | Background health-check thread is starting | Normal during startup |
 | `DNS server listening on port ...` | UDP socket is bound and serving | Use `dig` to verify answers |
 | `Checked IP ... on port ... from ... to ...` | A health-checked IP was probed via TCP; shows previous and new status | Compare with backend reachability tests |
-| `IP ... has no health port, assumed healthy` | An IP with no health port was marked healthy without a TCP probe | Expected for bare-list subdomain entries |
+| `IP ... has no health port, assumed healthy` | An IP with no health port was marked healthy without a TCP probe | Expected for standard static subdomain entries |
 | `A records changed` | At least one backend health state changed | Expect a zone rebuild next |
 | `Updating zone...` | The zone is being rebuilt atomically | Watch for added or skipped records |
 | `Added A record ... to zone` | A healthy subdomain is present in the new zone | Confirm with `dig` |

@@ -106,6 +106,8 @@ The NS RRset is stored as a set because DNS RRset ordering is not meaningful. Th
 
 ## 4. Immutable value objects for domain state
 
+Externally, the product supports two record modes: health-checked entries and standard static entries. Internally, both modes share the same health-state model so the updater and zone writer can stay simple.
+
 Health state is propagated through **immutable value objects** rather than mutation:
 
 - `AHealthyIp.updated_status(is_healthy)` returns a **new** `AHealthyIp` instance if the status changed, or `self` when unchanged.
@@ -113,7 +115,7 @@ Health state is propagated through **immutable value objects** rather than mutat
 
 This makes change detection trivially safe: `object is new_object` indicates a change occurred.
 
-`AHealthyIp` is a passive value object: it validates and stores `ip`, `health_port`, and `is_healthy`, but it does not infer health state from the port value. Configuration parsing constructs all IPs with an initial unhealthy state. `DnsServerZoneUpdater` is the single source of truth for runtime health interpretation: it performs TCP checks for IPs with a `health_port` and treats `health_port is None` as healthy during refresh cycles.
+`AHealthyIp` is a passive value object: it validates and stores `ip`, `health_port`, and `is_healthy`, but it does not infer health state from the port value. Configuration parsing constructs all IPs with an initial unhealthy state. `DnsServerZoneUpdater` is the single source of truth for runtime health interpretation: it performs TCP checks for IPs with a `health_port` and treats `health_port is None` as healthy during refresh cycles. That shared internal treatment is an implementation detail; product-facing documentation should describe the feature as two supported record modes rather than as one mode being implicit.
 
 **Convention:** domain state objects must remain immutable. Produce updated copies instead of mutating in place.
 
@@ -136,7 +138,7 @@ initialize_zone()
 
 The `dns.versioned.Zone` writer is used inside a `with` block; the transaction is committed atomically on exit and rolled back on exception.
 
-`DnsServerZoneUpdaterThreaded.start()` initializes the zone once from the current health state before starting the refresh loop. Because configuration-created IPs start unhealthy, bare-list entries (IPs with no health check) become healthy on the first updater refresh rather than during raw configuration parsing.
+`DnsServerZoneUpdaterThreaded.start()` initializes the zone once from the current health state before starting the refresh loop. Because configuration-created IPs start unhealthy, standard static entries (IPs with no health check) become publishable on the first updater refresh rather than during raw configuration parsing.
 
 **Convention:** all zone modifications must go through a single writer transaction. Partial writes are not allowed.
 
