@@ -58,7 +58,7 @@ There are two first-class record modes for each subdomain entry:
 }
 ```
 
-**Standard static mode** — provide a bare list of IPs; no TCP probe is performed and the IPs are always included in DNS responses:
+**Standard static mode** — provide a bare list of IPs; no TCP probe is performed and the IPs are published without a health gate:
 ```json
 {
   "<subdomain>": ["<ip1>", "<ip2>"]
@@ -165,7 +165,7 @@ UDP port the DNS server listens on.
 
 Log verbosity. Accepted values: `debug`, `info`, `warning`, `error`, `critical`. The CLI parser currently expects these lowercase tokens.
 
-### Minimum health-check interval
+### Minimum update interval
 
 | Surface | Name | Default |
 |---|---|---|
@@ -241,7 +241,7 @@ Algorithm used to sign the zone. Accepted values are the DNSSEC algorithm names 
 | Name servers | `--ns` | `DNS_NAME_SERVERS` | **yes** | — |
 | Port | `--port` | `DNS_PORT` | no | `53053` (CLI) / `53` (Docker) |
 | Log level | `--log-level` | `DNS_LOG_LEVEL` | no | `info` |
-| Min check interval | `--test-min-interval` | `DNS_TEST_MIN_INTERVAL` | no | `30` s |
+| Min update interval | `--test-min-interval` | `DNS_TEST_MIN_INTERVAL` | no | `30` s |
 | Check timeout | `--test-timeout` | `DNS_TEST_TIMEOUT` | no | `2` s |
 | Alias zones | `--alias-zones` | `DNS_ALIAS_ZONES` | no | `[]` |
 | DNSSEC key path | `--priv-key-path` | `DNS_PRIV_KEY_PATH` | no | _(DNSSEC disabled)_ |
@@ -251,12 +251,12 @@ Algorithm used to sign the zone. Accepted values are the DNSSEC algorithm names 
 
 ## Full examples
 
-### CLI — minimal
+### CLI — mixed static and health-checked
 
 ```bash
 a-healthy-dns \
   --hosted-zone sub.domain.com \
-  --zone-resolutions '{"www":{"ips":["192.168.1.100"],"health_port":8080}}' \
+  --zone-resolutions '{"www":{"ips":["192.168.1.100"],"health_port":8080},"static":["192.168.1.200"]}' \
   --ns '["ns1.dns.example.net"]'
 ```
 

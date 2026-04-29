@@ -67,6 +67,7 @@ docker run -d \
 
 ```bash
 dig @localhost -p 53053 www.example.local
+dig @localhost -p 53053 static.example.local
 docker ps --filter name=a-healthy-dns
 docker logs --tail 50 a-healthy-dns
 ```

@@ -132,7 +132,7 @@ initialize_zone()
        ├─ _add_records_to_zone()
        │    ├─ NS record (apex)
        │    ├─ SOA record (apex)
-       │    └─ A records (one per subdomain with currently healthy IPs)
+       │    └─ A records (one per subdomain with currently publishable IPs)
        └─ _sign_zone()          — DNSSEC artifacts (if key is configured)
 ```
 

@@ -31,6 +31,7 @@ Verify it is running:
 ```bash
 dig @localhost -p 53053 example.local SOA
 dig @localhost -p 53053 www.example.local A
+dig @localhost -p 53053 static.example.local A
 docker logs --tail 50 a-healthy-dns
 ```
 

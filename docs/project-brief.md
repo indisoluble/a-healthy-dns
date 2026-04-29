@@ -6,7 +6,7 @@ It is the canonical home for goals, non-goals, constraints, and high-level requi
 
 ## What it is
 
-**A Healthy DNS** is an authoritative DNS server that can publish standard static IP addresses, health-checked IP addresses, or both within the same hosted zone. Health-checked entries use continuous TCP probes and DNS answers update automatically to reflect backend health. Standard static entries are published without a health probe. Both modes can be mixed per subdomain set within one deployment.
+**A Healthy DNS** is an authoritative DNS server that can publish standard static IP addresses, health-checked IP addresses, or both within the same hosted zone. Health-checked entries use continuous TCP probes and DNS answers update automatically to reflect backend health. Standard static entries are published without a health probe. Both modes can be mixed across subdomains within one deployment.
 
 ## Why it exists
 
@@ -17,7 +17,7 @@ Traditional authoritative DNS returns static records. When a backend becomes una
 1. **Automatic failover** — remove unhealthy IP addresses from DNS responses without manual intervention.
 2. **Authoritative DNS** — serve one hosted zone plus any configured alias zones as an authoritative UDP DNS server.
 3. **Dual record modes** — support standard static records, health-checked records, and mixed configurations as first-class product behavior.
-4. **Multi-domain support** — let multiple domain aliases reuse the same records without duplicating health-check state.
+4. **Multi-domain support** — let multiple domain aliases reuse the same records without duplicating record or health-check state.
 5. **Optional DNSSEC** — sign the zone when a private key is provided and publish the generated DNSSEC artifacts alongside the base records.
 6. **Configurable health checking** — allow operators to tune check interval, TCP timeout, and health port per health-checked subdomain.
 7. **Operational simplicity** — run as a single Python process or Docker container with startup-time configuration only.
@@ -49,10 +49,10 @@ Traditional authoritative DNS returns static records. When a backend becomes una
 
 - **R1** For each configured subdomain, maintain a list of backend IP addresses together with the publication mode that applies to them.
 - **R2** Periodically test TCP connectivity to each configured `(ip, health_port)` pair for health-checked entries; standard static entries are not probed and remain publishable without a health check.
-- **R3** Update the in-memory DNS zone when backend health state changes.
+- **R3** Update the in-memory DNS zone when the publishable A-record set changes.
 - **R4** Return only currently healthy health-checked IPs plus any configured standard static IPs in DNS A-record responses.
 - **R5** Return `NXDOMAIN` when a configured subdomain has no currently publishable IPs.
-- **R6** Support alias zones that resolve identically to the primary zone without separate health-check state.
+- **R6** Support alias zones that resolve identically to the primary zone without separate record or health-check state.
 - **R7** Compute SOA timing values from health-check parameters so DNS timing stays aligned with refresh behavior.
 - **R8** When a DNSSEC private key is provided, sign the zone and publish the generated DNSSEC artifacts alongside the base A, NS, and SOA data.
 

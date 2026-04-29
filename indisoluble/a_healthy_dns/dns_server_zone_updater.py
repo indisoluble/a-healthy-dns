@@ -187,7 +187,10 @@ class DnsServerZoneUpdater:
 
             if health_ip.health_port is None:
                 is_healthy = True
-                logging.debug("IP %s has no health port, assumed healthy", health_ip.ip)
+                logging.debug(
+                    "IP %s has no health port; publishing as standard static entry",
+                    health_ip.ip,
+                )
             else:
                 is_healthy = self._can_create_connection(health_ip.ip, health_ip.health_port)
                 logging.debug(
