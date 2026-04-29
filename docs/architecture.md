@@ -1,13 +1,16 @@
-# System Patterns
+# Architecture
 
 Architecture patterns and conventions for **A Healthy DNS**.
 
 This document is the canonical home for:
-- architecture and concurrency patterns,
+- current system structure,
+- runtime and concurrency model,
+- component boundaries and data flow,
 - module and package dependency direction,
+- integration points,
 - and physical file-placement rules.
 
-It does not own repository workflow, code-style conventions, parameter syntax, or protocol-level DNS behavior. Those topics live in [`docs/project-rules.md`](project-rules.md), [`docs/configuration-reference.md`](configuration-reference.md), and [`docs/RFC-conformance.md`](RFC-conformance.md).
+It does not own requirements, major decision rationale, repository workflow, code-style conventions, parameter syntax, or protocol-level DNS behavior. Those topics live in [`docs/requirements.md`](requirements.md), [`docs/decisions.md`](decisions.md), [`docs/workflow.md`](workflow.md), [`docs/implementation-notes.md`](implementation-notes.md), [`docs/configuration-reference.md`](configuration-reference.md), and [`docs/RFC-conformance.md`](RFC-conformance.md).
 
 ---
 
@@ -256,7 +259,7 @@ tests/
 
 The test tree mirrors the source tree by default. Most source folders have a corresponding test folder, and most source modules `foo.py` should have a mirrored test file `test_foo.py`.
 
-**Convention:** when adding a new source file `indisoluble/a_healthy_dns/X/foo.py`, default to placing its module-focused test under `tests/indisoluble/a_healthy_dns/X/`. Naming and broader test-convention rules are defined in [`docs/project-rules.md` § 6](project-rules.md#6-test-conventions). Exceptions are allowed when a dedicated mirrored test would be redundant or when behavior is better covered by a higher-level or cross-cutting test, but the exception should be deliberate and justified in the change.
+**Convention:** when adding a new source file `indisoluble/a_healthy_dns/X/foo.py`, default to placing its module-focused test under `tests/indisoluble/a_healthy_dns/X/`. Naming and broader test-convention rules are defined in [`docs/testing.md`](testing.md). Exceptions are allowed when a dedicated mirrored test would be redundant or when behavior is better covered by a higher-level or cross-cutting test, but the exception should be deliberate and justified in the change.
 
 ### 7.6 Placement rules for new files
 

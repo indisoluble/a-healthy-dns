@@ -2,7 +2,7 @@
 
 This document defines the product scope and acceptance boundaries for **A Healthy DNS**.
 
-It is the canonical home for goals, non-goals, constraints, and high-level requirements. Architecture and folder layout live in [`docs/system-patterns.md`](system-patterns.md); toolchain, dependency pins, QA workflow, and code conventions live in [`docs/project-rules.md`](project-rules.md); configuration syntax lives in [`docs/configuration-reference.md`](configuration-reference.md); protocol-level DNS behavior lives in [`docs/RFC-conformance.md`](RFC-conformance.md).
+It is the canonical home for purpose, scope, goals, non-goals, target operators, and high-level capabilities. Requirements live in [`docs/requirements.md`](requirements.md); major decision rationale lives in [`docs/decisions.md`](decisions.md); architecture and folder layout live in [`docs/architecture.md`](architecture.md); engineering rules live in [`docs/engineering-rules.md`](engineering-rules.md); configuration syntax lives in [`docs/configuration-reference.md`](configuration-reference.md); protocol-level DNS behavior lives in [`docs/RFC-conformance.md`](RFC-conformance.md).
 
 ## What it is
 
@@ -31,34 +31,10 @@ Traditional authoritative DNS returns static records. When a backend becomes una
 - **IPv6 answer support** — current implementation serves A records (IPv4) only.
 - **Traffic-shaping policy** — weighted, geographic, or policy-based routing is out of scope.
 
-## Constraints
+## High-level capabilities
 
-| Constraint | Detail |
-|---|---|
-| Runtime target | Python 3.10+ |
-| Network role | Authoritative DNS server for one hosted zone plus optional alias zones |
-| Transport | UDP only |
-| Record modes | Standard static IP entries and health-checked IP entries, both configurable within the same zone |
-| Health check protocol | TCP connectivity checks against configured health-checked backend IPs and ports; standard static entries skip probing |
-| Record scope | Base records: A, SOA, and NS; when DNSSEC is enabled, generated DNSKEY, NSEC, and RRSIG data are also published |
-| Deployment modes | Direct CLI process and Docker container |
-
-## Key requirements
-
-### Functional
-
-- **R1** For each configured subdomain, maintain a list of backend IP addresses together with the publication mode that applies to them.
-- **R2** Periodically test TCP connectivity to each configured `(ip, health_port)` pair for health-checked entries; standard static entries are not probed and remain publishable without a health check.
-- **R3** Update the in-memory DNS zone when the publishable A-record set changes.
-- **R4** Return only currently healthy health-checked IPs plus any configured standard static IPs in DNS A-record responses.
-- **R5** Return `NXDOMAIN` when a configured subdomain has no currently publishable IPs.
-- **R6** Support alias zones that resolve identically to the primary zone without separate record or health-check state.
-- **R7** Compute SOA timing values from health-check parameters so DNS timing stays aligned with refresh behavior.
-- **R8** When a DNSSEC private key is provided, sign the zone and publish the generated DNSSEC artifacts alongside the base A, NS, and SOA data.
-
-### Operational
-
-- **R9** Accept startup configuration through CLI arguments and Docker environment variables.
-- **R10** Validate startup configuration before serving traffic; invalid configuration must fail fast and exit non-zero.
-- **R11** Provide structured log output at configurable verbosity levels.
-- **R12** Start serving DNS queries within seconds and require no external database or coordination service.
+- Serve authoritative UDP DNS answers for one hosted zone and optional alias zones.
+- Publish A, SOA, and NS records, with optional DNSSEC-generated DNSKEY, NSEC, and RRSIG data.
+- Mix standard static A records and TCP health-checked A records in the same zone.
+- Update the in-memory zone automatically as backend health changes.
+- Run directly from the Python CLI or as a Docker container.

@@ -69,9 +69,15 @@ Start with [docs/table-of-contents.md](docs/table-of-contents.md) for the minimu
 | Document | Contents |
 |---|---|
 | [docs/table-of-contents.md](docs/table-of-contents.md) | Full documentation index, minimum reading set, and canonical topic ownership |
-| [docs/project-brief.md](docs/project-brief.md) | Goals, non-goals, constraints, requirements |
-| [docs/system-patterns.md](docs/system-patterns.md) | Architecture patterns, structural conventions, and folder hierarchy / codebase layout rules |
-| [docs/project-rules.md](docs/project-rules.md) | Toolchain, QA workflow, CI/release rules, and repository-specific code conventions |
+| [docs/project-brief.md](docs/project-brief.md) | Purpose, scope, goals, non-goals, and high-level capabilities |
+| [docs/requirements.md](docs/requirements.md) | Functional, operational, protocol, quality, reliability, and deployment requirements |
+| [docs/architecture.md](docs/architecture.md) | Runtime model, component boundaries, data flow, and file placement rules |
+| [docs/decisions.md](docs/decisions.md) | Major design decisions, rationale, alternatives, and consequences |
+| [docs/engineering-rules.md](docs/engineering-rules.md) | Repository-wide engineering principles and source-of-truth rules |
+| [docs/implementation-notes.md](docs/implementation-notes.md) | Python-specific implementation conventions |
+| [docs/testing.md](docs/testing.md) | Test strategy, QA commands, and test placement rules |
+| [docs/workflow.md](docs/workflow.md) | CI validation, release readiness gates, and documentation workflow |
+| [docs/release.md](docs/release.md) | Versioning, release publication, artifacts, changelog, and compatibility |
 | [docs/RFC-conformance.md](docs/RFC-conformance.md) | Wire-level authoritative UDP behavior, response semantics, and RFC scope boundaries |
 | [docs/configuration-reference.md](docs/configuration-reference.md) | CLI flags and Docker environment variables with defaults and examples |
 | [docs/docker.md](docs/docker.md) | Docker deployment guide: quick start, Compose, DNSSEC mounts, hardening, and upgrades |

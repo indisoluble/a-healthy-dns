@@ -9,7 +9,7 @@ It owns:
 - live debugging commands,
 - and monitoring / incident handoff guidance.
 
-It does not own deployment setup, parameter reference, or architecture details. Use [`docs/docker.md`](docker.md) for Docker deployment, [`docs/configuration-reference.md`](configuration-reference.md) for parameter definitions, [`docs/system-patterns.md`](system-patterns.md) for architecture and timing derivation, and [`docs/RFC-conformance.md`](RFC-conformance.md) for wire-level response semantics.
+It does not own deployment setup, parameter reference, or architecture details. Use [`docs/docker.md`](docker.md) for Docker deployment, [`docs/configuration-reference.md`](configuration-reference.md) for parameter definitions, [`docs/architecture.md`](architecture.md) for architecture and timing derivation, and [`docs/RFC-conformance.md`](RFC-conformance.md) for wire-level response semantics.
 
 ---
 

@@ -2,10 +2,10 @@
 
 Full parameter reference for **A Healthy DNS**, covering both the CLI (`a-healthy-dns`) and Docker environment variables.
 
-This document is the canonical home for CLI flags, Docker environment variables, default values, and configuration examples. It does not own deployment procedures, architecture details, or troubleshooting runbooks. Those topics live in [`docs/docker.md`](docker.md), [`docs/system-patterns.md`](system-patterns.md), and [`docs/troubleshooting.md`](troubleshooting.md).
+This document is the canonical home for CLI flags, Docker environment variables, default values, and configuration examples. It does not own deployment procedures, architecture details, or troubleshooting runbooks. Those topics live in [`docs/docker.md`](docker.md), [`docs/architecture.md`](architecture.md), and [`docs/troubleshooting.md`](troubleshooting.md).
 
 > **Quick-start:** see [`README.md`](../README.md).  
-> **Parameter behaviour details** (TTL derivation, DNSSEC timing): see [`docs/system-patterns.md`](system-patterns.md).
+> **Parameter behaviour details** (TTL derivation, DNSSEC timing): see [`docs/architecture.md`](architecture.md).
 
 ---
 
@@ -174,7 +174,7 @@ Log verbosity. Accepted values: `debug`, `info`, `warning`, `error`, `critical`.
 
 Minimum seconds between consecutive zone update cycles. Entries with `health_port` are TCP health-checked during these cycles; standard static entries remain publishable without a TCP probe.
 
-The effective interval is `max(test-min-interval, sum of per-health-checked-IP timeout × count + per-record overhead)`. See [docs/system-patterns.md § 6](system-patterns.md#6-interval-calculation-pattern) for the full formula.
+The effective interval is `max(test-min-interval, sum of per-health-checked-IP timeout × count + per-record overhead)`. See [docs/architecture.md § 6](architecture.md#6-interval-calculation-pattern) for the full formula.
 
 ### Health-check timeout
 
@@ -198,7 +198,7 @@ JSON array of additional domain names that resolve to the same records as the ho
 ["sub.domain.net", "sub.domain.org"]
 ```
 
-See [docs/system-patterns.md § 8](system-patterns.md#8-multi-domain-support-via-zoneorigins) for the implementation pattern.
+See [docs/architecture.md § 8](architecture.md#8-multi-domain-support-via-zoneorigins) for the implementation pattern.
 
 ---
 

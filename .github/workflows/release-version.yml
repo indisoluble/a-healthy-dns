@@ -71,7 +71,7 @@ jobs:
         
         gh release create "$TAG" \
           --title "Release $VERSION" \
-          --notes "Automated release for version $VERSION" \
+          --generate-notes \
           --latest
         
         echo "✅ Created GitHub release: $TAG"

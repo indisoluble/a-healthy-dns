@@ -8,7 +8,7 @@ It owns:
 - the runtime container contract that operators need to preserve,
 - and Docker-focused deployment patterns and hardening guidance.
 
-It does not own parameter-by-parameter reference material, repository-side container build rules, or troubleshooting procedures. Those topics live in [`docs/configuration-reference.md`](configuration-reference.md), [`docs/project-rules.md`](project-rules.md), and [`docs/troubleshooting.md`](troubleshooting.md).
+It does not own parameter-by-parameter reference material, repository-side container build rules, or troubleshooting procedures. Those topics live in [`docs/configuration-reference.md`](configuration-reference.md), [`docs/engineering-rules.md`](engineering-rules.md), and [`docs/troubleshooting.md`](troubleshooting.md).
 
 Commands below use `docker compose` syntax. If you use the legacy standalone binary, replace it with `docker-compose`.
 
@@ -123,7 +123,7 @@ docker run -d \
 
 Keep key files restrictive on the host side. The runtime image expects `/app/keys` to be private to `appuser`.
 
-For exact parameter semantics, use [`docs/configuration-reference.md`](configuration-reference.md). For DNSSEC design boundaries, use [`docs/system-patterns.md`](system-patterns.md).
+For exact parameter semantics, use [`docs/configuration-reference.md`](configuration-reference.md). For DNSSEC design boundaries, use [`docs/architecture.md`](architecture.md).
 
 ---
 
