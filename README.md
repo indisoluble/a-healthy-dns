@@ -5,9 +5,9 @@
 [![Codecov](https://codecov.io/gh/indisoluble/a-healthy-dns/branch/master/graph/badge.svg)](https://codecov.io/gh/indisoluble/a-healthy-dns)
 [![Docker Hub](https://img.shields.io/docker/v/indisoluble/a-healthy-dns?label=docker%20hub&logo=docker)](https://hub.docker.com/r/indisoluble/a-healthy-dns)
 
-An authoritative UDP DNS server that continuously health-checks configured backend IPs via TCP, supports always-on static IP entries, and serves healthy A records.
+An authoritative UDP DNS server for one hosted zone that can serve standard static A records, health-checked A records, or a mix of both.
 
-When a subdomain has no currently healthy or always-on IPs, that name fails closed with `NXDOMAIN` until a later refresh marks at least one configured IP healthy.
+Health-checked entries are published only while their TCP check passes. Standard static entries are published without a health probe. When a subdomain has no currently publishable IPs, that name fails closed with `NXDOMAIN`.
 
 ## Quick start
 
@@ -31,6 +31,7 @@ Verify it is running:
 ```bash
 dig @localhost -p 53053 example.local SOA
 dig @localhost -p 53053 www.example.local A
+dig @localhost -p 53053 static.example.local A
 docker logs --tail 50 a-healthy-dns
 ```
 
@@ -53,10 +54,11 @@ Requires Python 3.10+.
 
 ## Behavior at a glance
 
+- Each subdomain can be configured in one of two supported record modes: health-checked (`{"ips":[...],"health_port":...}`) or standard static (`["ip1","ip2"]`).
 - Health checks run in the background, testing TCP connectivity only for entries configured with a `health_port`.
-- Subdomains configured as a bare list of IPs have no `health_port`; the zone updater treats those IPs as healthy during refresh cycles.
-- When an IP becomes unhealthy it is removed from DNS A record responses immediately on the next zone update.
-- When a subdomain has no currently healthy or always-on IPs, the subdomain returns `NXDOMAIN`.
+- Standard static entries are returned without a health probe and can be mixed freely with health-checked entries in the same zone.
+- When a health-checked IP becomes unhealthy it is removed from DNS A record responses on the next zone update.
+- When a subdomain has no currently publishable IPs, the subdomain returns `NXDOMAIN`.
 - Multiple domain aliases can share the same records without duplicated checks (`--alias-zones`).
 - DNSSEC zone signing is supported when a private key is provided (`--priv-key-path`).
 

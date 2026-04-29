@@ -84,7 +84,7 @@ Examples:
 
 {_GRP_CONNECTIVITY_TESTS}
 {len(_GRP_CONNECTIVITY_TESTS) * '-'}
---{_NAME_TEST_MIN_INTERVAL}: Minimum interval between tests of a given health-checked IP (in seconds).
+--{_NAME_TEST_MIN_INTERVAL}: Minimum interval between zone update cycles; health-checked entries are probed during these cycles (in seconds).
 --{_NAME_TEST_TIMEOUT}: Maximum time to wait for a health check response (in seconds).
 
 {_GRP_NS_RECORDS}
@@ -168,7 +168,10 @@ Example usage
         type=int,
         default=_VAL_MIN_TEST_INTERVAL,
         dest=_ARG_MIN_TEST_INTERVAL,
-        help=f"Minimum interval between zone update cycles (default: {_VAL_MIN_TEST_INTERVAL} seconds)",
+        help=(
+            "Minimum interval between zone update cycles "
+            f"(default: {_VAL_MIN_TEST_INTERVAL} seconds)"
+        ),
     )
     conn_group.add_argument(
         f"--{_NAME_TEST_TIMEOUT}",

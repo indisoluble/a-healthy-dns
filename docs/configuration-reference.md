@@ -46,9 +46,9 @@ The domain name for which this server is authoritative.
 
 JSON object mapping subdomain names to their IP list and optional health check port.
 
-There are two formats for each subdomain entry:
+There are two first-class record modes for each subdomain entry:
 
-**Health-checked** — provide a dict with both `ips` and `health_port`:
+**Health-checked mode** — provide a dict with both `ips` and `health_port`:
 ```json
 {
   "<subdomain>": {
@@ -58,14 +58,14 @@ There are two formats for each subdomain entry:
 }
 ```
 
-**No health check** — provide a bare list of IPs; no TCP probe is performed and the IPs are always included in DNS responses:
+**Standard static mode** — provide a bare list of IPs; no TCP probe is performed and the IPs are published without a health gate:
 ```json
 {
   "<subdomain>": ["<ip1>", "<ip2>"]
 }
 ```
 
-Both formats can be mixed in the same configuration.
+Both modes can be mixed in the same configuration.
 
 **Example:**
 ```json
@@ -86,7 +86,7 @@ Both formats can be mixed in the same configuration.
 - `ips` must be valid IPv4 addresses (IPv6/AAAA is not supported).
 - `health_port` is the TCP port used for health checks. It is required when using the dict format.
 - All IPs for a subdomain share the same health port.
-- IPs configured as a bare list are not TCP health-checked; the zone updater treats them as healthy during refresh cycles.
+- Standard static entries are not TCP health-checked and remain publishable without a health probe.
 
 ### Name servers
 
@@ -137,9 +137,9 @@ An in-zone nameserver name such as `ns-192-0-2-53.app.example.test` is DNS-valid
 - the child zone should also serve authoritative address data for that same hostname,
 - and this project does not currently provide a separate static address-record surface for nameserver glue.
 
-`zone-resolutions` is the surface for `A` records. Dict entries with a `health_port` are health-checked; bare-list entries skip the health check and are always included in responses. Do not add a nameserver hostname to `zone-resolutions` only to satisfy glue or delegation metadata.
+`zone-resolutions` is the surface for `A` records. Dict entries with a `health_port` use health-checked mode; bare-list entries use standard static mode. Do not add a nameserver hostname to `zone-resolutions` only to satisfy glue or delegation metadata.
 
-Use an in-zone nameserver hostname only when that owner name is also a real service record (health-checked or bare-list). Otherwise, use an out-of-zone nameserver hostname.
+Use an in-zone nameserver hostname only when that owner name is also a real service record (health-checked or standard static). Otherwise, use an out-of-zone nameserver hostname.
 
 ---
 
@@ -165,14 +165,14 @@ UDP port the DNS server listens on.
 
 Log verbosity. Accepted values: `debug`, `info`, `warning`, `error`, `critical`. The CLI parser currently expects these lowercase tokens.
 
-### Minimum health-check interval
+### Minimum update interval
 
 | Surface | Name | Default |
 |---|---|---|
 | CLI | `--test-min-interval` | `30` |
 | Docker | `DNS_TEST_MIN_INTERVAL` | _(not set — falls back to CLI default)_ |
 
-Minimum seconds between consecutive zone update cycles. Entries with `health_port` are TCP health-checked during these cycles; bare-list entries are treated as healthy without a TCP probe.
+Minimum seconds between consecutive zone update cycles. Entries with `health_port` are TCP health-checked during these cycles; standard static entries remain publishable without a TCP probe.
 
 The effective interval is `max(test-min-interval, sum of per-health-checked-IP timeout × count + per-record overhead)`. See [docs/system-patterns.md § 6](system-patterns.md#6-interval-calculation-pattern) for the full formula.
 
@@ -241,7 +241,7 @@ Algorithm used to sign the zone. Accepted values are the DNSSEC algorithm names 
 | Name servers | `--ns` | `DNS_NAME_SERVERS` | **yes** | — |
 | Port | `--port` | `DNS_PORT` | no | `53053` (CLI) / `53` (Docker) |
 | Log level | `--log-level` | `DNS_LOG_LEVEL` | no | `info` |
-| Min check interval | `--test-min-interval` | `DNS_TEST_MIN_INTERVAL` | no | `30` s |
+| Min update interval | `--test-min-interval` | `DNS_TEST_MIN_INTERVAL` | no | `30` s |
 | Check timeout | `--test-timeout` | `DNS_TEST_TIMEOUT` | no | `2` s |
 | Alias zones | `--alias-zones` | `DNS_ALIAS_ZONES` | no | `[]` |
 | DNSSEC key path | `--priv-key-path` | `DNS_PRIV_KEY_PATH` | no | _(DNSSEC disabled)_ |
@@ -251,12 +251,12 @@ Algorithm used to sign the zone. Accepted values are the DNSSEC algorithm names 
 
 ## Full examples
 
-### CLI — minimal
+### CLI — mixed static and health-checked
 
 ```bash
 a-healthy-dns \
   --hosted-zone sub.domain.com \
-  --zone-resolutions '{"www":{"ips":["192.168.1.100"],"health_port":8080}}' \
+  --zone-resolutions '{"www":{"ips":["192.168.1.100"],"health_port":8080},"static":["192.168.1.200"]}' \
   --ns '["ns1.dns.example.net"]'
 ```
 

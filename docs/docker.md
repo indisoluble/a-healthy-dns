@@ -35,14 +35,14 @@ The published image and the repository `Dockerfile` expose a few operator-visibl
 
 ### Published image
 
-This startup pattern keeps the container on a high port so local testing does not require binding host port `53`.
+This startup pattern keeps the container on a high port so local testing does not require binding host port `53`. The example intentionally mixes one health-checked record and one standard static record.
 
 ```bash
 docker run -d \
   --name a-healthy-dns \
   -p 53053:53053/udp \
   -e DNS_HOSTED_ZONE="example.local" \
-  -e DNS_ZONE_RESOLUTIONS='{"www":{"ips":["192.168.1.100","192.168.1.101"],"health_port":8080}}' \
+  -e DNS_ZONE_RESOLUTIONS='{"www":{"ips":["192.168.1.100","192.168.1.101"],"health_port":8080},"static":["192.168.1.200"]}' \
   -e DNS_NAME_SERVERS='["ns1.dns.example.net"]' \
   -e DNS_PORT="53053" \
   indisoluble/a-healthy-dns
@@ -57,7 +57,7 @@ docker run -d \
   --name a-healthy-dns-local \
   -p 53053:53053/udp \
   -e DNS_HOSTED_ZONE="example.local" \
-  -e DNS_ZONE_RESOLUTIONS='{"www":{"ips":["192.168.1.100"],"health_port":8080}}' \
+  -e DNS_ZONE_RESOLUTIONS='{"www":{"ips":["192.168.1.100"],"health_port":8080},"static":["192.168.1.200"]}' \
   -e DNS_NAME_SERVERS='["ns1.dns.example.net"]' \
   -e DNS_PORT="53053" \
   a-healthy-dns:local
@@ -67,6 +67,7 @@ docker run -d \
 
 ```bash
 dig @localhost -p 53053 www.example.local
+dig @localhost -p 53053 static.example.local
 docker ps --filter name=a-healthy-dns
 docker logs --tail 50 a-healthy-dns
 ```
@@ -113,7 +114,7 @@ docker run -d \
   -p 53:53/udp \
   -v "$(pwd)/keys:/app/keys:ro" \
   -e DNS_HOSTED_ZONE="example.com" \
-  -e DNS_ZONE_RESOLUTIONS='{"www":{"ips":["192.168.1.100"],"health_port":8080}}' \
+  -e DNS_ZONE_RESOLUTIONS='{"www":{"ips":["192.168.1.100"],"health_port":8080},"static":["192.168.1.200"]}' \
   -e DNS_NAME_SERVERS='["ns1.dns.example.net"]' \
   -e DNS_PRIV_KEY_PATH="/app/keys/private.pem" \
   -e DNS_PRIV_KEY_ALG="RSASHA256" \
@@ -141,7 +142,7 @@ docker run -d \
   --name a-healthy-dns \
   -p 53:53/udp \
   -e DNS_HOSTED_ZONE="example.com" \
-  -e DNS_ZONE_RESOLUTIONS='{"www":{"ips":["10.0.1.100","10.0.1.101"],"health_port":80}}' \
+  -e DNS_ZONE_RESOLUTIONS='{"www":{"ips":["10.0.1.100","10.0.1.101"],"health_port":80},"static":["10.0.1.200"]}' \
   -e DNS_NAME_SERVERS='["ns1.dns.example.net","ns2.dns.example.net"]' \
   indisoluble/a-healthy-dns
 ```
@@ -191,7 +192,7 @@ docker run -d \
   --security-opt=no-new-privileges:true \
   -p 53:53/udp \
   -e DNS_HOSTED_ZONE="example.com" \
-  -e DNS_ZONE_RESOLUTIONS='{"www":{"ips":["10.0.1.100"],"health_port":80}}' \
+  -e DNS_ZONE_RESOLUTIONS='{"www":{"ips":["10.0.1.100"],"health_port":80},"static":["10.0.1.200"]}' \
   -e DNS_NAME_SERVERS='["ns1.dns.example.net"]' \
   indisoluble/a-healthy-dns
 ```
