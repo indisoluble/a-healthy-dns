@@ -26,6 +26,20 @@ Dev/test packages (`pytest`, `pytest-cov`) are installed directly in CI and are 
 
 Keep upper-bound pins tight at the minor version level. Both runtime libraries have historically introduced breaking API changes across minor versions.
 
+## Naming Rules
+
+| Context | Convention |
+|---|---|
+| Source modules | `snake_case.py` |
+| Test modules | `test_<source_module>.py` |
+| Class names | `PascalCase` |
+| Function / method names | `snake_case` |
+| Constants | `UPPER_SNAKE_CASE` |
+| Private helpers | prefix `_` |
+| CLI argument names | `kebab-case` (for example, `--hosted-zone`) |
+| `argparse` dest / internal keys | `snake_case`, matching `ARG_*` constants where applicable |
+| Docker environment variables | `DNS_` prefix + `UPPER_SNAKE_CASE` |
+
 ## Import Ordering
 
 Each source module organizes imports into five groups, each separated by a blank line:

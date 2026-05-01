@@ -42,20 +42,6 @@ When a change alters one of these surfaces, update the implementation and the ca
 - Keep query handling read-only with respect to zone state.
 - Keep DNSSEC logic isolated to `records/dnssec.py` and the signing call in `DnsServerZoneUpdater`.
 
-## Naming Rules
-
-| Context | Convention |
-|---|---|
-| Source modules | `snake_case.py` |
-| Test modules | `test_<source_module>.py` |
-| Class names | `PascalCase` |
-| Function / method names | `snake_case` |
-| Constants | `UPPER_SNAKE_CASE` |
-| Private helpers | prefix `_` |
-| CLI argument names | `kebab-case` (for example, `--hosted-zone`) |
-| `argparse` dest / internal keys | `snake_case`, matching `ARG_*` constants where applicable |
-| Docker environment variables | `DNS_` prefix + `UPPER_SNAKE_CASE` |
-
 ## Testing Expectations
 
 - Behavior changes require focused automated tests at the lowest useful level.
