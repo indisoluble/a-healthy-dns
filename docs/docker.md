@@ -231,6 +231,72 @@ If you deploy through Kubernetes, Swarm, Nomad, or another orchestrator, preserv
 - `/app/keys` for DNSSEC key mounts,
 - and `NET_BIND_SERVICE` when the runtime enforces privileged-port restrictions and still needs port `53`.
 
-For AWS ECS, put the same CLI flags in the container definition `command` array. The image entrypoint is already `a-healthy-dns`.
+### AWS ECS Anywhere / external VMs
+
+For Amazon ECS external instances, use the `EXTERNAL` launch type. External instances do not support `awsvpc` networking, ECS service load balancing, or ECS service discovery, so authoritative DNS traffic must reach the VM directly. Publish the external VM addresses in your DNS delegation and allow inbound UDP `53` through the VM firewall and any upstream network firewall.
+
+Use `host` networking when the task should answer directly on the VM's UDP port `53`. This keeps DNS port ownership explicit: only one task per VM can bind host port `53`.
+
+Task definition shape:
+
+```json
+{
+  "family": "a-healthy-dns",
+  "requiresCompatibilities": ["EXTERNAL"],
+  "networkMode": "host",
+  "cpu": "256",
+  "memory": "256",
+  "containerDefinitions": [
+    {
+      "name": "a-healthy-dns",
+      "image": "indisoluble/a-healthy-dns:<version>",
+      "essential": true,
+      "user": "65532",
+      "readonlyRootFilesystem": true,
+      "dockerSecurityOptions": ["no-new-privileges"],
+      "linuxParameters": {
+        "capabilities": {
+          "drop": ["ALL"],
+          "add": ["NET_BIND_SERVICE"]
+        }
+      },
+      "portMappings": [
+        {
+          "containerPort": 53,
+          "hostPort": 53,
+          "protocol": "udp"
+        }
+      ],
+      "command": [
+        "--port", "53",
+        "--hosted-zone", "example.com",
+        "--zone-resolutions", "{\"www\":{\"ips\":[\"10.0.1.100\"],\"health_port\":80}}",
+        "--ns", "[\"ns1.dns.example.net\"]"
+      ],
+      "mountPoints": [
+        {
+          "sourceVolume": "dnssec-keys",
+          "containerPath": "/app/keys",
+          "readOnly": true
+        }
+      ]
+    }
+  ],
+  "volumes": [
+    {
+      "name": "dnssec-keys",
+      "host": {
+        "sourcePath": "/etc/a-healthy-dns/keys"
+      }
+    }
+  ]
+}
+```
+
+If DNSSEC is disabled, omit `mountPoints` and `volumes`. If DNSSEC is enabled, make the host key directory readable by uid `65532` and keep the mount read-only.
+
+External instances must also be able to reach the required ECS and SSM regional endpoints. If you send logs to CloudWatch Logs, configure a task execution IAM role and an ECS logging driver on the external instance.
+
+`bridge` networking is also valid on ECS external instances. Use it only when you need Docker bridge isolation; map `hostPort` `53` to the container port passed with `--port`. Mapping host port `53` to a non-privileged container port such as `53053` avoids needing `NET_BIND_SERVICE` inside the container.
 
 This document does not provide full orchestrator manifests. Keep the orchestrator config aligned with the runtime contract above and with the repository's Dockerfile.
