@@ -152,7 +152,7 @@ Use an in-zone nameserver hostname only when that owner name is also a real serv
 
 UDP port the DNS server listens on.
 
-> **Note:** Docker examples that expose container port `53` pass `--port 53` explicitly. The image uses `setcap cap_net_bind_service` on the Python binary to allow binding to privileged port 53 without root.
+> **Note:** Docker examples that expose container port `53` pass `--port 53` explicitly. Deployments that enforce privileged-port restrictions must grant `NET_BIND_SERVICE` to let the non-root container process bind port `53`.
 
 ### Log level
 

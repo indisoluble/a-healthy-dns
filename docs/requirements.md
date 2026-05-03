@@ -53,5 +53,5 @@ It is the canonical home for functional, operational, quality, compatibility, se
 ## Security And Deployment Requirements
 
 - **R22** Keep DNSSEC private keys optional and loaded only when explicitly configured.
-- **R23** The Docker image must run the application as the non-root `appuser` while retaining the ability to bind container port `53` through `CAP_NET_BIND_SERVICE`.
+- **R23** The Docker image must run the application as the Chainguard default non-root uid `65532` while retaining the ability to bind container port `53` when deployments grant `NET_BIND_SERVICE`.
 - **R24** `/app/keys` remains the Docker mount point for DNSSEC private keys and should be mounted read-only by operators.

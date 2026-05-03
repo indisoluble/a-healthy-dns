@@ -20,14 +20,14 @@ The published image and the repository `Dockerfile` expose a few operator-visibl
 
 | Aspect | Runtime behavior |
 |---|---|
-| Base image | Multi-stage build based on `python:3-slim` |
+| Base image | Multi-stage build based on `cgr.dev/chainguard/python:latest-dev` and `cgr.dev/chainguard/python:latest` |
 | Process model | `a-healthy-dns` runs directly as PID 1 and handles `SIGINT` / `SIGTERM` |
-| Runtime user | Non-root `appuser` with uid/gid `10000` |
+| Runtime user | Chainguard default non-root user, uid `65532`; this keeps the image aligned with the distroless base instead of adding custom user-management steps |
 | Exposed container port | `53/udp`; pass `--port 53` when the process should listen on that port |
 | Configuration surface | Pass normal `a-healthy-dns` CLI flags as the container command |
 | DNSSEC key mount | `/app/keys` is the expected mount point for private keys |
-| Privileged bind strategy | The Python interpreter has `CAP_NET_BIND_SERVICE` via `setcap` so the process can bind port `53` without running as root |
-| Image footprint | The runtime image is intentionally slim; use the troubleshooting guide for diagnostics rather than expecting general debug tools inside the container |
+| Privileged bind strategy | Add runtime `NET_BIND_SERVICE` when the container must bind port `53` and the runtime enforces privileged-port restrictions |
+| Image footprint | The runtime image is distroless and does not include a shell, `pip`, or an OS package manager; use the troubleshooting guide for diagnostics |
 
 ---
 
@@ -90,7 +90,7 @@ The example file already demonstrates the main deployment choices this project e
 - explicit UDP port mapping,
 - CLI flag configuration through the Compose `command`,
 - a dedicated bridge network,
-- non-root execution as `10000:10000`,
+- non-root execution as uid `65532`,
 - `no-new-privileges`,
 - `cap_drop: [ALL]` plus `NET_BIND_SERVICE`,
 - and memory/CPU limits.
@@ -122,7 +122,7 @@ docker run -d \
   --priv-key-alg RSASHA256
 ```
 
-Keep key files restrictive on the host side. The runtime image expects `/app/keys` to be private to `appuser`.
+Keep key files restrictive on the host side. The runtime image expects `/app/keys` to be private to uid `65532`.
 
 For exact parameter semantics, use [`docs/configuration-reference.md`](configuration-reference.md). For DNSSEC design boundaries, use [`docs/architecture.md`](architecture.md).
 
@@ -149,7 +149,7 @@ docker run -d \
   --ns '["ns1.dns.example.net","ns2.dns.example.net"]'
 ```
 
-If your runtime drops all Linux capabilities, add back `NET_BIND_SERVICE` explicitly to preserve port-53 binding:
+If your runtime enforces privileged-port restrictions, add `NET_BIND_SERVICE` explicitly to preserve port-53 binding:
 
 ```bash
 docker run -d \
@@ -186,7 +186,7 @@ Example hardened run:
 ```bash
 docker run -d \
   --name a-healthy-dns \
-  --user 10000:10000 \
+  --user 65532 \
   --cap-drop=ALL \
   --cap-add=NET_BIND_SERVICE \
   --read-only \
@@ -227,9 +227,9 @@ When upgrading:
 If you deploy through Kubernetes, Swarm, Nomad, or another orchestrator, preserve the same container contract:
 - UDP exposure for the DNS listener,
 - the CLI-argument configuration surface,
-- non-root execution as uid/gid `10000`,
+- non-root execution as uid `65532`,
 - `/app/keys` for DNSSEC key mounts,
-- and `NET_BIND_SERVICE` only when the runtime drops capabilities and still needs port `53`.
+- and `NET_BIND_SERVICE` when the runtime enforces privileged-port restrictions and still needs port `53`.
 
 For AWS ECS, put the same CLI flags in the container definition `command` array. The image entrypoint is already `a-healthy-dns`.
 

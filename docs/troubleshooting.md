@@ -58,7 +58,7 @@ nc -zv 192.168.1.101 8080
 From inside the running container:
 
 ```bash
-docker exec a-healthy-dns python3 -c "import socket; socket.create_connection(('192.168.1.100', 8080), 2).close(); print('ok')"
+docker exec a-healthy-dns python -c "import socket; socket.create_connection(('192.168.1.100', 8080), 2).close(); print('ok')"
 ```
 
 ### 1.4 Interpret the first result correctly
@@ -225,7 +225,7 @@ sudo tcpdump -i any -n udp port 53053 -w dns-traffic.pcap
 
 **Backend connectivity from inside the container** (use when host-to-backend looks healthy but container cannot reach the backend):
 ```bash
-docker exec a-healthy-dns python3 -c "import socket; socket.create_connection(('192.168.1.100', 8080), 2).close(); print('ok')"
+docker exec a-healthy-dns python -c "import socket; socket.create_connection(('192.168.1.100', 8080), 2).close(); print('ok')"
 ```
 
 **Zone-update activity:**

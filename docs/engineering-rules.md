@@ -62,8 +62,8 @@ When a change alters one of these surfaces, update the implementation and the ca
 
 These rules apply to repository-side changes in `Dockerfile`, `docker-compose.example.yml`, and Docker-related CI workflows. Operator deployment guidance lives in [`docs/docker.md`](docker.md).
 
-- The final image runs as the non-root `appuser` user. Do not change this casually.
-- `/app/keys` remains the mount point for DNSSEC private keys, owned by `appuser` with restrictive permissions.
-- The Python interpreter keeps `CAP_NET_BIND_SERVICE` via `setcap` so the process can bind port `53` without running as root.
+- The final image runs as the Chainguard default non-root user, uid `65532`, avoiding custom user creation in the distroless runtime. Do not change this casually.
+- `/app/keys` remains the mount point for DNSSEC private keys, owned by uid `65532` with restrictive permissions.
+- Runtime deployments that bind container port `53` must preserve `NET_BIND_SERVICE` when the container runtime enforces privileged-port restrictions.
 - The image entrypoint runs `a-healthy-dns` directly; container runtime configuration is passed as CLI command arguments.
 - Docker end-to-end coverage continues to use an isolated bridge network with a real backend container so health checks exercise an actual TCP connection.
