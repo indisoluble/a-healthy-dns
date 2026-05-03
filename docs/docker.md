@@ -22,12 +22,14 @@ The published image and the repository `Dockerfile` expose a few operator-visibl
 |---|---|
 | Base image | Multi-stage build based on `cgr.dev/chainguard/python:latest-dev` and `cgr.dev/chainguard/python:latest` |
 | Process model | `a-healthy-dns` runs directly as PID 1 and handles `SIGINT` / `SIGTERM` |
-| Runtime user | Chainguard default non-root user, uid `65532`; this keeps the image aligned with the distroless base instead of adding custom user-management steps |
+| Runtime user | Chainguard default non-root user, uid `65532`; runtime files are owned by this uid instead of introducing custom user-management steps |
 | Exposed container port | `53/udp`; pass `--port 53` when the process should listen on that port |
 | Configuration surface | Pass normal `a-healthy-dns` CLI flags as the container command |
 | DNSSEC key mount | `/app/keys` is the expected mount point for private keys |
 | Privileged bind strategy | Add runtime `NET_BIND_SERVICE` when the container must bind port `53` and the runtime enforces privileged-port restrictions |
 | Image footprint | The runtime image is distroless and does not include a shell, `pip`, or an OS package manager; use the troubleshooting guide for diagnostics |
+
+The image already declares `USER 65532` in the repository `Dockerfile`. Deployment examples repeat `--user 65532`, Compose `user: "65532"`, or equivalent orchestrator settings so manifests preserve the image's non-root runtime identity. This does not require a host user named `65532`; it preserves the numeric uid that owns runtime files inside the image and keeps mounted DNSSEC key permissions predictable.
 
 ---
 
@@ -91,7 +93,7 @@ The example file already demonstrates the main deployment choices this project e
 - CLI flag configuration through the Compose `command`,
 - a dedicated bridge network,
 - non-root execution as uid `65532`,
-- `no-new-privileges`,
+- `no-new-privileges` hardening,
 - `cap_drop: [ALL]` plus `NET_BIND_SERVICE`,
 - and memory/CPU limits.
 
@@ -122,7 +124,7 @@ docker run -d \
   --priv-key-alg RSASHA256
 ```
 
-Keep key files restrictive on the host side. The runtime image expects `/app/keys` to be private to uid `65532`.
+Keep key files restrictive on the host side. When keys are mounted from the host, their permissions must allow numeric uid `65532` to read them inside the container.
 
 For exact parameter semantics, use [`docs/configuration-reference.md`](configuration-reference.md). For DNSSEC design boundaries, use [`docs/architecture.md`](architecture.md).
 
@@ -178,8 +180,8 @@ Recommended controls:
 - keep the container non-root; the image already does this by default,
 - use `--cap-drop=ALL` and add back only `NET_BIND_SERVICE` when binding container port `53`,
 - prefer read-only key mounts (`/app/keys:ro`),
-- use `--security-opt=no-new-privileges:true`,
-- and consider `--read-only` plus `--tmpfs /tmp:rw,noexec,nosuid` in hardened environments.
+- use `--security-opt=no-new-privileges:true` so the process and its children cannot acquire additional privileges after startup,
+- consider `--read-only` plus `--tmpfs /tmp:rw,noexec,nosuid` when a hardened deployment should make the image filesystem immutable while still providing a constrained writable `/tmp`.
 
 Example hardened run:
 
@@ -292,6 +294,8 @@ Task definition shape:
   ]
 }
 ```
+
+In ECS task definitions, `"readonlyRootFilesystem": true` is the orchestrator equivalent of Docker `--read-only`: it makes the container root filesystem immutable after startup. This is optional hardening, not a functional requirement for `a-healthy-dns`. Keep it enabled when the task only reads image contents and read-only DNSSEC key mounts. If runtime writes become necessary, provide an explicit writable mount or temporary filesystem for those paths.
 
 If DNSSEC is disabled, omit `mountPoints` and `volumes`. If DNSSEC is enabled, make the host key directory readable by uid `65532` and keep the mount read-only.
 
