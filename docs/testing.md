@@ -64,4 +64,4 @@ Component integration tests exercise a production component end-to-end over real
 
 Docker end-to-end tests validate the fully packaged application, including health-check-driven DNS state transitions. They live in `.github/workflows/test-integration.yml` and use an isolated Docker network with a real nginx backend.
 
-Use this level when the behavior requires the built image, Docker entrypoint, environment-variable mapping, real container networking, or real TCP health checks.
+Use this level when the behavior requires the built image, Docker entrypoint, container command argument handling, real container networking, or real TCP health checks.

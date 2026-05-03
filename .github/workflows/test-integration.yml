@@ -41,15 +41,15 @@ jobs:
           --name a-healthy-dns-test \
           --network a-healthy-dns-test-net \
           -p 53053:53053/udp \
-          -e DNS_HOSTED_ZONE="test.example.com" \
-          -e DNS_ALIAS_ZONES='["test.other.com", "test.another.com"]' \
-          -e DNS_ZONE_RESOLUTIONS='{"www": {"ips": ["172.28.0.10"], "health_port": 80}}' \
-          -e DNS_NAME_SERVERS='["ns1.example.com", "ns2.example.com"]' \
-          -e DNS_PORT="53053" \
-          -e DNS_TEST_MIN_INTERVAL="1" \
-          -e DNS_TEST_TIMEOUT="1" \
-          -e DNS_LOG_LEVEL="debug" \
-          a-healthy-dns:test
+          a-healthy-dns:test \
+          --port 53053 \
+          --log-level debug \
+          --hosted-zone "test.example.com" \
+          --alias-zones '["test.other.com", "test.another.com"]' \
+          --zone-resolutions '{"www": {"ips": ["172.28.0.10"], "health_port": 80}}' \
+          --ns '["ns1.example.com", "ns2.example.com"]' \
+          --test-min-interval 1 \
+          --test-timeout 1
 
     - name: wait for dns server to start
       run: |
@@ -67,8 +67,8 @@ jobs:
         # Install dig for testing
         sudo apt-get update && sudo apt-get install -y dnsutils
 
-        DNS_HOST="127.0.0.1"
-        DNS_PORT="53053"
+        QUERY_HOST="127.0.0.1"
+        QUERY_PORT="53053"
         BACKEND_IP="172.28.0.10"
 
         wait_for_a_record() {
@@ -76,7 +76,7 @@ jobs:
           local answer
 
           for _ in $(seq 1 20); do
-            answer="$(dig +short +time=1 +tries=1 @"${DNS_HOST}" -p "${DNS_PORT}" "${fqdn}" A)"
+            answer="$(dig +short +time=1 +tries=1 @"${QUERY_HOST}" -p "${QUERY_PORT}" "${fqdn}" A)"
             printf '%s\n' "${answer}" | grep -qx "${BACKEND_IP}" && {
               echo "[OK] A ${fqdn}"
               return 0
@@ -85,7 +85,7 @@ jobs:
           done
 
           echo "[FAIL] A ${fqdn}"
-          dig +nocmd +noall +comments +answer @"${DNS_HOST}" -p "${DNS_PORT}" "${fqdn}" A || true
+          dig +nocmd +noall +comments +answer @"${QUERY_HOST}" -p "${QUERY_PORT}" "${fqdn}" A || true
           return 1
         }
 
@@ -100,8 +100,8 @@ jobs:
       run: |
         set -euo pipefail
 
-        DNS_HOST="127.0.0.1"
-        DNS_PORT="53053"
+        QUERY_HOST="127.0.0.1"
+        QUERY_PORT="53053"
         BACKEND_IP="172.28.0.10"
         MAX_RETRIES=20
 
@@ -110,7 +110,7 @@ jobs:
           local answer
 
           for _ in $(seq 1 "${MAX_RETRIES}"); do
-            answer="$(dig +short +time=1 +tries=1 @"${DNS_HOST}" -p "${DNS_PORT}" "${fqdn}" A)"
+            answer="$(dig +short +time=1 +tries=1 @"${QUERY_HOST}" -p "${QUERY_PORT}" "${fqdn}" A)"
             printf '%s\n' "${answer}" | grep -qx "${BACKEND_IP}" && {
               echo "[OK] A present: ${fqdn}"
               return 0
@@ -119,7 +119,7 @@ jobs:
           done
 
           echo "[FAIL] A never appeared: ${fqdn}"
-          dig +nocmd +noall +comments +answer @"${DNS_HOST}" -p "${DNS_PORT}" "${fqdn}" A || true
+          dig +nocmd +noall +comments +answer @"${QUERY_HOST}" -p "${QUERY_PORT}" "${fqdn}" A || true
           return 1
         }
 
@@ -128,7 +128,7 @@ jobs:
           local answer
 
           for _ in $(seq 1 "${MAX_RETRIES}"); do
-            answer="$(dig +short +time=1 +tries=1 @"${DNS_HOST}" -p "${DNS_PORT}" "${fqdn}" A)"
+            answer="$(dig +short +time=1 +tries=1 @"${QUERY_HOST}" -p "${QUERY_PORT}" "${fqdn}" A)"
             [ -z "${answer}" ] && {
               echo "[OK] A removed: ${fqdn}"
               return 0
@@ -137,7 +137,7 @@ jobs:
           done
 
           echo "[FAIL] A still present after backend went down: ${fqdn}"
-          dig +nocmd +noall +comments +answer @"${DNS_HOST}" -p "${DNS_PORT}" "${fqdn}" A || true
+          dig +nocmd +noall +comments +answer @"${QUERY_HOST}" -p "${QUERY_PORT}" "${fqdn}" A || true
           return 1
         }
 

@@ -6,22 +6,32 @@ services:
     ports:
       # Map container port to host port (host:container)
       - "53:53/udp"
-    environment:
+    command:
       # Required parameters
-      DNS_HOSTED_ZONE: "example.com"
-      DNS_ZONE_RESOLUTIONS: '{"www":{"ips":["192.168.1.100","192.168.1.101"],"health_port":8080},"api":{"ips":["192.168.1.102"],"health_port":8000}}'
-      DNS_NAME_SERVERS: '["ns1.dns.example.net", "ns2.dns.example.net"]'
+      - --hosted-zone
+      - "example.com"
+      - --zone-resolutions
+      - '{"www":{"ips":["192.168.1.100","192.168.1.101"],"health_port":8080},"api":{"ips":["192.168.1.102"],"health_port":8000}}'
+      - --ns
+      - '["ns1.dns.example.net", "ns2.dns.example.net"]'
 
-      # Optional parameters (with their default values)
-      # DNS_PORT: "53"
-      # DNS_LOG_LEVEL: "info"
-      # DNS_ALIAS_ZONES: '[]'
-      # DNS_TEST_MIN_INTERVAL: "30"
-      # DNS_TEST_TIMEOUT: "2"
+      # Optional parameters
+      - --port
+      - "53"
+      # - --log-level
+      # - info
+      # - --alias-zones
+      # - '[]'
+      # - --test-min-interval
+      # - "30"
+      # - --test-timeout
+      # - "2"
 
-      # Optional DNSSEC parameters (if you have one)
-      # DNS_PRIV_KEY_PATH: "/app/keys/private.pem"
-      # DNS_PRIV_KEY_ALG: "RSASHA256"
+      # Optional DNSSEC parameters
+      # - --priv-key-path
+      # - /app/keys/private.pem
+      # - --priv-key-alg
+      # - RSASHA256
     
     # volumes:
       # Mount a directory for DNSSEC keys (optional)
@@ -41,8 +51,8 @@ services:
     cap_add:
       - NET_BIND_SERVICE
     
-    # Security: Specify user explicitly
-    user: "10000:10000"
+    # Security: Use the Chainguard image's default nonroot UID explicitly
+    user: "65532"
     
     # Resource limits
     deploy:
