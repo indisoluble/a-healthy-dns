@@ -44,7 +44,7 @@ Use this map when updating documentation: extend the canonical owner for the top
 | CI validation, release readiness, and documentation workflow | [`docs/workflow.md`](workflow.md) | How repository changes are validated, merged, and prepared for release |
 | Versioning, release publication, artifacts, changelog, and compatibility | [`docs/release.md`](release.md) | Release publication rules; not development workflow |
 | Authoritative UDP scope, wire-level behavior, and RFC conformance | [`docs/RFC-conformance.md`](RFC-conformance.md) | Protocol correctness and conformance status |
-| CLI flags, Docker environment variables, defaults, and configuration examples | [`docs/configuration-reference.md`](configuration-reference.md) | Parameter definitions only |
+| CLI flags, defaults, and configuration examples | [`docs/configuration-reference.md`](configuration-reference.md) | Parameter definitions only |
 | Docker runtime contract, Compose usage, deployment patterns, security hardening, and orchestrator notes | [`docs/docker.md`](docker.md) | Deployment guidance, not general troubleshooting |
 | Troubleshooting, diagnostics, log interpretation, live debugging, monitoring, and incident handoff | [`docs/troubleshooting.md`](troubleshooting.md) | Diagnosis and runtime operations, not deployment setup |
 
@@ -70,7 +70,7 @@ Use this map when updating documentation: extend the canonical owner for the top
 ### Reference And Operations
 
 - [`docs/RFC-conformance.md`](RFC-conformance.md) - RFC conformance reference for the Level 1 authoritative UDP subset.
-- [`docs/configuration-reference.md`](configuration-reference.md) - full CLI and Docker environment variable reference.
+- [`docs/configuration-reference.md`](configuration-reference.md) - full CLI flag reference.
 - [`docs/docker.md`](docker.md) - Docker deployment guide.
 - [`docs/troubleshooting.md`](troubleshooting.md) - runtime diagnosis, log interpretation, live debugging, monitoring, and incident handoff.
 
@@ -85,7 +85,7 @@ Use this map when updating documentation: extend the canonical owner for the top
 | Major design decision, alternative evaluation, or durable rationale | [`docs/decisions.md`](decisions.md) |
 | Python runtime, dependencies, imports, module headers, logging, typing, validators, or class layout | [`docs/implementation-notes.md`](implementation-notes.md) |
 | Health-check timing, alias-zone behavior, or DNSSEC design | [`docs/architecture.md`](architecture.md), [`docs/configuration-reference.md`](configuration-reference.md) when configuration surfaces change |
-| CLI flag, Docker environment variable, default value, or configuration example | [`docs/configuration-reference.md`](configuration-reference.md), [`docs/requirements.md`](requirements.md) when behavior changes |
+| CLI flag, default value, or configuration example | [`docs/configuration-reference.md`](configuration-reference.md), [`docs/requirements.md`](requirements.md) when behavior changes |
 | Docker image, runtime contract, Compose, hardening, or upgrades | [`docs/docker.md`](docker.md), [`docs/engineering-rules.md`](engineering-rules.md) for repository-side build invariants |
 | Operational issue, runtime diagnosis, log analysis, incident response, or monitoring | [`docs/troubleshooting.md`](troubleshooting.md) |
 | DNS wire behavior, response codes, negative responses, or RFC scope | [`docs/RFC-conformance.md`](RFC-conformance.md), [`docs/requirements.md`](requirements.md) |

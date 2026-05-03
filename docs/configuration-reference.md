@@ -1,22 +1,24 @@
 # Configuration Reference
 
-Full parameter reference for **A Healthy DNS**, covering both the CLI (`a-healthy-dns`) and Docker environment variables.
+Full parameter reference for **A Healthy DNS**, covering the `a-healthy-dns` CLI and Docker command arguments.
 
-This document is the canonical home for CLI flags, Docker environment variables, default values, and configuration examples. It does not own deployment procedures, architecture details, or troubleshooting runbooks. Those topics live in [`docs/docker.md`](docker.md), [`docs/architecture.md`](architecture.md), and [`docs/troubleshooting.md`](troubleshooting.md).
+This document is the canonical home for CLI flags, default values, and configuration examples. It does not own deployment procedures, architecture details, or troubleshooting runbooks. Those topics live in [`docs/docker.md`](docker.md), [`docs/architecture.md`](architecture.md), and [`docs/troubleshooting.md`](troubleshooting.md).
 
 > **Quick-start:** see [`README.md`](../README.md).  
 > **Parameter behaviour details** (TTL derivation, DNSSEC timing): see [`docs/architecture.md`](architecture.md).
 
 ---
 
-## Two configuration surfaces
+## Configuration surface
 
-| Surface | When to use |
-|---|---|
-| **CLI flags** | Direct invocation (`a-healthy-dns --flag value ...`) |
-| **Docker env vars** | Container deployment (`-e DNS_VAR=value`) |
+Use CLI flags for both direct execution and Docker execution:
 
-The Docker entrypoint maps each `DNS_*` variable to its corresponding CLI flag. They are equivalent in function.
+```bash
+a-healthy-dns --flag value ...
+docker run indisoluble/a-healthy-dns --flag value ...
+```
+
+The Docker image entrypoint is `a-healthy-dns`, so arguments after the image name become normal CLI flags.
 
 ---
 
@@ -26,10 +28,9 @@ These three must always be provided. The server will not start and exits with a 
 
 ### Hosted zone
 
-| Surface | Name |
-|---|---|
-| CLI | `--hosted-zone` |
-| Docker | `DNS_HOSTED_ZONE` |
+| Flag |
+|---|
+| `--hosted-zone` |
 
 The domain name for which this server is authoritative.
 
@@ -39,10 +40,9 @@ The domain name for which this server is authoritative.
 
 ### Zone resolutions
 
-| Surface | Name |
-|---|---|
-| CLI | `--zone-resolutions` |
-| Docker | `DNS_ZONE_RESOLUTIONS` |
+| Flag |
+|---|
+| `--zone-resolutions` |
 
 JSON object mapping subdomain names to their IP list and optional health check port.
 
@@ -90,10 +90,9 @@ Both modes can be mixed in the same configuration.
 
 ### Name servers
 
-| Surface | Name |
-|---|---|
-| CLI | `--ns` |
-| Docker | `DNS_NAME_SERVERS` |
+| Flag |
+|---|
+| `--ns` |
 
 JSON array of fully-qualified name server hostnames for the zone's apex `NS` record. Single-label hostnames such as `ns1` are rejected. Provide names without a trailing root dot; the server normalizes them to absolute DNS names internally.
 
@@ -147,30 +146,27 @@ Use an in-zone nameserver hostname only when that owner name is also a real serv
 
 ### Port
 
-| Surface | Name | Default |
-|---|---|---|
-| CLI | `--port` | `53053` |
-| Docker | `DNS_PORT` | `53` |
+| Flag | Default |
+|---|---|
+| `--port` | `53053` |
 
 UDP port the DNS server listens on.
 
-> **Note:** the Docker image default (`53`) differs from the CLI default (`53053`). The image uses `setcap cap_net_bind_service` on the Python binary to allow binding to privileged port 53 without root.
+> **Note:** Docker examples that expose container port `53` pass `--port 53` explicitly. The image uses `setcap cap_net_bind_service` on the Python binary to allow binding to privileged port 53 without root.
 
 ### Log level
 
-| Surface | Name | Default |
-|---|---|---|
-| CLI | `--log-level` | `info` |
-| Docker | `DNS_LOG_LEVEL` | _(not set — falls back to CLI default)_ |
+| Flag | Default |
+|---|---|
+| `--log-level` | `info` |
 
 Log verbosity. Accepted values: `debug`, `info`, `warning`, `error`, `critical`. The CLI parser currently expects these lowercase tokens.
 
 ### Minimum update interval
 
-| Surface | Name | Default |
-|---|---|---|
-| CLI | `--test-min-interval` | `30` |
-| Docker | `DNS_TEST_MIN_INTERVAL` | _(not set — falls back to CLI default)_ |
+| Flag | Default |
+|---|---|
+| `--test-min-interval` | `30` |
 
 Minimum seconds between consecutive zone update cycles. Entries with `health_port` are TCP health-checked during these cycles; standard static entries remain publishable without a TCP probe.
 
@@ -178,19 +174,17 @@ The effective interval is `max(test-min-interval, sum of per-health-checked-IP t
 
 ### Health-check timeout
 
-| Surface | Name | Default |
-|---|---|---|
-| CLI | `--test-timeout` | `2` |
-| Docker | `DNS_TEST_TIMEOUT` | _(not set — falls back to CLI default)_ |
+| Flag | Default |
+|---|---|
+| `--test-timeout` | `2` |
 
 Maximum seconds to wait for a TCP connection during a health check. If the connection does not succeed within this time the IP is considered unhealthy.
 
 ### Alias zones
 
-| Surface | Name | Default |
-|---|---|---|
-| CLI | `--alias-zones` | `[]` |
-| Docker | `DNS_ALIAS_ZONES` | _(not set — falls back to CLI default)_ |
+| Flag | Default |
+|---|---|
+| `--alias-zones` | `[]` |
 
 JSON array of additional domain names that resolve to the same records as the hosted zone. Health checks are shared; no duplication occurs.
 
@@ -204,29 +198,29 @@ See [docs/architecture.md § 8](architecture.md#8-multi-domain-support-via-zoneo
 
 ## DNSSEC parameters (optional)
 
-Both parameters are optional. If `--priv-key-path` / `DNS_PRIV_KEY_PATH` is omitted, DNSSEC signing is disabled entirely and no DNSSEC-generated records (`DNSKEY`, `NSEC`, `RRSIG`) are produced.
+Both parameters are optional. If `--priv-key-path` is omitted, DNSSEC signing is disabled entirely and no DNSSEC-generated records (`DNSKEY`, `NSEC`, `RRSIG`) are produced.
 
 ### Private key path
 
-| Surface | Name | Default |
-|---|---|---|
-| CLI | `--priv-key-path` | _(none)_ |
-| Docker | `DNS_PRIV_KEY_PATH` | _(none)_ |
+| Flag | Default |
+|---|---|
+| `--priv-key-path` | _(none)_ |
 
 Path to a PEM-encoded DNSSEC private key file. In Docker, mount the key directory into `/app/keys` (read-only) and point this to the mounted path.
 
 ```bash
-# Docker example
+# Docker mount option before the image name:
 -v "$(pwd)/keys:/app/keys:ro"
--e DNS_PRIV_KEY_PATH="/app/keys/private.pem"
+
+# CLI flag after the image name:
+--priv-key-path /app/keys/private.pem
 ```
 
 ### Private key algorithm
 
-| Surface | Name | Default |
-|---|---|---|
-| CLI | `--priv-key-alg` | `RSASHA256` |
-| Docker | `DNS_PRIV_KEY_ALG` | _(not set — falls back to CLI default)_ |
+| Flag | Default |
+|---|---|
+| `--priv-key-alg` | `RSASHA256` |
 
 Algorithm used to sign the zone. Accepted values are the DNSSEC algorithm names supported by `dnspython` (e.g. `RSASHA256`, `RSASHA512`, `ECDSAP256SHA256`, `ECDSAP384SHA384`, `ED25519`, `ED448`). The full list is validated at startup against the installed `dnspython` version.
 
@@ -234,18 +228,18 @@ Algorithm used to sign the zone. Accepted values are the DNSSEC algorithm names 
 
 ## Parameter summary table
 
-| Parameter | CLI flag | Docker env var | Required | Default |
-|---|---|---|---|---|
-| Hosted zone | `--hosted-zone` | `DNS_HOSTED_ZONE` | **yes** | — |
-| Zone resolutions | `--zone-resolutions` | `DNS_ZONE_RESOLUTIONS` | **yes** | — |
-| Name servers | `--ns` | `DNS_NAME_SERVERS` | **yes** | — |
-| Port | `--port` | `DNS_PORT` | no | `53053` (CLI) / `53` (Docker) |
-| Log level | `--log-level` | `DNS_LOG_LEVEL` | no | `info` |
-| Min update interval | `--test-min-interval` | `DNS_TEST_MIN_INTERVAL` | no | `30` s |
-| Check timeout | `--test-timeout` | `DNS_TEST_TIMEOUT` | no | `2` s |
-| Alias zones | `--alias-zones` | `DNS_ALIAS_ZONES` | no | `[]` |
-| DNSSEC key path | `--priv-key-path` | `DNS_PRIV_KEY_PATH` | no | _(DNSSEC disabled)_ |
-| DNSSEC algorithm | `--priv-key-alg` | `DNS_PRIV_KEY_ALG` | no | `RSASHA256` |
+| Parameter | CLI flag | Required | Default |
+|---|---|---|---|
+| Hosted zone | `--hosted-zone` | **yes** | — |
+| Zone resolutions | `--zone-resolutions` | **yes** | — |
+| Name servers | `--ns` | **yes** | — |
+| Port | `--port` | no | `53053` |
+| Log level | `--log-level` | no | `info` |
+| Min update interval | `--test-min-interval` | no | `30` s |
+| Check timeout | `--test-timeout` | no | `2` s |
+| Alias zones | `--alias-zones` | no | `[]` |
+| DNSSEC key path | `--priv-key-path` | no | _(DNSSEC disabled)_ |
+| DNSSEC algorithm | `--priv-key-alg` | no | `RSASHA256` |
 
 ---
 
@@ -266,10 +260,11 @@ a-healthy-dns \
 docker run -d \
   -p 53:53/udp \
   -v "$(pwd)/keys:/app/keys:ro" \
-  -e DNS_HOSTED_ZONE="sub.domain.com" \
-  -e DNS_ZONE_RESOLUTIONS='{"www":{"ips":["192.168.1.100"],"health_port":8080}}' \
-  -e DNS_NAME_SERVERS='["ns1.dns.example.net"]' \
-  -e DNS_PRIV_KEY_PATH="/app/keys/private.pem" \
-  -e DNS_PRIV_KEY_ALG="RSASHA256" \
-  indisoluble/a-healthy-dns
+  indisoluble/a-healthy-dns \
+  --port 53 \
+  --hosted-zone sub.domain.com \
+  --zone-resolutions '{"www":{"ips":["192.168.1.100"],"health_port":8080}}' \
+  --ns '["ns1.dns.example.net"]' \
+  --priv-key-path /app/keys/private.pem \
+  --priv-key-alg RSASHA256
 ```

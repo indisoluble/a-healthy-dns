@@ -85,9 +85,9 @@ docker exec a-healthy-dns python3 -c "import socket; socket.create_connection(('
 docker logs --tail 100 a-healthy-dns
 lsof -nP -iUDP:53053
 ```
-Add `--log-level debug` when running the CLI directly.
+Add `--log-level debug` to the startup command when you need more detail.
 
-**Likely causes:** invalid JSON in `DNS_ZONE_RESOLUTIONS`, `DNS_NAME_SERVERS`, or `DNS_ALIAS_ZONES`; invalid hosted zone, subdomain, IP, or NS values; DNSSEC key path/format problems; UDP port in use; port-53 bind constraints in hardened Docker.
+**Likely causes:** invalid JSON in `--zone-resolutions`, `--ns`, or `--alias-zones`; invalid hosted zone, subdomain, IP, or NS values; DNSSEC key path/format problems; UDP port in use; port-53 bind constraints in hardened Docker.
 
 **Logs:** `Failed to parse alias zones`, `Failed to create zone origins`, `Failed to parse zone resolutions`, `Zone resolution subdomain '...' is not valid`, `Name server '...' is not a valid FQDN`, `Invalid IP/port address in '...'`, `Failed to load DNSSEC private key`, `Failed to load private key`.
 
@@ -119,13 +119,13 @@ dig @localhost -p 53053 www.example.local A
 dig @localhost -p 53053 www.example.local AAAA
 docker logs --tail 200 a-healthy-dns | grep -E "Checked IP|has no health port|A records changed|Updating zone|Added A record|skipped|unknown subdomain|not in hosted"
 ```
-Use `--log-level debug` or `DNS_LOG_LEVEL=debug` when you need the per-IP or per-record lines (`Checked IP`, `has no health port`, `Added A record`, `A record ... skipped`).
+Use `--log-level debug` when you need the per-IP or per-record lines (`Checked IP`, `has no health port`, `Added A record`, `A record ... skipped`).
 
 **Common causes:** wrong zone → `REFUSED`; unconfigured subdomain → `NXDOMAIN`; a health-checked subdomain has all backend IPs unhealthy → A record skipped → `NXDOMAIN`; record type not published (e.g. `AAAA`) → `NOERROR` empty answer; backend health changed and answer set reflects the new state. Standard static entries are published without TCP connection attempts.
 
 **Backend check:** `nc -zv 192.168.1.100 8080`. For health-checked entries, look for `A record <name> skipped` after `Updating zone...` when all backend IPs are unhealthy. For standard static entries, wait for the first `Updating zone...` after `Starting Zone Updater...` before treating a startup-time `NXDOMAIN` as persistent.
 
-**Nameserver address queries:** `DNS_NAME_SERVERS` / `--ns` creates `NS` records only. It does not create `A` records for the nameserver hostnames, so address queries for out-of-zone nameserver names may return `REFUSED`, and in-zone nameserver names require separate glue/address planning. Do not add nameserver hostnames to `zone-resolutions` unless they are real service records, either health-checked or standard static. See [`docs/configuration-reference.md#name-servers`](configuration-reference.md#name-servers) for the canonical nameserver guidance.
+**Nameserver address queries:** `--ns` creates `NS` records only. It does not create `A` records for the nameserver hostnames, so address queries for out-of-zone nameserver names may return `REFUSED`, and in-zone nameserver names require separate glue/address planning. Do not add nameserver hostnames to `zone-resolutions` unless they are real service records, either health-checked or standard static. See [`docs/configuration-reference.md#name-servers`](configuration-reference.md#name-servers) for the canonical nameserver guidance.
 
 ### 2.4 DNSSEC responses are missing or rejected
 
@@ -137,13 +137,13 @@ dig @localhost -p 53053 example.local DNSKEY
 dig @localhost -p 53053 www.example.local +dnssec
 docker logs --tail 200 a-healthy-dns | grep -i "dnssec\\|sign\\|key"
 ```
-Use `--log-level debug` or `DNS_LOG_LEVEL=debug` when you need signing-detail lines such as `Zone signed with expiration time ...`.
+Use `--log-level debug` when you need signing-detail lines such as `Zone signed with expiration time ...`.
 
 **Likely causes:** no key path configured (DNSSEC disabled); key file missing or unreadable; PEM/algorithm mismatch; signature near expiration.
 
 **Logs:** `Loaded DNSSEC private key from ...`, `Failed to load DNSSEC private key`, `Failed to load private key`, `Zone signing is near to expire`, `Zone signed with expiration time ...`.
 
-**Next:** verify key mount and permissions in [`docs/docker.md`](docker.md); verify `DNS_PRIV_KEY_PATH` and `DNS_PRIV_KEY_ALG` in [`docs/configuration-reference.md`](configuration-reference.md). For DNS wire behavior issues use [`docs/RFC-conformance.md`](RFC-conformance.md).
+**Next:** verify key mount and permissions in [`docs/docker.md`](docker.md); verify `--priv-key-path` and `--priv-key-alg` in [`docs/configuration-reference.md`](configuration-reference.md). For DNS wire behavior issues use [`docs/RFC-conformance.md`](RFC-conformance.md).
 
 ### 2.5 Responses are slow or the host is under pressure
 
@@ -176,7 +176,7 @@ docker logs --since 15m a-healthy-dns | grep -c "A records changed"
 
 ### 3.2 High-value log messages
 
-These fragments span `info`, `warning`, and `debug`. Use `--log-level debug` or `DNS_LOG_LEVEL=debug` when you need per-IP, per-record, or per-signing detail.
+These fragments span `info`, `warning`, and `debug`. Use `--log-level debug` when you need per-IP, per-record, or per-signing detail.
 
 | Message fragment | Meaning | Typical next step |
 |---|---|---|

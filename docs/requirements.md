@@ -30,7 +30,7 @@ It is the canonical home for functional, operational, quality, compatibility, se
 
 ## Operational Requirements
 
-- **R9** Accept startup configuration through CLI arguments and Docker environment variables.
+- **R9** Accept startup configuration through CLI arguments. Docker deployments pass the same arguments as the container command.
 - **R10** Validate startup configuration before serving traffic; invalid configuration must fail fast and exit non-zero.
 - **R11** Provide log output at configurable verbosity levels.
 - **R12** Start serving DNS queries without an external database or coordination service.

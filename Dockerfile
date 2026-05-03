@@ -30,7 +30,6 @@ RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-reco
     libffi8 \
     libssl3 \
     libcap2-bin \
-    tini \
     && apt-get autoremove -y \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
@@ -62,66 +61,11 @@ ENV PATH="/home/appuser/.local/bin:$PATH" \
 # Working directory
 WORKDIR /app
 
-# Default environment variables for all parameters
-ENV DNS_PORT="53" \
-    DNS_LOG_LEVEL="" \
-    DNS_HOSTED_ZONE="" \
-    DNS_ALIAS_ZONES="" \
-    DNS_ZONE_RESOLUTIONS="" \
-    DNS_TEST_MIN_INTERVAL="" \
-    DNS_TEST_TIMEOUT="" \
-    DNS_NAME_SERVERS="" \
-    DNS_PRIV_KEY_PATH="" \
-    DNS_PRIV_KEY_ALG=""
-
-# Expose the default DNS port (static at build time)
+# Expose the standard DNS port (static metadata; pass --port 53 to bind it)
 EXPOSE 53/udp
 
 # Volume for DNSSEC keys
 VOLUME ["/app/keys"]
 
-# Entry point script that converts environment variables to command line arguments
-ENTRYPOINT ["tini", "--", "sh", "-c", "\
-    set -e; \
-    if [ -z \"$DNS_HOSTED_ZONE\" ]; then \
-    echo 'Error: DNS_HOSTED_ZONE environment variable is required'; \
-    exit 1; \
-    fi; \
-    if [ -z \"$DNS_ZONE_RESOLUTIONS\" ]; then \
-    echo 'Error: DNS_ZONE_RESOLUTIONS environment variable is required'; \
-    exit 1; \
-    fi; \
-    if [ -z \"$DNS_NAME_SERVERS\" ]; then \
-    echo 'Error: DNS_NAME_SERVERS environment variable is required'; \
-    exit 1; \
-    fi; \
-    set -- a-healthy-dns --port \"$DNS_PORT\"; \
-    if [ -n \"$DNS_LOG_LEVEL\" ]; then \
-    set -- \"$@\" --log-level \"$DNS_LOG_LEVEL\"; \
-    fi; \
-    if [ -n \"$DNS_HOSTED_ZONE\" ]; then \
-    set -- \"$@\" --hosted-zone \"$DNS_HOSTED_ZONE\"; \
-    fi; \
-    if [ -n \"$DNS_ALIAS_ZONES\" ]; then \
-    set -- \"$@\" --alias-zones \"$DNS_ALIAS_ZONES\"; \
-    fi; \
-    if [ -n \"$DNS_ZONE_RESOLUTIONS\" ]; then \
-    set -- \"$@\" --zone-resolutions \"$DNS_ZONE_RESOLUTIONS\"; \
-    fi; \
-    if [ -n \"$DNS_TEST_MIN_INTERVAL\" ]; then \
-    set -- \"$@\" --test-min-interval \"$DNS_TEST_MIN_INTERVAL\"; \
-    fi; \
-    if [ -n \"$DNS_TEST_TIMEOUT\" ]; then \
-    set -- \"$@\" --test-timeout \"$DNS_TEST_TIMEOUT\"; \
-    fi; \
-    if [ -n \"$DNS_NAME_SERVERS\" ]; then \
-    set -- \"$@\" --ns \"$DNS_NAME_SERVERS\"; \
-    fi; \
-    if [ -n \"$DNS_PRIV_KEY_PATH\" ]; then \
-    set -- \"$@\" --priv-key-path \"$DNS_PRIV_KEY_PATH\"; \
-    fi; \
-    if [ -n \"$DNS_PRIV_KEY_ALG\" ]; then \
-    set -- \"$@\" --priv-key-alg \"$DNS_PRIV_KEY_ALG\"; \
-    fi; \
-    echo \"Starting a-healthy-dns with arguments: $*\"; \
-    exec \"$@\""]
+# Run the CLI directly; pass runtime configuration as command arguments.
+ENTRYPOINT ["a-healthy-dns"]

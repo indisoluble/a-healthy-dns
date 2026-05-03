@@ -38,7 +38,6 @@ Keep upper-bound pins tight at the minor version level. Both runtime libraries h
 | Private helpers | prefix `_` |
 | CLI argument names | `kebab-case` (for example, `--hosted-zone`) |
 | `argparse` dest / internal keys | `snake_case`, matching `ARG_*` constants where applicable |
-| Docker environment variables | `DNS_` prefix + `UPPER_SNAKE_CASE` |
 
 ## Import Ordering
 

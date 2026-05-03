@@ -99,6 +99,7 @@ Only decisions supported by repository code, documentation, or commit history ar
 **Consequences:**
 
 - Docker remains a supported runtime rather than a convenience example only.
+- Docker configuration uses the same CLI flags as direct process execution instead of a separate environment-variable mapping.
 - Operator deployment guidance remains owned by [`docs/docker.md`](docker.md).
 - Repository-side container invariants remain owned by [`docs/engineering-rules.md`](engineering-rules.md).
 

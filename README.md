@@ -19,11 +19,11 @@ This quick start keeps the container on a high port so local testing does not re
 docker run -d \
   --name a-healthy-dns \
   -p 53053:53053/udp \
-  -e DNS_HOSTED_ZONE="example.local" \
-  -e DNS_ZONE_RESOLUTIONS='{"www":{"ips":["192.168.1.100","192.168.1.101"],"health_port":8080},"static":["192.168.1.200"]}' \
-  -e DNS_NAME_SERVERS='["ns1.dns.example.net"]' \
-  -e DNS_PORT="53053" \
-  indisoluble/a-healthy-dns
+  indisoluble/a-healthy-dns \
+  --port 53053 \
+  --hosted-zone example.local \
+  --zone-resolutions '{"www":{"ips":["192.168.1.100","192.168.1.101"],"health_port":8080},"static":["192.168.1.200"]}' \
+  --ns '["ns1.dns.example.net"]'
 ```
 
 Verify it is running:
@@ -79,6 +79,6 @@ Start with [docs/table-of-contents.md](docs/table-of-contents.md) for the minimu
 | [docs/workflow.md](docs/workflow.md) | CI validation, release readiness gates, and documentation workflow |
 | [docs/release.md](docs/release.md) | Versioning, release publication, artifacts, changelog, and compatibility |
 | [docs/RFC-conformance.md](docs/RFC-conformance.md) | Wire-level authoritative UDP behavior, response semantics, and RFC scope boundaries |
-| [docs/configuration-reference.md](docs/configuration-reference.md) | CLI flags and Docker environment variables with defaults and examples |
+| [docs/configuration-reference.md](docs/configuration-reference.md) | CLI flags, defaults, and Docker command examples |
 | [docs/docker.md](docs/docker.md) | Docker deployment guide: quick start, Compose, DNSSEC mounts, hardening, and upgrades |
 | [docs/troubleshooting.md](docs/troubleshooting.md) | Runtime diagnosis, log interpretation, live debugging, monitoring, and incident handoff |
