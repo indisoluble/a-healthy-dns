@@ -26,7 +26,7 @@ The published image and the repository `Dockerfile` expose a few operator-visibl
 | Exposed container port | `53/udp`; pass `--port 53` when the process should listen on that port |
 | Configuration surface | Pass normal `a-healthy-dns` CLI flags as the container command |
 | DNSSEC key mount | `/app/keys` is the expected mount point for private keys |
-| Privileged bind strategy | Add runtime `NET_BIND_SERVICE` when the container must bind port `53` and the runtime enforces privileged-port restrictions |
+| Privileged bind strategy | The Python interpreter has `NET_BIND_SERVICE` set as a file capability during the image build. At runtime, grant `NET_BIND_SERVICE` via `cap_add` (or equivalent) so the capability stays in the process bounding set; do **not** set `no-new-privileges`, which blocks file capabilities |
 | Image footprint | The runtime image is distroless and does not include a shell, `pip`, or an OS package manager; use the troubleshooting guide for diagnostics |
 
 The image already declares `USER 65532` in the repository `Dockerfile`. Deployment examples repeat `--user 65532`, Compose `user: "65532"`, or equivalent orchestrator settings so manifests preserve the image's non-root runtime identity. This does not require a host user named `65532`; it preserves the numeric uid that owns runtime files inside the image and keeps mounted DNSSEC key permissions predictable.
@@ -178,10 +178,11 @@ Use the image defaults as the baseline, then add only the hardening controls you
 
 Recommended controls:
 - keep the container non-root; the image already does this by default,
-- use `--cap-drop=ALL` and add back only `NET_BIND_SERVICE` when binding container port `53`,
+- use `--cap-drop=ALL` and add back only `NET_BIND_SERVICE` when binding container port `53`; this keeps `NET_BIND_SERVICE` in the bounding set, which the Python interpreter's file capability requires to take effect,
 - prefer read-only key mounts (`/app/keys:ro`),
-- use `--security-opt=no-new-privileges:true` so the process and its children cannot acquire additional privileges after startup,
 - consider `--read-only` plus `--tmpfs /tmp:rw,noexec,nosuid` when a hardened deployment should make the image filesystem immutable while still providing a constrained writable `/tmp`.
+
+> **`no-new-privileges` and port 53:** Do **not** combine `--security-opt=no-new-privileges:true` with port-53 binding. The image relies on a file capability (`NET_BIND_SERVICE`) baked into the Python interpreter at build time. The Linux kernel clears file capabilities when `no-new-privileges` is active, so the process can no longer bind to privileged ports. Reserve `no-new-privileges` for deployments that use a non-privileged port.
 
 Example hardened run:
 
@@ -193,7 +194,6 @@ docker run -d \
   --cap-add=NET_BIND_SERVICE \
   --read-only \
   --tmpfs /tmp:rw,noexec,nosuid \
-  --security-opt=no-new-privileges:true \
   -p 53:53/udp \
   indisoluble/a-healthy-dns \
   --port 53 \
@@ -255,7 +255,6 @@ Task definition shape:
       "essential": true,
       "user": "65532",
       "readonlyRootFilesystem": true,
-      "dockerSecurityOptions": ["no-new-privileges"],
       "linuxParameters": {
         "capabilities": {
           "drop": ["ALL"],
@@ -296,6 +295,8 @@ Task definition shape:
 ```
 
 In ECS task definitions, `"readonlyRootFilesystem": true` is the orchestrator equivalent of Docker `--read-only`: it makes the container root filesystem immutable after startup. This is optional hardening, not a functional requirement for `a-healthy-dns`. Keep it enabled when the task only reads image contents and read-only DNSSEC key mounts. If runtime writes become necessary, provide an explicit writable mount or temporary filesystem for those paths.
+
+Do **not** add `"no-new-privileges"` to `dockerSecurityOptions` for port-53 deployments. The image uses a file capability on the Python interpreter to allow uid `65532` to bind to port `53`; the `no-new-privileges` flag causes the kernel to ignore file capabilities, which prevents port binding.
 
 If DNSSEC is disabled, omit `mountPoints` and `volumes`. If DNSSEC is enabled, make the host key directory readable by uid `65532` and keep the mount read-only.
 

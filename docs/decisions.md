@@ -118,3 +118,28 @@ Only decisions supported by repository code, documentation, or commit history ar
 - Release publication remains automation-owned rather than operator-owned.
 - Versioning and publication rules remain owned by [`docs/release.md`](release.md).
 - CI validation behavior remains owned by [`docs/workflow.md`](workflow.md).
+
+## D008 - Use File Capabilities For Privileged Port Binding
+
+**Status:** accepted.
+
+**Decision:** The Docker image grants `NET_BIND_SERVICE` to the Python interpreter as a Linux file capability (via `setcap` in the builder stage) rather than relying on the container runtime to supply it through `--cap-add` alone or through ambient capabilities. `libcap` is a build-time dependency only and is not present in the distroless production image.
+
+**Rationale:** For a non-root process (uid `65532`), Docker's `--cap-add NET_BIND_SERVICE` adds the capability to the process bounding set but not to the effective set. Without a file capability (`+ep`) on the binary, the Linux kernel leaves the effective set empty after `exec`, and the process cannot bind to privileged ports (< 1024). File capabilities are the portable, runtime-agnostic mechanism for granting this permission to a non-root user across bridge and host networking modes, including AWS ECS external instances. Ambient capabilities would achieve the same result but are not exposed by Docker's high-level API or by ECS task definitions.
+
+`no-new-privileges` (`PR_SET_NO_NEW_PRIVS`) causes the kernel to ignore file capabilities. It therefore cannot be combined with port-53 binding. Deployments that do not need port `53` may still enable `no-new-privileges`.
+
+**Alternatives considered:**
+- Runtime `--cap-add NET_BIND_SERVICE` without file capabilities: ineffective for non-root users; rejected.
+- Ambient capabilities: functionally equivalent but require low-level OCI config or runtime support not available in Docker's public API or AWS ECS; rejected as impractical.
+- Installing `libcap` in the production image and calling `setcap` at container startup: introduces a shell dependency and a mutable build step in the distroless image; rejected.
+- Running the process as root: rejected; contradicts the non-root uid requirement.
+
+**Consequences:**
+
+- Operators must keep `NET_BIND_SERVICE` in the capability bounding set (`cap_add: NET_BIND_SERVICE` or equivalent) for port-53 deployments.
+- Operators must not enable `no-new-privileges` for port-53 deployments.
+- The production image remains distroless and does not contain `libcap`.
+- Deployment guidance for these constraints lives in [`docs/docker.md`](docker.md).
+- Container build rules are owned by [`docs/engineering-rules.md`](engineering-rules.md).
+

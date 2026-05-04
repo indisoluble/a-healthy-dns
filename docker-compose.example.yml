@@ -41,11 +41,15 @@ services:
     networks:
       - dns-network
     
-    # Security options
-    security_opt:
-      - no-new-privileges:true
-    
-    # Security: Drop all capabilities and add only required ones
+    # Security options — no-new-privileges cannot be set when the image uses
+    # file capabilities for privileged port binding; omit it for port-53
+    # deployments.  Use it only when binding a non-privileged port.
+    # security_opt:
+    #   - no-new-privileges:true
+
+    # Drop all capabilities then restore only what the DNS server needs.
+    # NET_BIND_SERVICE must be in the bounding set so the Python interpreter's
+    # file capability (set during the image build) can take effect.
     cap_drop:
       - ALL
     cap_add:
