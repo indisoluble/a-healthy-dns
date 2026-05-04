@@ -130,10 +130,10 @@ Only decisions supported by repository code, documentation, or commit history ar
 `no-new-privileges` (`PR_SET_NO_NEW_PRIVS`) causes the kernel to ignore file capabilities. It therefore cannot be combined with port-53 binding. Deployments that do not need port `53` may still enable `no-new-privileges`.
 
 **Alternatives considered:**
-- Runtime `--cap-add NET_BIND_SERVICE` without file capabilities: ineffective for non-root users; rejected.
-- Ambient capabilities: functionally equivalent but require low-level OCI config or runtime support not available in Docker's public API or AWS ECS; rejected as impractical.
+- Runtime `--cap-add NET_BIND_SERVICE` without file capabilities: does not work for non-root users because the effective capability set is empty after `exec` without a file capability; rejected.
+- Ambient capabilities: functionally equivalent but require low-level OCI config or runtime support not available in Docker's public API or AWS ECS; rejected.
 - Installing `libcap` in the production image and calling `setcap` at container startup: introduces a shell dependency and a mutable build step in the distroless image; rejected.
-- Running the process as root: rejected; contradicts the non-root uid requirement.
+- Running the process as root: contradicts the non-root uid requirement; rejected.
 
 **Consequences:**
 

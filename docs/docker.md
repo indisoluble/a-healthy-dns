@@ -182,7 +182,7 @@ Recommended controls:
 - prefer read-only key mounts (`/app/keys:ro`),
 - consider `--read-only` plus `--tmpfs /tmp:rw,noexec,nosuid` when a hardened deployment should make the image filesystem immutable while still providing a constrained writable `/tmp`.
 
-> **`no-new-privileges` and port 53:** Do **not** combine `--security-opt=no-new-privileges:true` with port-53 binding. The image relies on a file capability (`NET_BIND_SERVICE`) baked into the Python interpreter at build time. The Linux kernel clears file capabilities when `no-new-privileges` is active, so the process can no longer bind to privileged ports. Reserve `no-new-privileges` for deployments that use a non-privileged port.
+> **`no-new-privileges` and port `53`:** Do **not** combine `--security-opt=no-new-privileges:true` with port-`53` binding. The image relies on a file capability (`NET_BIND_SERVICE`) baked into the Python interpreter at build time. The Linux kernel clears file capabilities when `no-new-privileges` is active, so the process can no longer bind to privileged ports. Reserve `no-new-privileges` for deployments that use a non-privileged port.
 
 Example hardened run:
 
