@@ -86,7 +86,7 @@ RFC 1034 §6.2 — https://www.rfc-editor.org/rfc/rfc1034 defines the authoritat
 
 | Behaviour | Status | Notes |
 |---|---|---|
-| Authoritative Answer (AA) flag set on all responses | **Implemented** | `indisoluble/a_healthy_dns/dns_server_udp_handler.py:126` sets `dns.flags.AA` on every response |
+| Authoritative Answer (AA) flag set on parsed DNS responses | **Implemented** | `indisoluble/a_healthy_dns/dns_server_udp_handler.py` sets `dns.flags.AA` after a query is parsed. Malformed-wire `FORMERR` responses are generated before a question or zone can be evaluated and intentionally do not set AA. |
 | REFUSED for queries outside all served zones | **Implemented** | `indisoluble/a_healthy_dns/dns_server_udp_handler.py:67` returns `dns.rcode.REFUSED` when the query name does not fall within any hosted or alias zone |
 | NXDOMAIN when owner name is absent from an in-zone query | **Implemented** | `indisoluble/a_healthy_dns/dns_server_udp_handler.py:90` returns `dns.rcode.NXDOMAIN` when `txn.get_node(relative_name)` returns nothing |
 | NOERROR when owner name exists and matching records are found | **Implemented** | Handler adds the matching RRset to the answer section |
@@ -102,14 +102,14 @@ RFC 1035 — https://www.rfc-editor.org/rfc/rfc1035: wire format (header §4.1.1
 | Behaviour | Status | Notes |
 |---|---|---|
 | Wire parsing of incoming queries | **Implemented** | `dns.message.from_wire()` is used; `dns.exception.DNSException` is caught |
-| FORMERR when wire parsing fails | **Implemented** | When `dns.message.from_wire()` raises a `DNSException` other than `ShortHeader` (DNS header readable), the handler extracts the transaction ID from bytes 0–1 and responds with FORMERR (`indisoluble/a_healthy_dns/dns_server_udp_handler.py:112-123`).  When `ShortHeader` is raised (payload < 12 bytes), the packet is dropped silently (`indisoluble/a_healthy_dns/dns_server_udp_handler.py:107-111`).  See the note below for details. |
+| FORMERR when wire parsing fails | **Implemented** | When `dns.message.from_wire()` raises a `DNSException` other than `ShortHeader` (DNS header readable), the handler extracts the transaction ID from bytes 0-1 and responds with FORMERR. That minimal parse-failure response sets QR and preserves the ID, but does not set AA because no authoritative question is available. When `ShortHeader` is raised (payload < 12 bytes), the packet is dropped silently. See the note below for details. |
 | Opcode validation — NOTIMP for non-QUERY opcodes | **Implemented** | `indisoluble/a_healthy_dns/dns_server_udp_handler.py:128-133`: `query.opcode() != dns.opcode.QUERY` check returns `dns.rcode.NOTIMP`.  Tested with STATUS (opcode 2) and NOTIFY (opcode 4).  UPDATE messages (opcode 5) are rejected by dnspython's wire parser before this check is reached. |
 | QDCOUNT validation — FORMERR for ≠ 1 question | **Implemented** | `indisoluble/a_healthy_dns/dns_server_udp_handler.py:134-139`: `len(query.question) != 1` check; zero or more-than-one questions return `dns.rcode.FORMERR`.  Confirmed: dnspython preserves all questions for QDCOUNT > 1 wire messages.  See also RFC 2181 §5.1. |
 | QCLASS / IN class validation | **Implemented** | `indisoluble/a_healthy_dns/dns_server_udp_handler.py:142-147`: `question.rdclass != dns.rdataclass.IN` check; non-IN queries return `dns.rcode.REFUSED`.  Project decision: REFUSED because the server exclusively serves IN-class data. |
 | Wire serialisation of responses | **Implemented** | `response.to_wire()` is called before every `sendto()` |
 | A, SOA, NS record types in responses | **Implemented** | All three record types are populated by the zone updater |
 
-Note on malformed-wire inputs: replying requires the DNS transaction ID (bytes 0–1, RFC 1035 §4.1.1). Payloads shorter than 12 bytes raise `dns.message.ShortHeader` and are dropped silently. Any other `dns.exception.DNSException` subclass (`FormError`, `BadPointer`, etc.) means the header was readable; the server replies with FORMERR using the extracted transaction ID. Both paths are confirmed by unit tests in `test_dns_server_udp_handler.py` and by `TestMalformedWireInput` in the component integration tests.
+Note on malformed-wire inputs: replying requires the DNS transaction ID (bytes 0-1, RFC 1035 §4.1.1). Payloads shorter than 12 bytes raise `dns.message.ShortHeader` and are dropped silently. Any other `dns.exception.DNSException` subclass (`FormError`, `BadPointer`, etc.) means the header was readable; the server replies with FORMERR using the extracted transaction ID. Both paths are confirmed by unit tests in `test_dns_server_udp_handler.py` and by `TestMalformedWireInput` in the component integration tests.
 
 ---
 
@@ -119,7 +119,7 @@ RFC 2181 — https://www.rfc-editor.org/rfc/rfc2181: §5.1 requires exactly one 
 
 | Behaviour | Status | Notes |
 |---|---|---|
-| AA flag set correctly | **Implemented** | `indisoluble/a_healthy_dns/dns_server_udp_handler.py:126` |
+| AA flag set correctly | **Implemented** | Parsed DNS responses set AA. Minimal parse-failure FORMERR responses do not set AA because no authoritative question can be evaluated. |
 | FORMERR for QDCOUNT ≠ 1 (RFC 2181 §5.1) | **Implemented** | `indisoluble/a_healthy_dns/dns_server_udp_handler.py:134-139`: `len(query.question) != 1` check.  Verified: dnspython preserves all questions for QDCOUNT > 1 wire messages; the check is necessary and effective. |
 
 No remaining Level 1 gaps in RFC 2181 coverage.
@@ -153,7 +153,7 @@ No remaining Level 1 gaps in RFC 2308 coverage.
 | FORMERR for QDCOUNT ≠ 1 (wire-level) | `tests/indisoluble/a_healthy_dns/test_dns_server_udp_integration.py` (component integration) |
 | FORMERR for malformed wire with recoverable header (≥ 12 bytes) | `tests/indisoluble/a_healthy_dns/test_dns_server_udp_integration.py` (component integration) + `tests/indisoluble/a_healthy_dns/test_dns_server_udp_handler.py` (unit) |
 | Silent drop for malformed wire shorter than 12 bytes | `tests/indisoluble/a_healthy_dns/test_dns_server_udp_handler.py` (unit — no transaction ID to reply to) |
-| Response header fields (QR, ID, AA, RA, TC) | `tests/indisoluble/a_healthy_dns/test_dns_server_udp_integration.py` (component integration) |
+| Parsed response header fields (QR, ID, AA, RA, TC) | `tests/indisoluble/a_healthy_dns/test_dns_server_udp_integration.py` (component integration) |
 | Health-check-driven A-record addition/removal | `.github/workflows/test-integration.yml` (Docker end-to-end) |
 | Container startup, Docker networking, alias zone routing | `.github/workflows/test-integration.yml` (Docker end-to-end) |
 

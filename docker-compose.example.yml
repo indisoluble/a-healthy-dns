@@ -4,20 +4,21 @@ services:
   a-healthy-dns:
     build: .
     ports:
-      # Map container port to host port (host:container)
-      - "53:53/udp"
+      # Publish standard DNS on the host while the process listens on a non-privileged container port.
+      # If you change the command to "--port 53", see docs/docker.md for the required sysctl/capability guidance.
+      - "53:53053/udp"
     command:
       # Required parameters
       - --hosted-zone
       - "example.com"
       - --zone-resolutions
-      - '{"www":{"ips":["192.168.1.100","192.168.1.101"],"health_port":8080},"api":{"ips":["192.168.1.102"],"health_port":8000}}'
+      - '{"www":["192.168.1.200"],"api":{"ips":["192.168.1.102"],"health_port":8000}}'
       - --ns
       - '["ns1.dns.example.net", "ns2.dns.example.net"]'
 
       # Optional parameters
       - --port
-      - "53"
+      - "53053"
       # - --log-level
       # - info
       # - --alias-zones
@@ -45,12 +46,9 @@ services:
     security_opt:
       - no-new-privileges:true
     
-    # Security: Drop all capabilities. Requires net.ipv4.ip_unprivileged_port_start=53 on the host.
-    # Fallback: uncomment cap_add if the sysctl cannot be set. See docs/docker.md §5 for details.
+    # Security: the app binds a non-privileged container port, so no port-binding capability is required.
     cap_drop:
       - ALL
-    # cap_add:
-    #   - NET_BIND_SERVICE
     
     # Resource limits
     deploy:

@@ -25,10 +25,12 @@ ENV PATH="/app/venv/bin:$PATH" \
 
 WORKDIR /app
 
-COPY --from=builder /app/venv /app/venv
-COPY --from=builder --chmod=0700 /app/keys /app/keys
+# COPY defaults to root ownership; keep runtime files readable by the
+# Chainguard non-root uid 65532. See docs/docker.md for the runtime contract.
+COPY --from=builder --chown=65532:65532 /app/venv /app/venv
+COPY --from=builder --chown=65532:65532 --chmod=0700 /app/keys /app/keys
 
-# Expose the standard DNS port (static metadata; pass --port 53 to bind it).
+# Static metadata for standard DNS; the runtime command controls the actual listener port.
 EXPOSE 53/udp
 
 # Volume for DNSSEC keys.

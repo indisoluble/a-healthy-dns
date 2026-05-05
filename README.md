@@ -22,7 +22,7 @@ docker run -d \
   indisoluble/a-healthy-dns \
   --port 53053 \
   --hosted-zone example.local \
-  --zone-resolutions '{"www":{"ips":["192.168.1.100","192.168.1.101"],"health_port":8080},"static":["192.168.1.200"]}' \
+  --zone-resolutions '{"www":["192.168.1.200"],"checked":{"ips":["192.168.1.100","192.168.1.101"],"health_port":8080}}' \
   --ns '["ns1.dns.example.net"]'
 ```
 
@@ -31,7 +31,6 @@ Verify it is running:
 ```bash
 dig @localhost -p 53053 example.local SOA
 dig @localhost -p 53053 www.example.local A
-dig @localhost -p 53053 static.example.local A
 docker logs --tail 50 a-healthy-dns
 ```
 
@@ -46,7 +45,7 @@ pip install .
 
 a-healthy-dns \
   --hosted-zone example.local \
-  --zone-resolutions '{"www":{"ips":["192.168.1.100","192.168.1.101"],"health_port":8080},"static":["192.168.1.200"]}' \
+  --zone-resolutions '{"www":["192.168.1.200"],"checked":{"ips":["192.168.1.100","192.168.1.101"],"health_port":8080}}' \
   --ns '["ns1.dns.example.net"]'
 ```
 
@@ -79,6 +78,6 @@ Start with [docs/table-of-contents.md](docs/table-of-contents.md) for the minimu
 | [docs/workflow.md](docs/workflow.md) | CI validation, release readiness gates, and documentation workflow |
 | [docs/release.md](docs/release.md) | Versioning, release publication, artifacts, changelog, and compatibility |
 | [docs/RFC-conformance.md](docs/RFC-conformance.md) | Wire-level authoritative UDP behavior, response semantics, and RFC scope boundaries |
-| [docs/configuration-reference.md](docs/configuration-reference.md) | CLI flags, defaults, and Docker command examples |
-| [docs/docker.md](docs/docker.md) | Docker deployment guide: quick start, Compose, DNSSEC mounts, hardening, and upgrades |
+| [docs/configuration-reference.md](docs/configuration-reference.md) | CLI flags, defaults, and parameter examples |
+| [docs/docker.md](docs/docker.md) | Docker deployment guide: quick start, Compose, DNSSEC mounts, hardening, orchestrator notes, and upgrades |
 | [docs/troubleshooting.md](docs/troubleshooting.md) | Runtime diagnosis, log interpretation, live debugging, monitoring, and incident handoff |

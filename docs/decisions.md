@@ -119,25 +119,26 @@ Only decisions supported by repository code, documentation, or commit history ar
 - Versioning and publication rules remain owned by [`docs/release.md`](release.md).
 - CI validation behavior remains owned by [`docs/workflow.md`](workflow.md).
 
-## D008 - Use Host Sysctl As The Canonical Privileged-Port Binding Strategy
+## D008 - Use Network-Namespace Sysctl As The Canonical Privileged-Port Binding Strategy
 
 **Status:** accepted.
 
-**Decision:** `net.ipv4.ip_unprivileged_port_start=53` (or `=0`) set on the host or Kubernetes node is the canonical strategy for allowing a non-root container to bind port `53`. `NET_BIND_SERVICE` remains available as a fallback for environments where the sysctl cannot be applied. The image itself does not change: no `setcap`, no `libcap`, no additional build stage.
+**Decision:** The image must not gain privileged-port binding mechanics: no `setcap`, no `libcap`, no additional build stage, and no root runtime user. Standard DNS exposure should avoid process-level privileged binding when runtime port publishing can map host port `53` to a non-privileged listener port. When the DNS process itself must bind port `53`, `net.ipv4.ip_unprivileged_port_start=53` (or `=0`) set in the network namespace where the process binds is the canonical strategy. `NET_BIND_SERVICE` remains a runtime-specific fallback only when the runtime grants it effectively to the non-root process. Exact Docker, Compose, Kubernetes, and ECS deployment procedures live in [`docs/docker.md`](docker.md).
 
-**Rationale:** The sysctl approach requires no image modification, is fully compatible with `no-new-privileges: true`, is the standard mechanism in Kubernetes (`securityContext.sysctls`) and on modern Linux hosts, and eliminates the need for any Linux capability inside the container when the sysctl is set once on the host or node. File capabilities baked into the image would require an extra build stage and a non-distroless base layer, complicating the build and supply-chain properties of the image. `NET_BIND_SERVICE` is a working fallback but it is capability-based rather than kernel-parameter-based, meaning it is an image-independent host policy applied at runtime rather than at build time.
+**Rationale:** `net.ipv4.ip_unprivileged_port_start` is a network-namespace sysctl. Applying it to the namespace where the process binds requires no image modification, is fully compatible with `no-new-privileges: true`, is the standard mechanism in Kubernetes for non-hostNetwork pods (`securityContext.sysctls`), and eliminates the need for any Linux capability inside the container when the sysctl can be set. When bridge-mode port publishing can map host port `53` to container port `53053`, the process never performs a privileged bind and no privileged-port mechanism is needed inside the container. The capability path is more fragile: Linux checks the effective capability set, and a non-root exec path does not automatically make `NET_BIND_SERVICE` effective merely because a container manifest names it. Some runtimes can deliver an effective capability to a non-root process; others may leave it only in bounding/permitted state, especially across older Docker or Kubernetes combinations. Baked-in file capabilities (`setcap cap_net_bind_service=+ep`) would make that promotion explicit but require an extra build stage and a non-distroless base layer, complicating the build and supply-chain properties of the image.
 
 **Alternatives considered:**
 
 - `setcap cap_net_bind_service=+ep` on the binary (file capability): rejected because it requires an extra Alpine or similar build stage and changes the image, breaking the clean two-stage Chainguard build.
-- `NET_BIND_SERVICE` at runtime only: accepted as a fallback path for shared or restricted environments where the sysctl cannot be set, but not recommended as the primary approach because it requires a capability grant at every container start rather than a one-time host configuration.
+- `NET_BIND_SERVICE` at runtime only: accepted only as a runtime-specific fallback for shared or restricted environments where the sysctl cannot be set and the runtime is known to grant `CAP_NET_BIND_SERVICE` effectively to the non-root process.
 
 **Consequences:**
 
-- The Dockerfile remains unchanged.
+- The Dockerfile is not modified for privileged-port binding.
 - `no-new-privileges: true` remains a baseline hardening requirement in all deployment examples.
-- `net.ipv4.ip_unprivileged_port_start=53` becomes the documented one-time host prerequisite for port-53 binding without capabilities.
-- `NET_BIND_SERVICE` is documented as the fallback when the sysctl cannot be set (shared hosts, restricted cloud runtimes, ECS Anywhere when the VM sysctl is not configurable).
-- For ECS Anywhere with host networking, `NET_BIND_SERVICE` in `linuxParameters.capabilities.add` remains necessary when the sysctl is not set on the external VM, because ECS does not expose kernel sysctl configuration at the task level.
+- Repository Docker and Compose examples prefer publishing host port `53` to a non-privileged container listener when the process does not need to bind container port `53`.
+- `net.ipv4.ip_unprivileged_port_start=53` becomes the documented primary prerequisite for port-53 binding without capabilities in the network namespace where the process binds.
+- `NET_BIND_SERVICE` is documented only as a runtime-specific fallback when the sysctl cannot be set and the runtime makes the capability effective for the non-root process.
+- Operators who use the capability fallback must verify the running process has `CAP_NET_BIND_SERVICE` in its effective capability set; this image does not include a file capability on the Python interpreter or console-script entry point.
 - Operator deployment guidance and updated examples live in [`docs/docker.md`](docker.md).
-- The runtime security contract is owned by [`docs/requirements.md`](requirements.md) (R23) and [`docs/engineering-rules.md`](engineering-rules.md).
+- The security requirement is owned by [`docs/requirements.md`](requirements.md) (R23); repository-side container rules are owned by [`docs/engineering-rules.md`](engineering-rules.md).

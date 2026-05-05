@@ -86,7 +86,7 @@ Use this map when updating documentation: extend the canonical owner for the top
 | Python runtime, dependencies, imports, module headers, logging, typing, validators, or class layout | [`docs/implementation-notes.md`](implementation-notes.md) |
 | Health-check timing, alias-zone behavior, or DNSSEC design | [`docs/architecture.md`](architecture.md), [`docs/configuration-reference.md`](configuration-reference.md) when configuration surfaces change |
 | CLI flag, default value, or configuration example | [`docs/configuration-reference.md`](configuration-reference.md), [`docs/requirements.md`](requirements.md) when behavior changes |
-| Docker image, runtime contract, Compose, hardening, or upgrades | [`docs/docker.md`](docker.md), [`docs/engineering-rules.md`](engineering-rules.md) for repository-side build invariants |
+| Docker image, runtime contract, Compose, hardening, orchestrator notes, or upgrades | [`docs/docker.md`](docker.md), [`docs/engineering-rules.md`](engineering-rules.md) for repository-side build invariants |
 | Operational issue, runtime diagnosis, log analysis, incident response, or monitoring | [`docs/troubleshooting.md`](troubleshooting.md) |
 | DNS wire behavior, response codes, negative responses, or RFC scope | [`docs/RFC-conformance.md`](RFC-conformance.md), [`docs/requirements.md`](requirements.md) |
 | Test additions, QA commands, test taxonomy, fixtures, or coverage expectations | [`docs/testing.md`](testing.md) |
