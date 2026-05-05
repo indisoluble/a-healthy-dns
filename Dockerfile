@@ -25,11 +25,8 @@ ENV PATH="/app/venv/bin:$PATH" \
 
 WORKDIR /app
 
-COPY --from=builder --chown=65532:65532 /app/venv /app/venv
-COPY --from=builder --chown=65532:65532 --chmod=0700 /app/keys /app/keys
-
-# 65532 is the default non-root user in Chainguard distroless images.
-USER 65532
+COPY --from=builder /app/venv /app/venv
+COPY --from=builder --chmod=0700 /app/keys /app/keys
 
 # Expose the standard DNS port (static metadata; pass --port 53 to bind it).
 EXPOSE 53/udp

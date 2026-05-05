@@ -59,9 +59,6 @@ services:
     # cap_add:
     #   - NET_BIND_SERVICE
     
-    # Security: Use the Chainguard image's default nonroot UID explicitly
-    user: "65532"
-    
     # Resource limits
     deploy:
       resources:

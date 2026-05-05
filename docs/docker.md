@@ -29,7 +29,7 @@ The published image and the repository `Dockerfile` expose a few operator-visibl
 | Privileged bind strategy | Recommended: set `net.ipv4.ip_unprivileged_port_start=53` (or `=0`) on the host so no capability is required. Fallback: add `NET_BIND_SERVICE` at runtime when the sysctl cannot be set. |
 | Image footprint | The runtime image is distroless and does not include a shell, `pip`, or an OS package manager; use the troubleshooting guide for diagnostics |
 
-The image already declares `USER 65532` in the repository `Dockerfile`. Deployment examples repeat `--user 65532`, Compose `user: "65532"`, or equivalent orchestrator settings so manifests preserve the image's non-root runtime identity. This does not require a host user named `65532`; it preserves the numeric uid that owns runtime files inside the image and keeps mounted DNSSEC key permissions predictable.
+The Chainguard base image (`cgr.dev/chainguard/python:latest`) defaults to uid `65532` (`nonroot`). The repository `Dockerfile` relies on this default and does not override it with an explicit `USER` instruction. Because runtime files inside the image — the virtual environment and the DNSSEC key directory — are owned by that uid, operators who mount external DNSSEC keys must ensure the host directory is readable by numeric uid `65532`. This does not require a host user account named `65532`; Docker resolves ownership by numeric uid, not by name. Orchestrator manifests that pin the uid explicitly (for example `"user": "65532"` in ECS task definitions or `runAsUser: 65532` in Kubernetes pod specs) preserve the non-root identity even when the orchestrator does not propagate the image default.
 
 ---
 
@@ -92,7 +92,7 @@ The example file already demonstrates the main deployment choices this project e
 - explicit UDP port mapping,
 - CLI flag configuration through the Compose `command`,
 - a dedicated bridge network,
-- non-root execution as uid `65532`,
+- non-root execution as uid `65532` (inherited from the Chainguard base image default),
 - `no-new-privileges` hardening,
 - `cap_drop: [ALL]` with no capabilities added (assumes `net.ipv4.ip_unprivileged_port_start=53` is set on the host — see the inline comments),
 - and memory/CPU limits.
@@ -254,7 +254,7 @@ When upgrading:
 If you deploy through Kubernetes, Swarm, Nomad, or another orchestrator, preserve the same container contract:
 - UDP exposure for the DNS listener,
 - the CLI-argument configuration surface,
-- non-root execution as uid `65532`,
+- non-root execution as uid `65532` (the Chainguard base image default; pin it explicitly with `runAsUser: 65532` in Kubernetes pod specs or `"user": "65532"` in ECS task definitions),
 - `/app/keys` for DNSSEC key mounts,
 - `no-new-privileges` enabled,
 - and the privileged-port binding strategy: set `net.ipv4.ip_unprivileged_port_start=53` on the node (or via a Kubernetes `securityContext.sysctls` entry) when possible. In Kubernetes, the equivalent pod-level setting is:
