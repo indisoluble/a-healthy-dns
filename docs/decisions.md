@@ -118,3 +118,26 @@ Only decisions supported by repository code, documentation, or commit history ar
 - Release publication remains automation-owned rather than operator-owned.
 - Versioning and publication rules remain owned by [`docs/release.md`](release.md).
 - CI validation behavior remains owned by [`docs/workflow.md`](workflow.md).
+
+## D008 - Use Host Sysctl As The Canonical Privileged-Port Binding Strategy
+
+**Status:** accepted.
+
+**Decision:** `net.ipv4.ip_unprivileged_port_start=53` (or `=0`) set on the host or Kubernetes node is the canonical strategy for allowing a non-root container to bind port `53`. `NET_BIND_SERVICE` remains available as a fallback for environments where the sysctl cannot be applied. The image itself does not change: no `setcap`, no `libcap`, no additional build stage.
+
+**Rationale:** The sysctl approach requires no image modification, is fully compatible with `no-new-privileges: true`, is the standard mechanism in Kubernetes (`securityContext.sysctls`) and on modern Linux hosts, and eliminates the need for any Linux capability inside the container when the sysctl is set once on the host or node. File capabilities baked into the image would require an extra build stage and a non-distroless base layer, complicating the build and supply-chain properties of the image. `NET_BIND_SERVICE` is a working fallback but it is capability-based rather than kernel-parameter-based, meaning it is an image-independent host policy applied at runtime rather than at build time.
+
+**Alternatives considered:**
+
+- `setcap cap_net_bind_service=+ep` on the binary (file capability): rejected because it requires an extra Alpine or similar build stage and changes the image, breaking the clean two-stage Chainguard build.
+- `NET_BIND_SERVICE` at runtime only: accepted as a fallback path for shared or restricted environments where the sysctl cannot be set, but not recommended as the primary approach because it requires a capability grant at every container start rather than a one-time host configuration.
+
+**Consequences:**
+
+- The Dockerfile remains unchanged.
+- `no-new-privileges: true` remains a baseline hardening requirement in all deployment examples.
+- `net.ipv4.ip_unprivileged_port_start=53` becomes the documented one-time host prerequisite for port-53 binding without capabilities.
+- `NET_BIND_SERVICE` is documented as the fallback when the sysctl cannot be set (shared hosts, restricted cloud runtimes, ECS Anywhere when the VM sysctl is not configurable).
+- For ECS Anywhere with host networking, `NET_BIND_SERVICE` in `linuxParameters.capabilities.add` remains necessary when the sysctl is not set on the external VM, because ECS does not expose kernel sysctl configuration at the task level.
+- Operator deployment guidance and updated examples live in [`docs/docker.md`](docker.md).
+- The runtime security contract is owned by [`docs/requirements.md`](requirements.md) (R23) and [`docs/engineering-rules.md`](engineering-rules.md).

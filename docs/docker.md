@@ -26,7 +26,7 @@ The published image and the repository `Dockerfile` expose a few operator-visibl
 | Exposed container port | `53/udp`; pass `--port 53` when the process should listen on that port |
 | Configuration surface | Pass normal `a-healthy-dns` CLI flags as the container command |
 | DNSSEC key mount | `/app/keys` is the expected mount point for private keys |
-| Privileged bind strategy | Add runtime `NET_BIND_SERVICE` when the container must bind port `53` and the runtime enforces privileged-port restrictions |
+| Privileged bind strategy | Recommended: set `net.ipv4.ip_unprivileged_port_start=53` (or `=0`) on the host so no capability is required. Fallback: add `NET_BIND_SERVICE` at runtime when the sysctl cannot be set. |
 | Image footprint | The runtime image is distroless and does not include a shell, `pip`, or an OS package manager; use the troubleshooting guide for diagnostics |
 
 The image already declares `USER 65532` in the repository `Dockerfile`. Deployment examples repeat `--user 65532`, Compose `user: "65532"`, or equivalent orchestrator settings so manifests preserve the image's non-root runtime identity. This does not require a host user named `65532`; it preserves the numeric uid that owns runtime files inside the image and keeps mounted DNSSEC key permissions predictable.
@@ -94,8 +94,10 @@ The example file already demonstrates the main deployment choices this project e
 - a dedicated bridge network,
 - non-root execution as uid `65532`,
 - `no-new-privileges` hardening,
-- `cap_drop: [ALL]` plus `NET_BIND_SERVICE`,
+- `cap_drop: [ALL]` with no capabilities added (assumes `net.ipv4.ip_unprivileged_port_start=53` is set on the host — see the inline comments),
 - and memory/CPU limits.
+
+If the host sysctl cannot be set, uncomment `cap_add: [NET_BIND_SERVICE]` in the example file as a fallback.
 
 By default the example builds the image from the local repository (`build: .`). If you want to deploy the published image instead, replace `build: .` with `image: indisoluble/a-healthy-dns:<version>`.
 
@@ -138,11 +140,22 @@ Use a non-privileged host port such as `53053` when you do not need the service 
 
 ### Direct port-53 deployment
 
-For a production-style deployment on the standard DNS port, run the container on `53/udp`:
+For a production-style deployment on the standard DNS port, run the container on `53/udp`.
+
+**Recommended approach — host sysctl:**
+
+Set `net.ipv4.ip_unprivileged_port_start=53` once on the host before starting the container. This allows the non-root process to bind privileged ports without any additional capability:
 
 ```bash
+# One-time host configuration
+sudo sysctl -w net.ipv4.ip_unprivileged_port_start=53
+# To persist across reboots, add to /etc/sysctl.d/99-dns.conf:
+#   net.ipv4.ip_unprivileged_port_start=53
+
 docker run -d \
   --name a-healthy-dns \
+  --cap-drop=ALL \
+  --security-opt=no-new-privileges:true \
   -p 53:53/udp \
   indisoluble/a-healthy-dns \
   --port 53 \
@@ -151,15 +164,22 @@ docker run -d \
   --ns '["ns1.dns.example.net","ns2.dns.example.net"]'
 ```
 
-If your runtime enforces privileged-port restrictions, add `NET_BIND_SERVICE` explicitly to preserve port-53 binding:
+**Fallback — `NET_BIND_SERVICE` capability:**
+
+Use this when the host sysctl cannot be set (shared hosts, restricted cloud runtimes):
 
 ```bash
 docker run -d \
+  --name a-healthy-dns \
   --cap-drop=ALL \
   --cap-add=NET_BIND_SERVICE \
+  --security-opt=no-new-privileges:true \
   -p 53:53/udp \
-  ... \
-  indisoluble/a-healthy-dns
+  indisoluble/a-healthy-dns \
+  --port 53 \
+  --hosted-zone example.com \
+  --zone-resolutions '{"www":{"ips":["10.0.1.100","10.0.1.101"],"health_port":80},"static":["10.0.1.200"]}' \
+  --ns '["ns1.dns.example.net","ns2.dns.example.net"]'
 ```
 
 ### Redundant authoritative nodes
@@ -168,7 +188,7 @@ Run the same zone configuration on more than one host and publish all nodes in t
 
 ### Host networking
 
-`--network host` is a valid deployment option when your environment prefers direct host networking over bridge networking. The tradeoff is lower network isolation in exchange for simpler port handling and lower network overhead.
+`--network host` is a valid deployment option when your environment prefers direct host networking over bridge networking. The tradeoff is lower network isolation in exchange for simpler port handling and lower network overhead. Apply the same port-53 binding strategy as the direct port-53 pattern above: prefer the host sysctl and fall back to `NET_BIND_SERVICE` when the sysctl cannot be set.
 
 ---
 
@@ -178,19 +198,22 @@ Use the image defaults as the baseline, then add only the hardening controls you
 
 Recommended controls:
 - keep the container non-root; the image already does this by default,
-- use `--cap-drop=ALL` and add back only `NET_BIND_SERVICE` when binding container port `53`,
+- use `--security-opt=no-new-privileges:true` so the process and its children cannot acquire additional privileges after startup; this is a baseline hardening requirement,
+- use `--cap-drop=ALL`; no capabilities need to be added when `net.ipv4.ip_unprivileged_port_start=53` (or `=0`) is set on the host,
+- add `NET_BIND_SERVICE` only as a fallback when the host sysctl cannot be set,
 - prefer read-only key mounts (`/app/keys:ro`),
-- use `--security-opt=no-new-privileges:true` so the process and its children cannot acquire additional privileges after startup,
 - consider `--read-only` plus `--tmpfs /tmp:rw,noexec,nosuid` when a hardened deployment should make the image filesystem immutable while still providing a constrained writable `/tmp`.
 
-Example hardened run:
+Example hardened run (with host sysctl set):
 
 ```bash
+# One-time host prerequisite
+sudo sysctl -w net.ipv4.ip_unprivileged_port_start=53
+
 docker run -d \
   --name a-healthy-dns \
   --user 65532 \
   --cap-drop=ALL \
-  --cap-add=NET_BIND_SERVICE \
   --read-only \
   --tmpfs /tmp:rw,noexec,nosuid \
   --security-opt=no-new-privileges:true \
@@ -201,6 +224,8 @@ docker run -d \
   --zone-resolutions '{"www":{"ips":["10.0.1.100"],"health_port":80},"static":["10.0.1.200"]}' \
   --ns '["ns1.dns.example.net"]'
 ```
+
+If the host sysctl cannot be set, add `--cap-add=NET_BIND_SERVICE` to the command above.
 
 The repository Compose example already demonstrates a conservative hardened baseline.
 
@@ -231,7 +256,17 @@ If you deploy through Kubernetes, Swarm, Nomad, or another orchestrator, preserv
 - the CLI-argument configuration surface,
 - non-root execution as uid `65532`,
 - `/app/keys` for DNSSEC key mounts,
-- and `NET_BIND_SERVICE` when the runtime enforces privileged-port restrictions and still needs port `53`.
+- `no-new-privileges` enabled,
+- and the privileged-port binding strategy: set `net.ipv4.ip_unprivileged_port_start=53` on the node (or via a Kubernetes `securityContext.sysctls` entry) when possible. In Kubernetes, the equivalent pod-level setting is:
+
+  ```yaml
+  securityContext:
+    sysctls:
+      - name: net.ipv4.ip_unprivileged_port_start
+        value: "53"
+  ```
+
+  When the sysctl cannot be set, add `NET_BIND_SERVICE` to the container's `securityContext.capabilities.add`.
 
 ### AWS ECS Anywhere / external VMs
 
@@ -239,7 +274,9 @@ For Amazon ECS external instances, use the `EXTERNAL` launch type. External inst
 
 Use `host` networking when the task should answer directly on the VM's UDP port `53`. This keeps DNS port ownership explicit: only one task per VM can bind host port `53`.
 
-Task definition shape:
+**Privileged-port note for ECS Anywhere:** ECS does not expose kernel sysctl configuration at the task level. The recommended approach is to set `net.ipv4.ip_unprivileged_port_start=53` on the external VM itself (e.g., in `/etc/sysctl.d/99-dns.conf`) before the task starts. When that sysctl is set on the VM, `NET_BIND_SERVICE` can be removed from `linuxParameters.capabilities.add`. When the sysctl cannot be applied to the VM, keep `NET_BIND_SERVICE` in the task definition as the fallback.
+
+Task definition shape (with `NET_BIND_SERVICE` as fallback; remove it when the host sysctl is set):
 
 ```json
 {

@@ -64,6 +64,6 @@ These rules apply to repository-side changes in `Dockerfile`, `docker-compose.ex
 
 - The final image runs as the Chainguard default non-root user, uid `65532`, avoiding custom user creation in the distroless runtime. Do not change this casually.
 - `/app/keys` remains the mount point for DNSSEC private keys, owned by uid `65532` with restrictive permissions.
-- Runtime deployments that bind container port `53` must preserve `NET_BIND_SERVICE` when the container runtime enforces privileged-port restrictions.
+- Runtime deployments that bind container port `53` should use the host sysctl `net.ipv4.ip_unprivileged_port_start=53` (or `=0`) as the primary approach. `NET_BIND_SERVICE` remains a valid fallback when the sysctl cannot be set. See D008 in [`docs/decisions.md`](decisions.md).
 - The image entrypoint runs `a-healthy-dns` directly; container runtime configuration is passed as CLI command arguments.
 - Docker end-to-end coverage continues to use an isolated bridge network with a real backend container so health checks exercise an actual TCP connection.
