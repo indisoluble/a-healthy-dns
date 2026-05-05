@@ -45,15 +45,8 @@ services:
     security_opt:
       - no-new-privileges:true
     
-    # Security: Drop all capabilities.
-    # Recommended approach: set net.ipv4.ip_unprivileged_port_start=53 (or =0) on the host
-    # once before starting the container. With that sysctl, no capabilities are needed:
-    #   sudo sysctl -w net.ipv4.ip_unprivileged_port_start=53
-    # To persist across reboots, add to /etc/sysctl.d/99-dns.conf:
-    #   net.ipv4.ip_unprivileged_port_start=53
-    # Fallback: if the sysctl cannot be set (shared hosts, restricted runtimes), uncomment
-    # cap_add below. NET_BIND_SERVICE is compatible with no-new-privileges but is less
-    # portable than the sysctl approach.
+    # Security: Drop all capabilities. Requires net.ipv4.ip_unprivileged_port_start=53 on the host.
+    # Fallback: uncomment cap_add if the sysctl cannot be set. See docs/docker.md §5 for details.
     cap_drop:
       - ALL
     # cap_add:
