@@ -29,7 +29,7 @@ The published image and the repository `Dockerfile` expose a few operator-visibl
 | Privileged bind strategy | The Python interpreter has `NET_BIND_SERVICE` set as a file capability during the image build. At runtime, grant `NET_BIND_SERVICE` via `cap_add` (or equivalent) so the capability stays in the process bounding set; do **not** set `no-new-privileges`, which blocks file capabilities |
 | Image footprint | The runtime image is distroless and does not include a shell, `pip`, or an OS package manager; use the troubleshooting guide for diagnostics |
 
-The image already declares `USER 65532` in the repository `Dockerfile`. Deployment examples repeat `--user 65532`, Compose `user: "65532"`, or equivalent orchestrator settings so manifests preserve the image's non-root runtime identity. This does not require a host user named `65532`; it preserves the numeric uid that owns runtime files inside the image and keeps mounted DNSSEC key permissions predictable.
+The Chainguard base image runs as uid `65532` by default; the repository `Dockerfile` does not add a separate `USER` instruction. Deployment manifests and Compose files should still set `user: "65532"` explicitly to make the non-root uid visible in operator configuration and keep mounted DNSSEC key permissions predictable. This does not require a host user named `65532`.
 
 ---
 
@@ -93,8 +93,8 @@ The example file already demonstrates the main deployment choices this project e
 - CLI flag configuration through the Compose `command`,
 - a dedicated bridge network,
 - non-root execution as uid `65532`,
-- `no-new-privileges` hardening,
 - `cap_drop: [ALL]` plus `NET_BIND_SERVICE`,
+- `no-new-privileges` commented out because it is incompatible with port-53 file capability binding (see [`docs/decisions.md`](decisions.md) D008),
 - and memory/CPU limits.
 
 By default the example builds the image from the local repository (`build: .`). If you want to deploy the published image instead, replace `build: .` with `image: indisoluble/a-healthy-dns:<version>`.
@@ -113,6 +113,8 @@ Example:
 ```bash
 docker run -d \
   --name a-healthy-dns-dnssec \
+  --cap-drop=ALL \
+  --cap-add=NET_BIND_SERVICE \
   -p 53:53/udp \
   -v "$(pwd)/keys:/app/keys:ro" \
   indisoluble/a-healthy-dns \
@@ -138,28 +140,19 @@ Use a non-privileged host port such as `53053` when you do not need the service 
 
 ### Direct port-53 deployment
 
-For a production-style deployment on the standard DNS port, run the container on `53/udp`:
+For a production-style deployment on the standard DNS port, `NET_BIND_SERVICE` must be in the capability bounding set; the image relies on a file capability to allow uid `65532` to bind to port `53` (see [`docs/decisions.md`](decisions.md) D008):
 
 ```bash
 docker run -d \
   --name a-healthy-dns \
+  --cap-drop=ALL \
+  --cap-add=NET_BIND_SERVICE \
   -p 53:53/udp \
   indisoluble/a-healthy-dns \
   --port 53 \
   --hosted-zone example.com \
   --zone-resolutions '{"www":{"ips":["10.0.1.100","10.0.1.101"],"health_port":80},"static":["10.0.1.200"]}' \
   --ns '["ns1.dns.example.net","ns2.dns.example.net"]'
-```
-
-If your runtime enforces privileged-port restrictions, add `NET_BIND_SERVICE` explicitly to preserve port-53 binding:
-
-```bash
-docker run -d \
-  --cap-drop=ALL \
-  --cap-add=NET_BIND_SERVICE \
-  -p 53:53/udp \
-  ... \
-  indisoluble/a-healthy-dns
 ```
 
 ### Redundant authoritative nodes
@@ -231,7 +224,7 @@ If you deploy through Kubernetes, Swarm, Nomad, or another orchestrator, preserv
 - the CLI-argument configuration surface,
 - non-root execution as uid `65532`,
 - `/app/keys` for DNSSEC key mounts,
-- and `NET_BIND_SERVICE` when the runtime enforces privileged-port restrictions and still needs port `53`.
+- and `NET_BIND_SERVICE` in the capability bounding set for port-53 deployments (required; see [`docs/decisions.md`](decisions.md) D008).
 
 ### AWS ECS Anywhere / external VMs
 
