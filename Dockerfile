@@ -48,9 +48,6 @@ COPY --from=builder --chown=65532:65532 --chmod=0700 /app/keys /app/keys
 # See docs/decisions.md (D008).
 COPY --from=capable-python /app/python /app/python
 
-# 65532 is the default non-root user in Chainguard distroless images.
-USER 65532
-
 # Expose the standard DNS port (static metadata; pass --port 53 to bind it).
 EXPOSE 53/udp
 
