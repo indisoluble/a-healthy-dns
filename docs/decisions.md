@@ -123,7 +123,7 @@ Only decisions supported by repository code, documentation, or commit history ar
 
 **Status:** accepted.
 
-**Decision:** The Docker image grants `NET_BIND_SERVICE` to the Python interpreter as a Linux file capability (via `setcap` in the builder stage) rather than relying on the container runtime to supply it through `--cap-add` alone or through ambient capabilities. `libcap` is a build-time dependency only and is not present in the distroless production image.
+**Decision:** The Docker image grants `NET_BIND_SERVICE` to the Python interpreter as a Linux file capability (via `setcap` in a dedicated Alpine build stage) rather than relying on the container runtime to supply it through `--cap-add` alone or through ambient capabilities. `libcap` is a build-time dependency only and is not present in the distroless production image. A separate Alpine stage is used for `setcap` because the Chainguard builder image runs as a non-root user and cannot install packages with `apk`.
 
 **Rationale:** For a non-root process (uid `65532`), Docker's `--cap-add NET_BIND_SERVICE` adds the capability to the process bounding set but not to the effective set. Without a file capability (`+ep`) on the binary, the Linux kernel leaves the effective set empty after `exec`, and the process cannot bind to privileged ports (< 1024). File capabilities are the portable, runtime-agnostic mechanism for granting this permission to a non-root user across bridge and host networking modes, including AWS ECS external instances. Ambient capabilities would achieve the same result but are not exposed by Docker's high-level API or by ECS task definitions.
 
