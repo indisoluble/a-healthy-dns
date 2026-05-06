@@ -83,6 +83,32 @@ def test_main_success(
 @patch("indisoluble.a_healthy_dns.main.make_config")
 @patch("indisoluble.a_healthy_dns.main.DnsServerZoneUpdaterThreaded")
 @patch("indisoluble.a_healthy_dns.main.socketserver.UDPServer")
+def test_main_stops_zone_updater_when_server_setup_fails(
+    mock_udp_server,
+    mock_zone_updater,
+    mock_make_config,
+    mock_logging,
+    default_args,
+    mock_config,
+):
+    mock_make_config.return_value = mock_config
+
+    mock_zone_updater_instance = MagicMock()
+    mock_zone_updater.return_value = mock_zone_updater_instance
+    mock_udp_server.side_effect = OSError("port already in use")
+
+    with pytest.raises(OSError, match="port already in use"):
+        _main(default_args)
+
+    mock_logging.basicConfig.assert_called_once()
+    mock_zone_updater_instance.start.assert_called_once()
+    mock_zone_updater_instance.stop.assert_called_once()
+
+
+@patch("indisoluble.a_healthy_dns.main.logging")
+@patch("indisoluble.a_healthy_dns.main.make_config")
+@patch("indisoluble.a_healthy_dns.main.DnsServerZoneUpdaterThreaded")
+@patch("indisoluble.a_healthy_dns.main.socketserver.UDPServer")
 def test_main_with_failed_config(
     mock_udp_server, mock_zone_updater, mock_make_config, mock_logging, default_args
 ):

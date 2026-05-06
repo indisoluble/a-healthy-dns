@@ -152,7 +152,7 @@ Use an in-zone nameserver hostname only when that owner name is also a real serv
 
 UDP port the DNS server listens on.
 
-> **Note:** Docker examples that expose container port `53` pass `--port 53` explicitly. Deployments that enforce privileged-port restrictions must grant `NET_BIND_SERVICE` to let the non-root container process bind port `53`.
+> **Note:** `--port` controls the UDP listener inside the process. Docker host-port publishing, privileged bind handling, and hardening are deployment concerns owned by [`docs/docker.md`](docker.md).
 
 ### Log level
 
@@ -258,10 +258,12 @@ a-healthy-dns \
 
 ```bash
 docker run -d \
-  -p 53:53/udp \
+  --cap-drop=ALL \
+  --security-opt=no-new-privileges:true \
+  -p 53:53053/udp \
   -v "$(pwd)/keys:/app/keys:ro" \
   indisoluble/a-healthy-dns \
-  --port 53 \
+  --port 53053 \
   --hosted-zone sub.domain.com \
   --zone-resolutions '{"www":{"ips":["192.168.1.100"],"health_port":8080}}' \
   --ns '["ns1.dns.example.net"]' \

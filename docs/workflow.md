@@ -36,4 +36,4 @@ Early runs that fail because a sibling workflow has not completed yet are expect
 - Update canonical documentation in the same change as any behavior, interface, architecture, configuration, operations, workflow, or constraint change.
 - Keep `README.md` concise and entry-point oriented.
 - Put long-form documentation under `docs/`.
-- Keep legacy redirect documents short; do not add new substantive content to them.
+- If a legacy redirect document is introduced, keep it short and do not add new substantive content to it.

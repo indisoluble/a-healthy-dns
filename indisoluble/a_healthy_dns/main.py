@@ -240,20 +240,19 @@ def _main(args: Dict[str, Any]) -> int:
     )
     zone_updater.start()
 
-    # Launch DNS server
-    server_address = ("", args[_ARG_PORT])
-    with socketserver.UDPServer(server_address, DnsServerUdpHandler) as server:
-        partial_signal_handler = partial(_signal_handler, server)
-        for sig in (signal.SIGINT, signal.SIGTERM):
-            signal.signal(sig, partial_signal_handler)
+    try:
+        server_address = ("", args[_ARG_PORT])
+        with socketserver.UDPServer(server_address, DnsServerUdpHandler) as server:
+            partial_signal_handler = partial(_signal_handler, server)
+            for sig in (signal.SIGINT, signal.SIGTERM):
+                signal.signal(sig, partial_signal_handler)
 
-        logging.info("DNS server listening on port %d...", args[_ARG_PORT])
-        server.zone = zone_updater.zone
-        server.zone_origins = config.zone_origins
-        server.serve_forever()
-
-    # Stop zone updater
-    zone_updater.stop()
+            logging.info("DNS server listening on port %d...", args[_ARG_PORT])
+            server.zone = zone_updater.zone
+            server.zone_origins = config.zone_origins
+            server.serve_forever()
+    finally:
+        zone_updater.stop()
 
     return 0
 

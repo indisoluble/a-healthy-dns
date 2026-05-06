@@ -377,7 +377,7 @@ def test_handle_exception_parsing_query(
     assert not bool(response.flags & dns.flags.RA)
     assert not bool(response.flags & dns.flags.TC)
 
-    assert mock_update_response.call_not_called()
+    mock_update_response.assert_not_called()
 
 
 @pytest.mark.parametrize("wire_data", [b"", b"\x00\x01\x00\x00"])
@@ -392,7 +392,7 @@ def test_handle_malformed_wire_input_drops_silently(
 
     # Payload too short to recover a DNS header: drop silently, no response.
     mock_sock.sendto.assert_not_called()
-    assert mock_update_response.call_not_called()
+    mock_update_response.assert_not_called()
 
 
 # Wire bytes that fail dns.message.from_wire() but are ≥ 12 bytes so the DNS
@@ -428,7 +428,7 @@ def test_handle_malformed_wire_with_recoverable_header_returns_formerr(
     assert sent_wire[2] & 0x80  # QR=1
     assert (sent_wire[3] & 0x0F) == dns.rcode.FORMERR
 
-    assert mock_update_response.call_not_called()
+    mock_update_response.assert_not_called()
 
 
 @pytest.mark.parametrize(
