@@ -117,7 +117,7 @@ When using Docker, confirm you are querying the exposed host port, not only the 
 ```bash
 dig @localhost -p 53053 www.example.local A
 dig @localhost -p 53053 www.example.local AAAA
-docker logs --tail 200 a-healthy-dns | grep -E "Checked IP|has no health port|A records changed|Updating zone|Added A record|skipped|unknown subdomain|not in hosted"
+docker logs --tail 200 a-healthy-dns | grep -E "Checked IP|has no health port|A records changed|Updating zone|Added A record|skipped|active zone|outside hosted"
 ```
 Use `--log-level debug` when you need the per-IP or per-record lines (`Checked IP`, `has no health port`, `Added A record`, `A record ... skipped`).
 
@@ -171,7 +171,7 @@ docker logs --since 15m a-healthy-dns | grep -c "A records changed"
 |---|---|
 | `debug` | Per-IP health checks, per-record zone updates, DNSSEC signing details, answered-query detail |
 | `info` | Normal lifecycle events: startup, shutdown, zone-updater start/stop, zone rebuilds |
-| `warning` | Out-of-zone queries, malformed queries, unsupported query shapes, unexpected updater lifecycle calls |
+| `warning` | Out-of-zone queries, malformed packets, unsupported query shapes, inbound response packets received on the query socket, unexpected updater lifecycle calls |
 | `error` | Startup-time configuration failures and key-loading failures |
 
 ### 3.2 High-value log messages
@@ -190,17 +190,22 @@ These fragments span `info`, `warning`, and `debug`. Use `--log-level debug` whe
 | `Added A record ... to zone` | A subdomain with publishable IPs is present in the new zone | Confirm with `dig` |
 | `A record ... skipped` | That subdomain currently has no publishable IPs in the active zone view | Expect `NXDOMAIN` for that name until a later refresh adds a publishable IP |
 | `Zone signing is near to expire` | DNSSEC forced a refresh even without health changes | Confirm fresh signatures if DNSSEC is enabled |
-| `Received query for unknown subdomain: ...` | In-zone `NXDOMAIN` path | Check spelling, configuration, and whether the subdomain has publishable IPs |
-| `Received query for domain not in hosted or alias zones: ...` | Out-of-zone `REFUSED` path | Check hosted zone or alias-zone config |
-| `Failed to parse DNS query: ...` | Malformed DNS input reached the server | Check the client or packet generator |
+| `DNS owner name is not present in the active zone; returning NXDOMAIN: ...` | In-zone `NXDOMAIN` path | Check spelling, configuration, and whether the subdomain has publishable IPs |
+| `Refused DNS query outside hosted or alias zones: ...` | Out-of-zone `REFUSED` path | Check hosted zone or alias-zone config |
+| `Malformed DNS query; replying FORMERR: ...` | Malformed DNS input had a recoverable header, so the server returned `FORMERR` | Check the client or packet generator; public port-53 services commonly receive scan traffic |
+| `Ignoring malformed DNS packet: ...` | Packet was too short to contain a complete DNS header, so no response could be sent | Usually scan or broken-client traffic; use packet capture if the source should be legitimate |
+| `Ignoring DNS response packet received on query socket: ...` | A packet had the DNS response flag set and was not a query the server can answer | Usually scan, reflection, or misdirected traffic; check the source only if it is expected |
+| `Stack trace for DNS response construction failure` | Debug-only traceback for an ignored packet that could not be converted into a response | Enable `--log-level debug` only when diagnosing handler internals |
 | `Received ... signal, shutting down DNS server...` | Graceful shutdown started | Normal during stop / restart |
 | `Stopping Zone Updater...` | Background updater is being stopped | Normal during shutdown |
 | `Zone Updater thread did not terminate gracefully` | Shutdown was slow or blocked | Inspect long-running health checks |
 
 ### 3.3 Query-response clues from logs
 
-- `Received query for domain not in hosted or alias zones: ...` lines correlate with `REFUSED`.
-- `Received query for unknown subdomain: ...` lines correlate with `NXDOMAIN`.
+- `Refused DNS query outside hosted or alias zones: ...` lines correlate with `REFUSED`.
+- `DNS owner name is not present in the active zone; returning NXDOMAIN: ...` lines correlate with `NXDOMAIN`.
+- `Malformed DNS query; replying FORMERR: ...` lines correlate with `FORMERR`.
+- `Ignoring malformed DNS packet: ...` and `Ignoring DNS response packet received on query socket: ...` lines mean no DNS response was sent.
 - `Answered query for ... with ...` appears only at `debug` level when a matching RRset is found.
 - `Subdomain ... exists but has no ... records` appears only at `debug` level for `NODATA` responses.
 

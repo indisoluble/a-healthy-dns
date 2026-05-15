@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 
+import logging
+
 import dns.exception
 import dns.flags
 import dns.message
@@ -383,40 +385,73 @@ def test_handle_exception_parsing_query(
 @pytest.mark.parametrize("wire_data", [b"", b"\x00\x01\x00\x00"])
 @patch("indisoluble.a_healthy_dns.dns_server_udp_handler._update_response")
 def test_handle_malformed_wire_input_drops_silently(
-    mock_update_response, wire_data, mock_dns_client_address, mock_server
+    mock_update_response, wire_data, mock_dns_client_address, mock_server, caplog
 ):
     mock_sock = MagicMock()
     request = (wire_data, mock_sock)
 
-    _ = DnsServerUdpHandler(request, mock_dns_client_address, mock_server)
+    with caplog.at_level(logging.DEBUG):
+        _ = DnsServerUdpHandler(request, mock_dns_client_address, mock_server)
 
     # Payload too short to recover a DNS header: drop silently, no response.
     mock_sock.sendto.assert_not_called()
     mock_update_response.assert_not_called()
+
+    assert "Ignoring malformed DNS packet" in caplog.text
+    assert "packet is shorter than the 12-byte DNS header" in caplog.text
+    assert "Stack trace for malformed DNS packet" in caplog.text
 
 
 # Wire bytes that fail dns.message.from_wire() but are ≥ 12 bytes so the DNS
 # header (and transaction ID) can still be recovered.  The handler must respond
 # with FORMERR, preserving the original transaction ID (RFC 1035 §4.1.1).
 @pytest.mark.parametrize(
-    "wire_data",
+    "wire_data,expected_problem",
     [
-        # Valid 12-byte header claiming QDCOUNT=1 but question section missing
-        b"\x12\x34\x01\x00\x00\x01\x00\x00\x00\x00\x00\x00",
-        # Self-referential compression pointer (offset 12 points to itself)
-        b"\x12\x34\x01\x00\x00\x01\x00\x00\x00\x00\x00\x00\xc0\x0c\x00\x01\x00\x01",
-        # Garbage bytes that do not form a valid DNS message
-        bytes(range(32)),
+        (
+            # Valid 12-byte header claiming QDCOUNT=1 but question section missing
+            b"\x12\x34\x01\x00\x00\x01\x00\x00\x00\x00\x00\x00",
+            "packet does not match the DNS message wire format",
+        ),
+        (
+            # Self-referential compression pointer (offset 12 points to itself)
+            b"\x12\x34\x01\x00\x00\x01\x00\x00\x00\x00\x00\x00"
+            b"\xc0\x0c\x00\x01\x00\x01",
+            "packet contains an invalid DNS compression pointer",
+        ),
+        (
+            # Label length byte with unsupported label-type bits set.
+            b"\x12\x34\x01\x00\x00\x01\x00\x00\x00\x00\x00\x00"
+            b"\x40\x00\x00\x01\x00\x01",
+            "packet uses an unsupported DNS label encoding",
+        ),
+        (
+            # Valid query followed by extra bytes after the DNS message ends.
+            b"\x12\x34\x01\x00\x00\x01\x00\x00\x00\x00\x00\x00"
+            b"\x03www\x00\x00\x01\x00\x01junk",
+            "packet has trailing bytes after a complete DNS message",
+        ),
+        (
+            # Garbage bytes that do not form a valid DNS message
+            bytes(range(32)),
+            "packet does not match the DNS message wire format",
+        ),
     ],
 )
 @patch("indisoluble.a_healthy_dns.dns_server_udp_handler._update_response")
 def test_handle_malformed_wire_with_recoverable_header_returns_formerr(
-    mock_update_response, wire_data, mock_dns_client_address, mock_server
+    mock_update_response,
+    wire_data,
+    expected_problem,
+    mock_dns_client_address,
+    mock_server,
+    caplog,
 ):
     mock_sock = MagicMock()
     request = (wire_data, mock_sock)
 
-    _ = DnsServerUdpHandler(request, mock_dns_client_address, mock_server)
+    with caplog.at_level(logging.DEBUG):
+        _ = DnsServerUdpHandler(request, mock_dns_client_address, mock_server)
 
     mock_sock.sendto.assert_called_once()
     sent_wire = mock_sock.sendto.call_args[0][0]
@@ -429,6 +464,30 @@ def test_handle_malformed_wire_with_recoverable_header_returns_formerr(
     assert (sent_wire[3] & 0x0F) == dns.rcode.FORMERR
 
     mock_update_response.assert_not_called()
+
+    assert "Malformed DNS query; replying FORMERR" in caplog.text
+    assert f"problem={expected_problem}" in caplog.text
+    assert "Stack trace for malformed DNS query" in caplog.text
+
+
+@patch("indisoluble.a_healthy_dns.dns_server_udp_handler._update_response")
+def test_handle_dns_response_packet_logs_warning_and_debug_trace(
+    mock_update_response, mock_dns_client_address, mock_server, caplog
+):
+    query = dns.message.make_query("test.example.com.", dns.rdatatype.A)
+    response_packet = dns.message.make_response(query)
+    mock_sock = MagicMock()
+    request = (response_packet.to_wire(), mock_sock)
+
+    with caplog.at_level(logging.DEBUG):
+        _ = DnsServerUdpHandler(request, mock_dns_client_address, mock_server)
+
+    mock_update_response.assert_not_called()
+    mock_sock.sendto.assert_not_called()
+
+    assert "Ignoring DNS response packet received on query socket" in caplog.text
+    assert "problem=response flag is set" in caplog.text
+    assert "Stack trace for DNS response construction failure" in caplog.text
 
 
 @pytest.mark.parametrize(
