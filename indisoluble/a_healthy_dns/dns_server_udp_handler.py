@@ -26,6 +26,15 @@ from typing import List
 from indisoluble.a_healthy_dns.records.zone_origins import ZoneOrigins
 
 
+_DNS_HEADER_LENGTH = 12
+_DNS_OPCODE_MASK = 0x7800
+_CLASSIC_UDP_PAYLOAD_SIZE = 512
+_DNS_TRAFFIC_JUNK = "dns_traffic=junk"
+_DNS_TRAFFIC_NOISE = "dns_traffic=noise"
+_DNS_TRAFFIC_NORMAL = "dns_traffic=normal"
+_DNS_TRAFFIC_SUSPICIOUS = "dns_traffic=suspicious"
+
+
 def _describe_parse_error(ex: dns.exception.DNSException) -> str:
     if isinstance(ex, dns.message.ShortHeader):
         return "packet is shorter than the 12-byte DNS header"
@@ -42,16 +51,19 @@ def _describe_parse_error(ex: dns.exception.DNSException) -> str:
 
 
 def _build_authority_with_apex_soa(
-    zone: dns.versioned.Zone, txn: dns.zone.Transaction
+    apex_name: dns.name.Name, txn: dns.zone.Transaction
 ) -> List[dns.rrset.RRset]:
     soa_rdataset = txn.get(dns.name.empty, dns.rdatatype.SOA)
     if soa_rdataset is None:
         return []
 
-    soa_rrset = dns.rrset.RRset(zone.origin, soa_rdataset.rdclass, soa_rdataset.rdtype)
-    soa_rrset.ttl = soa_rdataset.ttl
-    for rdata in soa_rdataset:
-        soa_rrset.add(rdata)
+    soa_rdata = next(iter(soa_rdataset), None)
+    if soa_rdata is None:
+        return []
+
+    soa_rrset = dns.rrset.RRset(apex_name, soa_rdataset.rdclass, soa_rdataset.rdtype)
+    soa_rrset.ttl = min(soa_rdataset.ttl, soa_rdata.minimum)
+    soa_rrset.add(soa_rdata)
 
     return [soa_rrset]
 
@@ -67,22 +79,47 @@ def _build_answer(
     return [rrset]
 
 
+def _make_formerr_response_from_header(data: bytes) -> dns.message.Message:
+    request_flags = int.from_bytes(data[2:4], "big")
+    formerr = dns.message.Message(id=int.from_bytes(data[:2], "big"))
+    formerr.flags = dns.flags.QR | (request_flags & (_DNS_OPCODE_MASK | dns.flags.RD))
+    formerr.set_rcode(dns.rcode.FORMERR)
+
+    return formerr
+
+
+def _response_to_udp_wire(response: dns.message.Message) -> bytes:
+    return response.to_wire(
+        max_size=_CLASSIC_UDP_PAYLOAD_SIZE, prefer_truncation=True
+    )
+
+
 def _update_response(
     response: dns.message.Message,
     query_name: dns.name.Name,
     query_type: dns.rdatatype.RdataType,
     zone: dns.versioned.Zone,
     zone_origins: ZoneOrigins,
+    query_id: int,
+    source_host: str,
+    source_port: int,
 ) -> None:
-    relative_name = zone_origins.relativize(query_name)
-    if relative_name is None:
-        logging.warning(
-            "Refused DNS query outside hosted or alias zones: qname=%s qtype=%s",
+    origin_name = zone_origins.origin_for(query_name)
+    if origin_name is None:
+        logging.info(
+            "%s Refused DNS query outside hosted or alias zones: source=%s:%d id=%d qname=%s qtype=%s",
+            _DNS_TRAFFIC_NOISE,
+            source_host,
+            source_port,
+            query_id,
             query_name,
             dns.rdatatype.to_text(query_type),
         )
         response.set_rcode(dns.rcode.REFUSED)
         return
+
+    relative_name = zone_origins.relativize(query_name)
+    response.flags |= dns.flags.AA  # Authoritative Answer
 
     with zone.reader() as txn:
         rcode = dns.rcode.NOERROR
@@ -94,22 +131,39 @@ def _update_response(
             rdataset = node.get_rdataset(zone.rdclass, query_type)
             if rdataset:
                 answer = _build_answer(query_name, rdataset)
-                logging.debug("Answered query for %s with %s", query_name, answer)
+                logging.info(
+                    "%s Answered DNS query from hosted zone: source=%s:%d id=%d qname=%s qtype=%s answers=%d",
+                    _DNS_TRAFFIC_NORMAL,
+                    source_host,
+                    source_port,
+                    query_id,
+                    query_name,
+                    dns.rdatatype.to_text(query_type),
+                    len(answer),
+                )
             else:
-                logging.debug(
-                    "Subdomain %s exists but has no %s records",
+                logging.info(
+                    "%s DNS owner name exists but has no requested records; returning NODATA: source=%s:%d id=%d qname=%s qtype=%s",
+                    _DNS_TRAFFIC_NORMAL,
+                    source_host,
+                    source_port,
+                    query_id,
                     query_name,
                     dns.rdatatype.to_text(query_type),
                 )
-                authority = _build_authority_with_apex_soa(zone, txn)
+                authority = _build_authority_with_apex_soa(origin_name, txn)
         else:
-            logging.warning(
-                "DNS owner name is not present in the active zone; returning NXDOMAIN: qname=%s qtype=%s",
+            logging.info(
+                "%s DNS owner name is not present in the active zone; returning NXDOMAIN: source=%s:%d id=%d qname=%s qtype=%s",
+                _DNS_TRAFFIC_NORMAL,
+                source_host,
+                source_port,
+                query_id,
                 query_name,
                 dns.rdatatype.to_text(query_type),
             )
             rcode = dns.rcode.NXDOMAIN
-            authority = _build_authority_with_apex_soa(zone, txn)
+            authority = _build_authority_with_apex_soa(origin_name, txn)
 
     response.set_rcode(rcode)
     response.authority.extend(authority)
@@ -122,72 +176,95 @@ class DnsServerUdpHandler(socketserver.BaseRequestHandler):
     def handle(self) -> None:
         """Handle incoming DNS query and send appropriate response."""
         data, sock = self.request
+        if len(data) >= _DNS_HEADER_LENGTH:
+            header_flags = int.from_bytes(data[2:4], "big")
+            if header_flags & dns.flags.QR:
+                logging.warning(
+                    "%s Ignoring DNS response packet received on query socket: source=%s:%d id=%d bytes=%d problem=response flag is set",
+                    _DNS_TRAFFIC_SUSPICIOUS,
+                    self.client_address[0],
+                    self.client_address[1],
+                    int.from_bytes(data[:2], "big"),
+                    len(data),
+                )
+                return
 
         try:
             query = dns.message.from_wire(data)
         except dns.message.ShortHeader as ex:
             # Payload too short to contain a DNS header - no transaction ID to
-            # recover, drop silently (RFC 1035 §4.1.1).
-            logging.warning(
-                "Ignoring malformed DNS packet: source=%s:%d bytes=%d problem=%s",
+            # recover, drop without a DNS response (RFC 1035 §4.1.1).
+            logging.info(
+                "%s Ignoring malformed DNS packet: source=%s:%d bytes=%d problem=%s",
+                _DNS_TRAFFIC_JUNK,
                 self.client_address[0],
                 self.client_address[1],
                 len(data),
                 _describe_parse_error(ex),
             )
-            logging.debug("Stack trace for malformed DNS packet", exc_info=True)
+            logging.debug(
+                "%s Stack trace for malformed DNS packet: source=%s:%d bytes=%d",
+                _DNS_TRAFFIC_JUNK,
+                self.client_address[0],
+                self.client_address[1],
+                len(data),
+                exc_info=True,
+            )
             return
         except dns.exception.DNSException as ex:
             # Header is readable but message is malformed - recover the
             # transaction ID and respond with FORMERR (RFC 1035 §4.1.1).
             msg_id = int.from_bytes(data[:2], "big")
-            logging.warning(
-                "Malformed DNS query; replying FORMERR: source=%s:%d id=%d bytes=%d problem=%s",
+            logging.info(
+                "%s Malformed DNS query; replying FORMERR: source=%s:%d id=%d bytes=%d problem=%s",
+                _DNS_TRAFFIC_JUNK,
                 self.client_address[0],
                 self.client_address[1],
                 msg_id,
                 len(data),
                 _describe_parse_error(ex),
             )
-            logging.debug("Stack trace for malformed DNS query", exc_info=True)
+            logging.debug(
+                "%s Stack trace for malformed DNS query: source=%s:%d id=%d bytes=%d",
+                _DNS_TRAFFIC_JUNK,
+                self.client_address[0],
+                self.client_address[1],
+                msg_id,
+                len(data),
+                exc_info=True,
+            )
 
-            formerr = dns.message.Message(id=msg_id)
-            formerr.flags = dns.flags.QR
-            formerr.set_rcode(dns.rcode.FORMERR)
-
-            sock.sendto(formerr.to_wire(), self.client_address)
+            formerr = _make_formerr_response_from_header(data)
+            sock.sendto(_response_to_udp_wire(formerr), self.client_address)
             return
 
         try:
             response = dns.message.make_response(query)
         except dns.exception.FormError as ex:
-            if query.flags & dns.flags.QR:
-                logging.warning(
-                    "Ignoring DNS response packet received on query socket: source=%s:%d id=%d bytes=%d problem=response flag is set",
-                    self.client_address[0],
-                    self.client_address[1],
-                    query.id,
-                    len(data),
-                )
-            else:
-                logging.warning(
-                    "Unable to build DNS response; dropping packet: source=%s:%d id=%d bytes=%d problem=%s",
-                    self.client_address[0],
-                    self.client_address[1],
-                    query.id,
-                    len(data),
-                    ex,
-                )
+            logging.info(
+                "%s Unable to build DNS response; dropping packet: source=%s:%d id=%d bytes=%d problem=%s",
+                _DNS_TRAFFIC_JUNK,
+                self.client_address[0],
+                self.client_address[1],
+                query.id,
+                len(data),
+                ex,
+            )
             logging.debug(
-                "Stack trace for DNS response construction failure", exc_info=True
+                "%s Stack trace for DNS response construction failure: source=%s:%d id=%d bytes=%d",
+                _DNS_TRAFFIC_JUNK,
+                self.client_address[0],
+                self.client_address[1],
+                query.id,
+                len(data),
+                exc_info=True,
             )
             return
 
-        response.flags |= dns.flags.AA  # Authoritative Answer
-
         if query.opcode() != dns.opcode.QUERY:
             logging.warning(
-                "DNS query uses unsupported opcode; returning NOTIMP: source=%s:%d id=%d opcode=%s expected=QUERY",
+                "%s DNS query uses unsupported opcode; returning NOTIMP: source=%s:%d id=%d opcode=%s expected=QUERY",
+                _DNS_TRAFFIC_SUSPICIOUS,
                 self.client_address[0],
                 self.client_address[1],
                 query.id,
@@ -195,8 +272,9 @@ class DnsServerUdpHandler(socketserver.BaseRequestHandler):
             )
             response.set_rcode(dns.rcode.NOTIMP)
         elif len(query.question) != 1:
-            logging.warning(
-                "DNS query has invalid question count; returning FORMERR: source=%s:%d id=%d qdcount=%d expected=1",
+            logging.info(
+                "%s DNS query has invalid question count; returning FORMERR: source=%s:%d id=%d qdcount=%d expected=1",
+                _DNS_TRAFFIC_JUNK,
                 self.client_address[0],
                 self.client_address[1],
                 query.id,
@@ -206,8 +284,9 @@ class DnsServerUdpHandler(socketserver.BaseRequestHandler):
         else:
             question = query.question[0]
             if question.rdclass != dns.rdataclass.IN:
-                logging.warning(
-                    "Refused DNS query with unsupported class: source=%s:%d id=%d qname=%s qtype=%s qclass=%s expected=IN",
+                logging.info(
+                    "%s Refused DNS query with unsupported class: source=%s:%d id=%d qname=%s qtype=%s qclass=%s expected=IN",
+                    _DNS_TRAFFIC_NOISE,
                     self.client_address[0],
                     self.client_address[1],
                     query.id,
@@ -223,7 +302,10 @@ class DnsServerUdpHandler(socketserver.BaseRequestHandler):
                     question.rdtype,
                     self.server.zone,
                     self.server.zone_origins,
+                    query.id,
+                    self.client_address[0],
+                    self.client_address[1],
                 )
 
         # Send the response back to the client
-        sock.sendto(response.to_wire(), self.client_address)
+        sock.sendto(_response_to_udp_wire(response), self.client_address)

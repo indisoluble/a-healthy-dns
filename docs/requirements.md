@@ -41,7 +41,7 @@ It is the canonical home for functional, operational, quality, compatibility, se
 - **R14** Implement the authoritative UDP response semantics documented in [`docs/RFC-conformance.md`](RFC-conformance.md).
 - **R15** Set the authoritative-answer flag on responses produced for supported authoritative queries.
 - **R16** Return `REFUSED` for queries outside all configured zones and for unsupported DNS classes.
-- **R17** Return `FORMERR` for malformed DNS messages when a response can be formed, and silently drop packets that are too short to recover a DNS transaction ID.
+- **R17** Return `FORMERR` for malformed DNS messages when a response can be formed, and drop packets that are too short to recover a DNS transaction ID without a DNS response while logging the rejection for operator visibility.
 
 ## Quality And Reliability Requirements
 

@@ -105,7 +105,7 @@ sudo tcpdump -i any -n udp port 53053
 ```
 When using Docker, confirm you are querying the exposed host port, not only the container port.
 
-**Interpretation:** if the process is not listening, this is a startup failure. If packets reach the host but not the process, inspect firewall rules and Docker networking. Short packets (< 12-byte DNS header) are dropped silently by design.
+**Interpretation:** if the process is not listening, this is a startup failure. If packets reach the host but not the process, inspect firewall rules and Docker networking. Short packets (< 12-byte DNS header) are dropped without a DNS response by design.
 
 **Next:** re-run the fast-triage `dig` checks against the exact configured port. Use packet capture to confirm queries arrive and replies leave the host. For network mode, port mapping, or capability issues, fix the deployment in [`docs/docker.md`](docker.md).
 
@@ -117,7 +117,7 @@ When using Docker, confirm you are querying the exposed host port, not only the 
 ```bash
 dig @localhost -p 53053 www.example.local A
 dig @localhost -p 53053 www.example.local AAAA
-docker logs --tail 200 a-healthy-dns | grep -E "Checked IP|has no health port|A records changed|Updating zone|Added A record|skipped|active zone|outside hosted"
+docker logs --tail 200 a-healthy-dns | grep -E "Answered DNS query|NODATA|Checked IP|has no health port|A records changed|Updating zone|Added A record|skipped|active zone|outside hosted"
 ```
 Use `--log-level debug` when you need the per-IP or per-record lines (`Checked IP`, `has no health port`, `Added A record`, `A record ... skipped`).
 
@@ -169,12 +169,25 @@ docker logs --since 15m a-healthy-dns | grep -c "A records changed"
 
 | Level | Use it for |
 |---|---|
-| `debug` | Per-IP health checks, per-record zone updates, DNSSEC signing details, answered-query detail |
-| `info` | Normal lifecycle events: startup, shutdown, zone-updater start/stop, zone rebuilds |
-| `warning` | Out-of-zone queries, malformed packets, unsupported query shapes, inbound response packets received on the query socket, unexpected updater lifecycle calls |
+| `debug` | Per-IP health checks, per-record zone updates, DNSSEC signing details, handler tracebacks |
+| `info` | Normal lifecycle events: startup, shutdown, zone-updater start/stop, zone rebuilds, DNS query summaries for normal DNS-port traffic, including in-zone answers, `NXDOMAIN`, `NODATA`, `REFUSED`, unsupported classes, and malformed query or packet summaries |
+| `warning` | Unsupported opcodes, inbound response packets received on the query socket, unexpected updater lifecycle calls, and updater threads that do not stop gracefully |
 | `error` | Startup-time configuration failures and key-loading failures |
 
-### 3.2 High-value log messages
+### 3.2 DNS traffic markers
+
+DNS request-handler logs include a compact `dns_traffic=<category>` marker before the human-readable message.
+
+| Marker | Meaning | Typical examples |
+|---|---|---|
+| `dns_traffic=normal` | Expected authoritative DNS behavior | In-zone answers, `NODATA`, and in-zone `NXDOMAIN` |
+| `dns_traffic=noise` | Common background DNS traffic that does not require action by itself | Out-of-zone `REFUSED` queries and unsupported query classes |
+| `dns_traffic=junk` | Malformed or unusable DNS input, usually from broken clients, packet generators, or scan traffic | Short packets, malformed wire input, invalid question counts, response-construction failures |
+| `dns_traffic=suspicious` | Unusual DNS traffic worth keeping visible at `warning` level | Inbound DNS response packets on the query socket and unsupported opcodes |
+
+Treat the marker as an operator hint, not an incident classification. Volume, source reputation, and deployment context still determine whether traffic needs investigation.
+
+### 3.3 High-value log messages
 
 These fragments span `info`, `warning`, and `debug`. Use `--log-level debug` when you need per-IP, per-record, or per-signing detail.
 
@@ -190,24 +203,32 @@ These fragments span `info`, `warning`, and `debug`. Use `--log-level debug` whe
 | `Added A record ... to zone` | A subdomain with publishable IPs is present in the new zone | Confirm with `dig` |
 | `A record ... skipped` | That subdomain currently has no publishable IPs in the active zone view | Expect `NXDOMAIN` for that name until a later refresh adds a publishable IP |
 | `Zone signing is near to expire` | DNSSEC forced a refresh even without health changes | Confirm fresh signatures if DNSSEC is enabled |
+| `Answered DNS query from hosted zone: ...` | In-zone query found matching records and was answered; includes source, transaction id, qname, qtype, and answer count | Normal for configured names and supported record types |
+| `DNS owner name exists but has no requested records; returning NODATA: ...` | In-zone name exists, but the requested record type is absent; includes source, transaction id, qname, and qtype | Check whether the client requested an unpublished type such as `AAAA` |
 | `DNS owner name is not present in the active zone; returning NXDOMAIN: ...` | In-zone `NXDOMAIN` path | Check spelling, configuration, and whether the subdomain has publishable IPs |
 | `Refused DNS query outside hosted or alias zones: ...` | Out-of-zone `REFUSED` path | Check hosted zone or alias-zone config |
+| `Refused DNS query with unsupported class: ...` | Non-`IN` query class was refused | Check the client query class; this server serves Internet-class (`IN`) data only |
+| `DNS query uses unsupported opcode; returning NOTIMP: ...` | Request used a DNS opcode outside the supported standard-query path | Check the client or scanner; public DNS ports commonly receive probe traffic |
+| `DNS query has invalid question count; returning FORMERR: ...` | Request had zero or multiple questions instead of exactly one | Check the client or packet generator |
 | `Malformed DNS query; replying FORMERR: ...` | Malformed DNS input had a recoverable header, so the server returned `FORMERR` | Check the client or packet generator; public port-53 services commonly receive scan traffic |
 | `Ignoring malformed DNS packet: ...` | Packet was too short to contain a complete DNS header, so no response could be sent | Usually scan or broken-client traffic; use packet capture if the source should be legitimate |
 | `Ignoring DNS response packet received on query socket: ...` | A packet had the DNS response flag set and was not a query the server can answer | Usually scan, reflection, or misdirected traffic; check the source only if it is expected |
-| `Stack trace for DNS response construction failure` | Debug-only traceback for an ignored packet that could not be converted into a response | Enable `--log-level debug` only when diagnosing handler internals |
+| `Stack trace for DNS response construction failure: ...` | Debug-only traceback for an ignored packet that could not be converted into a response; includes source, transaction id, and byte count | Enable `--log-level debug` only when diagnosing handler internals |
 | `Received ... signal, shutting down DNS server...` | Graceful shutdown started | Normal during stop / restart |
 | `Stopping Zone Updater...` | Background updater is being stopped | Normal during shutdown |
 | `Zone Updater thread did not terminate gracefully` | Shutdown was slow or blocked | Inspect long-running health checks |
 
-### 3.3 Query-response clues from logs
+### 3.4 Query-response clues from logs
 
 - `Refused DNS query outside hosted or alias zones: ...` lines correlate with `REFUSED`.
+- `Refused DNS query with unsupported class: ...` lines correlate with `REFUSED`.
 - `DNS owner name is not present in the active zone; returning NXDOMAIN: ...` lines correlate with `NXDOMAIN`.
+- `Answered DNS query from hosted zone: ...` lines correlate with successful answers.
+- `DNS owner name exists but has no requested records; returning NODATA: ...` lines correlate with `NOERROR` empty-answer responses.
 - `Malformed DNS query; replying FORMERR: ...` lines correlate with `FORMERR`.
+- `DNS query has invalid question count; returning FORMERR: ...` lines correlate with `FORMERR`.
+- `DNS query uses unsupported opcode; returning NOTIMP: ...` lines correlate with `NOTIMP`.
 - `Ignoring malformed DNS packet: ...` and `Ignoring DNS response packet received on query socket: ...` lines mean no DNS response was sent.
-- `Answered query for ... with ...` appears only at `debug` level when a matching RRset is found.
-- `Subdomain ... exists but has no ... records` appears only at `debug` level for `NODATA` responses.
 
 ---
 

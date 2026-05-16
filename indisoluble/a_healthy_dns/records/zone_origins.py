@@ -35,15 +35,22 @@ class ZoneOrigins:
             key=lambda zone: (-len(zone), zone.to_text()),
         )
 
+    def origin_for(self, name: dns.name.Name) -> Optional[dns.name.Name]:
+        """Return the matching origin for *name*, or None when unmatched."""
+        if not name.is_absolute():
+            return self._primary
+
+        return next(
+            (origin for origin in self._origins if name.is_subdomain(origin)), None
+        )
+
     def relativize(self, name: dns.name.Name) -> Optional[dns.name.Name]:
         """Return relative name using matching origin, or None when unmatched."""
         if not name.is_absolute():
             return name
 
-        zone = next(
-            (origin for origin in self._origins if name.is_subdomain(origin)), None
-        )
-        return name.relativize(zone) if zone else None
+        origin = self.origin_for(name)
+        return None if origin is None else name.relativize(origin)
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, ZoneOrigins):

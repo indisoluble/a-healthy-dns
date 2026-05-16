@@ -27,14 +27,18 @@ from indisoluble.a_healthy_dns.records.zone_origins import ZoneOrigins
 # ---------------------------------------------------------------------------
 
 _ZONE = "example.integration.test"
+_ALIAS_ZONE = "alias.integration.test"
 _NS = "ns1.integration.test."
 _SUBDOMAIN = "www"
 _SUBDOMAIN_IP = "192.0.2.1"  # RFC 5737 TEST-NET-1
 _ABSENT_SUBDOMAIN = "missing"
 
 _ZONE_FQDN = f"{_ZONE}."
+_ALIAS_ZONE_FQDN = f"{_ALIAS_ZONE}."
 _SUBDOMAIN_FQDN = f"{_SUBDOMAIN}.{_ZONE}."
+_ALIAS_SUBDOMAIN_FQDN = f"{_SUBDOMAIN}.{_ALIAS_ZONE}."
 _ABSENT_FQDN = f"{_ABSENT_SUBDOMAIN}.{_ZONE}."
+_ALIAS_ABSENT_FQDN = f"{_ABSENT_SUBDOMAIN}.{_ALIAS_ZONE}."
 _OUT_OF_ZONE_FQDN = "www.unrelated.test."
 
 # A wire payload that is ≥ 12 bytes (DNS header is readable) but not a valid
@@ -142,7 +146,7 @@ def live_server():
     IPs are pre-marked healthy so initialize_zone() populates the zone
     immediately without making real TCP connections.
     """
-    zone_origins = ZoneOrigins(_ZONE, [])
+    zone_origins = ZoneOrigins(_ZONE, [_ALIAS_ZONE])
 
     a_record = AHealthyRecord(
         subdomain=dns.name.from_text(_SUBDOMAIN, origin=zone_origins.primary),
@@ -234,6 +238,23 @@ class TestPositiveResponses:
 
         _assert_response_flags(resp)
 
+    def test_alias_a_query_returns_noerror_expected_ip_and_empty_authority(
+        self, live_server
+    ):
+        host, port = live_server
+        query = dns.message.make_query(_ALIAS_SUBDOMAIN_FQDN, dns.rdatatype.A)
+        resp = _udp_query(host, port, query)
+
+        assert resp.rcode() == dns.rcode.NOERROR
+        assert resp.id == query.id
+
+        _assert_section_counts(resp, answer=1)
+        assert resp.answer[0].rdtype == dns.rdatatype.A
+        assert resp.answer[0].name == dns.name.from_text(_ALIAS_SUBDOMAIN_FQDN)
+        assert any(str(rdata) == _SUBDOMAIN_IP for rdata in resp.answer[0])
+
+        _assert_response_flags(resp)
+
 
 # ---------------------------------------------------------------------------
 # Negative responses — RFC 2308 §2.1 (NODATA) and §3 (NXDOMAIN)
@@ -245,15 +266,42 @@ class TestNegativeResponses:
     """NXDOMAIN and NODATA responses must carry the apex SOA in authority."""
 
     @pytest.mark.parametrize(
-        "qname,rdtype,expected_rcode",
+        "qname,rdtype,expected_rcode,expected_soa_name",
         [
-            (_ABSENT_FQDN, dns.rdatatype.A, dns.rcode.NXDOMAIN),
-            (_SUBDOMAIN_FQDN, dns.rdatatype.AAAA, dns.rcode.NOERROR),
+            (
+                _ABSENT_FQDN,
+                dns.rdatatype.A,
+                dns.rcode.NXDOMAIN,
+                _ZONE_FQDN,
+            ),
+            (
+                _SUBDOMAIN_FQDN,
+                dns.rdatatype.AAAA,
+                dns.rcode.NOERROR,
+                _ZONE_FQDN,
+            ),
+            (
+                _ALIAS_ABSENT_FQDN,
+                dns.rdatatype.A,
+                dns.rcode.NXDOMAIN,
+                _ALIAS_ZONE_FQDN,
+            ),
+            (
+                _ALIAS_SUBDOMAIN_FQDN,
+                dns.rdatatype.AAAA,
+                dns.rcode.NOERROR,
+                _ALIAS_ZONE_FQDN,
+            ),
         ],
-        ids=["nxdomain-absent-owner", "nodata-absent-type"],
+        ids=[
+            "nxdomain-absent-owner",
+            "nodata-absent-type",
+            "alias-nxdomain-absent-owner",
+            "alias-nodata-absent-type",
+        ],
     )
     def test_negative_response_has_soa_authority(
-        self, live_server, qname, rdtype, expected_rcode
+        self, live_server, qname, rdtype, expected_rcode, expected_soa_name
     ):
         host, port = live_server
         query = dns.message.make_query(qname, rdtype)
@@ -264,13 +312,15 @@ class TestNegativeResponses:
 
         _assert_section_counts(resp, authority=1)
         assert resp.authority[0].rdtype == dns.rdatatype.SOA
-        assert resp.authority[0].name == dns.name.from_text(_ZONE_FQDN)
+        assert resp.authority[0].name == dns.name.from_text(expected_soa_name)
+        soa_rdata = next(iter(resp.authority[0]))
+        assert resp.authority[0].ttl == soa_rdata.minimum
 
         _assert_response_flags(resp)
 
 
 # ---------------------------------------------------------------------------
-# Rejected queries — RFC 1034 §6.2, RFC 1035 §4.1.1, RFC 2181 §5.1
+# Rejected queries — RFC 1034 §6.2, RFC 1035 §4.1.1, RFC 9619
 # Response header fields — RFC 1035 §4.1.1
 # ---------------------------------------------------------------------------
 
@@ -291,7 +341,7 @@ class TestRejectedQueries:
                 ),
                 dns.rcode.REFUSED,
             ),
-            # dns.message.Message() with no questions produces QDCOUNT=0; handler must return FORMERR (RFC 2181 §5.1)
+            # dns.message.Message() with no questions produces QDCOUNT=0; handler returns FORMERR per Level 1 policy.
             (dns.message.Message(), dns.rcode.FORMERR),
         ],
         ids=["out-of-zone", "non-in-class", "zero-question"],
@@ -306,12 +356,13 @@ class TestRejectedQueries:
         assert resp.id == query.id
 
         _assert_section_counts(resp)
-        _assert_response_flags(resp)
+        _assert_response_flags(resp, aa=False)
 
     def test_multi_question_query_returns_formerr(self, live_server):
         host, port = live_server
         # Build a structurally well-formed but RFC-noncompliant DNS wire message
-        # with QDCOUNT=2.  RFC 2181 §5.1 requires exactly one question per query.
+        # with QDCOUNT=2.  RFC 9619 requires FORMERR for QUERY messages
+        # with more than one question.
         # dnspython preserves both questions when parsing; the handler must return
         # FORMERR because len(query.question) != 1.
         wire = _make_two_question_wire(_SUBDOMAIN_FQDN, _ABSENT_FQDN)
@@ -321,7 +372,7 @@ class TestRejectedQueries:
         assert resp.id == dns.message.from_wire(wire).id
 
         _assert_section_counts(resp)
-        _assert_response_flags(resp)
+        _assert_response_flags(resp, aa=False)
 
     def test_status_opcode_returns_notimp(self, live_server):
         host, port = live_server
@@ -333,7 +384,7 @@ class TestRejectedQueries:
         assert resp.id == query.id
 
         _assert_section_counts(resp)
-        _assert_response_flags(resp)
+        _assert_response_flags(resp, aa=False)
 
 
 # ---------------------------------------------------------------------------

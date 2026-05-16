@@ -65,6 +65,33 @@ def test_relativize_absolute_name_under_alias():
     assert result == dns.name.from_text("www", origin=None)
 
 
+def test_origin_for_relative_name_returns_primary():
+    origins = ZoneOrigins("example.com", ["alias.com"])
+    relative_name = dns.name.from_text("www", origin=None)
+
+    result = origins.origin_for(relative_name)
+
+    assert result == dns.name.from_text("example.com", origin=dns.name.root)
+
+
+def test_origin_for_absolute_name_under_alias():
+    origins = ZoneOrigins("example.com", ["alias.com"])
+    absolute_name = dns.name.from_text("www", origin=dns.name.from_text("alias.com"))
+
+    result = origins.origin_for(absolute_name)
+
+    assert result == dns.name.from_text("alias.com", origin=dns.name.root)
+
+
+def test_origin_for_unmatched_absolute_name_returns_none():
+    origins = ZoneOrigins("example.com", ["alias.com"])
+    absolute_name = dns.name.from_text("www", origin=dns.name.from_text("other.com"))
+
+    result = origins.origin_for(absolute_name)
+
+    assert result is None
+
+
 def test_relativize_returns_none_for_unmatched_absolute_name():
     origins = ZoneOrigins("example.com", ["alias.com"])
     absolute_name = dns.name.from_text("www", origin=dns.name.from_text("other.com"))
