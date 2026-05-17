@@ -36,7 +36,7 @@ When this document says an RFC is fully covered for Level 1, it means:
 
 When an RFC is necessary for the product but not fully covered under that definition, this document must say so explicitly. Current known gaps:
 
-- RFC 1123 requires DNS name servers to service UDP queries and use DNS name compression in responses. UDP service is covered by integration tests, and response serialization is delegated to `dnspython`, but there is no dedicated automated test proving response name compression or unsupported header status-bit handling.
+- RFC 1123 requires DNS name servers to service UDP queries and use DNS name compression in responses. UDP service is covered by integration tests, and response serialization is delegated to `dnspython`, but there is no dedicated automated test proving response name compression or unsupported response header-bit handling.
 - RFC 3425 obsoletes IQUERY and says name servers should return NOTIMP for IQUERY requests. The generic unsupported-opcode path returns NOTIMP, but there is no dedicated IQUERY automated test.
 - RFC 4343 case-insensitive DNS name matching lacks dedicated automated tests for mixed-case queries, so full Level 1 coverage is not confirmed even though the implementation relies on `dnspython` DNS name handling.
 - RFC 4592 and RFC 8020 empty non-terminal semantics are not fully implemented or tested. A configured nested name can imply an existing ancestor owner name with no RRsets, and the correct response for that ancestor is NODATA, not NXDOMAIN.
@@ -71,9 +71,9 @@ Level 1 covers the minimum behaviour required to be a correct authoritative UDP 
 | Query is not for the **IN** (Internet) class | Return **REFUSED** without the **AA** flag |
 | Query is for an unsupported or unknown non-meta RR type at an existing owner name | Treat the type as absent data and return **NOERROR** with an empty answer section and the **AA** flag |
 | Query has more or fewer than exactly one question | Return **FORMERR** without the **AA** flag |
-| Query contains supported, reserved, or unknown DNS request flags | Do not drop the query solely because those flags are present; do not copy unsupported status bits into the response |
+| Query contains supported, reserved, or unknown DNS request flags | Do not drop the query solely because those flags are present; apply the Level 1 response flag policy |
 | UDP response would exceed the classic DNS UDP payload limit | Return a response no larger than **512 bytes** with the **TC** (truncated) flag set |
-| DNS response wire encoding | Use DNS message serialization that applies standard name compression and leaves unused or unsupported DNS header status bits clear |
+| DNS response wire encoding | Use DNS message serialization that applies standard name compression and leaves unused or unsupported DNS response header bits clear |
 | DNS owner-name matching for hosted zones, alias zones, and zone nodes | Treat ASCII case differences as equivalent for lookup and authority decisions |
 | SOA response | Publish an unsigned 32-bit SOA serial value |
 | TTL-bearing responses | Publish TTL values consistently with the modern DNS TTL field definition for A, NS, SOA, and negative-response SOA authority RRsets |
@@ -96,6 +96,8 @@ Level 1 covers the minimum behaviour required to be a correct authoritative UDP 
 | **NXDOMAIN** | "Non-Existent Domain" — the queried name does not exist in the zone at all |
 | **NODATA / NOERROR empty answer** | The queried name exists but has no records of the requested type; the response code is NOERROR (not an error) and the answer section is empty |
 | **SOA in authority** | For negative responses (NXDOMAIN and NODATA) the server includes the matched hosted or alias zone's Start of Authority record in the authority section so that negative caching behaviour is well-defined. The authority SOA RRset TTL is the negative-cache TTL, not necessarily the stored apex SOA TTL |
+| **Non-meta RR type** | An ordinary resource-record type query handled as data lookup when unsupported, such as `AAAA` or an unknown `TYPE####`. This excludes special operation or extension query types outside Level 1, including `AXFR`, `IXFR`, `ANY`, and `OPT`/EDNS(0). |
+| **Level 1 response flag policy** | Responses set `QR`; preserve request `RD`; set `AA` only for authoritative in-zone responses; set `TC` only when UDP truncation occurs; and leave `RA`, `AD`, `CD`, and still-reserved header bits clear because recursion, DNSSEC signalling, and EDNS(0) are outside Level 1. |
 | **REFUSED** | The server refuses to answer because the query is for a zone it does not serve |
 | **FORMERR** | "Format Error" — the server cannot interpret the query because it is malformed |
 
@@ -172,13 +174,13 @@ RFC 1123 — https://www.rfc-editor.org/rfc/rfc1123: supplements the DNS base sp
 |---|---|---|
 | DNS server services UDP queries | **Implemented** | The runtime uses `socketserver.UDPServer`, and component integration tests exercise positive, negative, malformed, and rejected DNS queries over real UDP sockets. |
 | DNS responses use standard name compression | **Implemented but not fully covered** | Responses are serialized through `dns.message.Message.to_wire()` in `_response_to_udp_wire()`, which delegates DNS wire encoding to `dnspython`. There is no dedicated automated test inspecting response wire bytes to prove compression is applied when repeated names are present. |
-| Unused or unsupported DNS header status bits remain clear | **Implemented but not fully covered** | Response construction and serialization are delegated to `dnspython`, and tests assert expected high-level flags (`QR`, `AA`, `RA`, `TC`) on parsed responses. There is no dedicated automated test asserting the raw DNS header status bits that Level 1 does not use are clear for all response classes. |
+| Unused or unsupported DNS response header bits remain clear | **Implemented but not fully covered** | Response construction and serialization are delegated to `dnspython`, and tests assert expected high-level flags (`QR`, `AA`, `RA`, `TC`) on parsed responses. There is no dedicated automated test asserting the raw DNS response header bits that Level 1 does not use are clear for all response classes. |
 | TCP query service and TCP retry after truncation | **Out of Level 1 scope** | RFC 1123 recommends TCP service for DNS servers, and later DNS transport RFCs strengthen TCP requirements. Level 1 deliberately remains UDP-only and signals oversized UDP answers with `TC`. |
 | Zero-TTL record handling | **Out of Level 1 scope** | Level 1 generated records use TTLs derived from positive health-check timing configuration; the server does not load arbitrary zone data containing zero-TTL records. |
 | DNS software extensibility and arbitrary RR type loading | **Out of Level 1 scope** | Level 1 is restricted to generated A, SOA, and NS responses. The server does not implement arbitrary master-file loading or transparent support for every RR type. |
 | Resolver behavior, root hints, and broadcast/multicast DNS queries | **Out of Level 1 scope** | The server is authoritative-only, does not implement recursive resolution or cache management, and does not issue resolver queries. |
 
-Remaining Level 1 gap: add automated wire-level coverage for response name compression and unsupported header status-bit handling before marking RFC 1123 fully covered.
+Remaining Level 1 gap: add automated wire-level coverage for response name compression and unsupported response header-bit handling before marking RFC 1123 fully covered.
 
 ---
 
@@ -294,12 +296,12 @@ RFC 8906 — https://www.rfc-editor.org/rfc/rfc8906: documents Best Current Prac
 | SOA query for a served zone receives an SOA answer | **Implemented** | Positive SOA queries for the hosted apex return NOERROR with the apex SOA in the answer section. |
 | Unsupported known RR type at an existing owner name receives NODATA | **Implemented** | Existing tests query AAAA at an owner name that exists with A data and assert NOERROR with an empty answer and SOA authority. |
 | Unknown numeric RR type receives a normal DNS response instead of being dropped | **Implemented but not fully covered** | The handler treats every parsed QTYPE through the same rdataset lookup path. If no rdataset exists, it returns NODATA for existing owners or NXDOMAIN for absent owners. There is no dedicated test using an unknown numeric `TYPE####` query. |
-| DNS queries with request flags set receive a response and unsupported status bits are not copied | **Implemented but not fully covered** | Parsed queries with `RD` are answered through the ordinary authoritative path with `RA` clear, and response construction delegates status-bit handling to `dnspython`. The FORMERR recovery path preserves only the request opcode and `RD`. There is no dedicated test for `AD`, `CD`, or still-reserved request flags. |
+| DNS queries with request flags set receive a response and unsupported response header bits are not copied | **Implemented but not fully covered** | Parsed queries with `RD` are answered through the ordinary authoritative path with `RA` clear, and response construction delegates most response-flag handling to `dnspython`. The FORMERR recovery path preserves only the request opcode and `RD`. There is no dedicated test proving the Level 1 response flag policy for `RD`, `RA`, `AD`, `CD`, or still-reserved request flags. |
 | Unknown or unimplemented opcodes return NOTIMP | **Implemented but not fully covered** | Generic non-QUERY opcode handling returns NOTIMP without AA. Tests cover STATUS, NOTIFY, and UPDATE; they do not cover obsolete IQUERY or an unassigned opcode value. |
 | TCP and EDNS response robustness | **Out of Level 1 scope** | Level 1 is UDP-only and deliberately does not implement EDNS(0). |
 | Firewall, packet scrubber, whole-answer cache, remediation, and operator testing guidance | **Out of Level 1 scope** | These are operational deployment and ecosystem testing topics, not in-process authoritative UDP response semantics. |
 
-Remaining Level 1 gap: add automated robustness coverage for unknown numeric RR types, DNS request flags, obsolete IQUERY, an unassigned opcode, and raw unsupported response status bits before marking RFC 8906 fully covered.
+Remaining Level 1 gap: add automated robustness coverage for unknown numeric RR types, DNS request flags, obsolete IQUERY, an unassigned opcode, and the raw Level 1 response flag policy before marking RFC 8906 fully covered.
 
 ---
 
@@ -358,7 +360,7 @@ No remaining Level 1 gaps in RFC 2308 coverage.
 | Oversized UDP responses are truncated to the classic 512-byte limit and set TC | `tests/indisoluble/a_healthy_dns/test_dns_server_udp_handler.py` (unit) |
 | Parsed response header fields (QR, ID, AA, RA, TC), including non-AA rejected responses | `tests/indisoluble/a_healthy_dns/test_dns_server_udp_integration.py` (component integration) |
 | DNS request-flag robustness for `AD`, `CD`, and still-reserved flags | **Missing** |
-| Raw response name compression and unsupported header status bits | **Missing** |
+| Raw response name compression and unsupported response header bits | **Missing** |
 | Health-check-driven A-record addition/removal | `.github/workflows/test-integration.yml` (Docker end-to-end) |
 | Container startup, Docker networking, alias zone routing | `.github/workflows/test-integration.yml` (Docker end-to-end) |
 
@@ -382,9 +384,9 @@ When DNSSEC is enabled, `DnsServerZoneUpdater._sign_zone()` delegates to `dns.dn
 
 | Gap | Needed before claiming full coverage |
 |---|---|
-| RFC 1123 response wire encoding coverage | Add automated wire-byte tests proving response name compression is applied when repeated names are present and unsupported DNS header status bits remain clear. |
+| RFC 1123 response wire encoding coverage | Add automated wire-byte tests proving response name compression is applied when repeated names are present and unsupported DNS response header bits remain clear. |
 | RFC 3425 IQUERY rejection coverage | Add a dedicated automated test proving opcode 1 (IQUERY) returns NOTIMP without AA. |
 | RFC 4343 case-insensitive DNS name lookup | Add automated mixed-case query tests for primary-zone answers, alias-zone answers, NODATA, NXDOMAIN, and out-of-zone rejection. |
 | RFC 4592 / RFC 8020 empty non-terminal semantics | Implement and test NODATA responses for empty non-terminal ancestors of nested configured names in primary and alias zones. |
 | RFC 8767 TTL definition coverage | Define and test the TTL cap/range policy for generated A, NS, SOA, and negative-response SOA authority RRsets. |
-| RFC 8906 basic DNS response robustness | Add automated tests proving unknown numeric RR types receive normal DNS responses, request flags such as `AD`, `CD`, and still-reserved bits do not cause drops or unsupported status-bit copying, and an unassigned opcode returns NOTIMP without AA. |
+| RFC 8906 basic DNS response robustness | Add automated tests proving unknown numeric RR types receive normal DNS responses, request flags such as `RD`, `AD`, `CD`, and still-reserved bits follow the Level 1 response flag policy, and an unassigned opcode returns NOTIMP without AA. |
