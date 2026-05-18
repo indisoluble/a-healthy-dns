@@ -5,6 +5,7 @@ RFC conformance contract for **A Healthy DNS** — Level 1 authoritative UDP res
 This document is the canonical home for:
 - the DNS protocol behavior this server intentionally covers,
 - the RFCs that define correctness for that behavior,
+- adjacent RFC references only where they clarify explicit scope boundaries,
 - and the current implementation and test coverage status for those applicable RFC requirements.
 
 It does not own product scope, configuration syntax, deployment procedures, or troubleshooting guidance. Those topics live in [`docs/project-brief.md`](project-brief.md), [`docs/configuration-reference.md`](configuration-reference.md), [`docs/docker.md`](docker.md), and [`docs/troubleshooting.md`](troubleshooting.md).
@@ -16,7 +17,7 @@ It does not own product scope, configuration syntax, deployment procedures, or t
 This document exists to make the DNS protocol contract reviewable. Use it to answer three questions:
 
 1. What DNS behavior does this server intentionally cover?
-2. Which RFCs define correctness for that behavior?
+2. Which RFCs define correctness for that behavior, and which adjacent RFCs are explicitly not conformance dependencies?
 3. Which applicable RFC requirements are currently implemented and tested?
 
 Do not use this document as an unqualified claim that A Healthy DNS implements every DNS feature in every referenced RFC. The product deliberately serves a narrow authoritative UDP role. Product scope and non-goals live in [`docs/project-brief.md`](project-brief.md); protocol requirements live in [`docs/requirements.md`](requirements.md).
@@ -26,6 +27,8 @@ Do not use this document as an unqualified claim that A Healthy DNS implements e
 Current claim: **not every necessary Level 1 RFC is fully covered under this document's definition**. The RFC applicability table below contains the complete RFC set needed to judge the declared Level 1 target. The core Level 1 behaviours previously documented here are implemented and covered by automated tests, and the remaining Level 1 gaps are tracked for RFC 1123, RFC 3425, RFC 3597, RFC 4343, RFC 4592, RFC 8020, RFC 8767, and RFC 8906.
 
 That claim is scoped. For broad DNS RFCs such as RFC 1034 and RFC 1035, "covered" means the implementation satisfies the RFC requirements that apply to the declared Level 1 authoritative UDP target. It does not mean full-document compliance for unrelated resolver behavior, zone transfers, TCP transport, unsupported record types, EDNS(0), or DNSSEC proof semantics.
+
+A listed RFC is a Level 1 conformance dependency only when it appears in the RFC applicability table. RFCs mentioned in glossary notes, scope-boundary rows, or out-of-scope sections are supporting references, not conformance claims.
 
 When this document says an RFC is fully covered for Level 1, it means:
 
@@ -87,6 +90,8 @@ Level 1 covers the minimum behaviour required to be a correct authoritative UDP 
 - TCP transport, including RFC 7766 DNS-over-TCP requirements
 - IPv6 (AAAA records)
 - QTYPE=ANY response policy (RFC 8482)
+- CNAME, DNAME, or other xNAME redirection-chain processing
+- DNS Stateful Operations (DSO), including RFC 8490 session semantics
 - Delegation referral and glue response construction, including RFC 9471 referral-glue behavior
 - Full DNSSEC authoritative-server behavior, including EDNS(0)/DO processing, automatic inclusion of RRSIG RRsets with signed answers, DNSSEC negative-denial proofs, DNSSEC algorithm policy enforcement, and complete DNSKEY / NSEC / RRSIG query semantics, even though the current signing path publishes DNSKEY, NSEC, and RRSIG RRsets when DNSSEC is enabled
 
@@ -98,7 +103,7 @@ Level 1 covers the minimum behaviour required to be a correct authoritative UDP 
 | **NXDOMAIN** | "Non-Existent Domain" — the queried name does not exist in the zone at all |
 | **NODATA / NOERROR empty answer** | The queried name exists but has no records of the requested type; the response code is NOERROR (not an error) and the answer section is empty |
 | **SOA in authority** | For negative responses (NXDOMAIN and NODATA) the server includes the matched hosted or alias zone's Start of Authority record in the authority section so that negative caching behaviour is well-defined. The authority SOA RRset TTL is the negative-cache TTL, not necessarily the stored apex SOA TTL |
-| **Non-meta RR type** | An ordinary resource-record type query handled as data lookup when unsupported, such as `AAAA` or an unknown `TYPE####` data type under RFC 3597 and RFC 6895 terminology. This excludes special operation or extension query types outside Level 1, including `AXFR`, `IXFR`, `ANY`, and `OPT`/EDNS(0). |
+| **Non-meta RR type** | An ordinary resource-record type query handled as data lookup when unsupported, such as `AAAA` or an unknown `TYPE####` data type under RFC 3597 and current DNS registry terminology. This excludes special operation or extension query types outside Level 1, including `AXFR`, `IXFR`, `ANY`, and `OPT`/EDNS(0). |
 | **Level 1 response flag policy** | Responses set `QR`; preserve request `RD`; set `AA` only for authoritative in-zone responses; set `TC` only when UDP truncation occurs; and leave `RA`, `AD`, `CD`, and still-reserved header bits clear because recursion, DNSSEC signalling, and EDNS(0) are outside Level 1. |
 | **REFUSED** | The server refuses to answer because the query is for a zone it does not serve |
 | **FORMERR** | "Format Error" — the server cannot interpret the query because it is malformed |
@@ -109,7 +114,7 @@ Level 1 covers the minimum behaviour required to be a correct authoritative UDP 
 
 The table below identifies the smallest complete RFC set needed to judge the Level 1 protocol target. The project does not claim unqualified full-document compliance with these broad RFCs; it claims full coverage only when the status column says so.
 
-Completeness is based on the declared behaviour in [Level 1 protocol target](#3-level-1-protocol-target) and the current RFC Editor update chains for the DNS base specifications and the Level 1-dependent updates. If an RFC defines behavior inside the Level 1 target, it must appear in this table with an implemented, gap, or supporting-taxonomy status. RFCs that update the core DNS specifications only for TCP transport, EDNS(0), DNSSEC, QTYPE=ANY policy, zone transfer/update/notify, TSIG, DNS Stateful Operations, referral glue, resolver/cache behavior, terminology, IANA registry allocation procedures without Level 1 taxonomy impact, experimental record types, or record families outside A/SOA/NS are not listed in the main table because those behaviours are outside Level 1.
+Completeness is based on the declared behaviour in [Level 1 protocol target](#3-level-1-protocol-target) and the current RFC Editor update chains for the DNS base specifications and Level 1-dependent updates, especially RFC 1034, RFC 1035, RFC 2181, and RFC 2308. If an RFC defines behavior inside the Level 1 target, it must appear in this table with an implemented or gap status. RFCs that update the core DNS specifications only for lower-layer UDP/IP transport, TCP transport, EDNS(0), DNSSEC, QTYPE=ANY policy, zone transfer/update/notify, TSIG/TKEY/SIG(0), DSO/sessionful DNS, xNAME redirection, referral glue, resolver/cache behavior, terminology, IANA registry allocation procedures, experimental record types, or record families outside A/SOA/NS are not listed in the main table because those behaviours are outside Level 1.
 
 | RFC | Applies to Level 1 because it defines | Current Level 1 status | Broader material not claimed |
 |---|---|---|---|
@@ -121,7 +126,6 @@ Completeness is based on the declared behaviour in [Level 1 protocol target](#3-
 | [RFC 2308](https://www.rfc-editor.org/rfc/rfc2308) | NXDOMAIN and NODATA authority-section SOA requirements and negative-response TTL handling | **Fully covered for Level 1** | Referral response details and server-side negative caching |
 | [RFC 3425](https://www.rfc-editor.org/rfc/rfc3425) | IQUERY obsolescence and NOTIMP handling for IQUERY requests | **Gap: not fully covered** | Historical inverse-query semantics, which are obsolete and not implemented |
 | [RFC 3597](https://www.rfc-editor.org/rfc/rfc3597) | Unknown DNS RR type handling for ordinary non-meta `TYPE####` queries | **Gap: not fully covered** | Loading, storing, transferring, and serving arbitrary unknown RR data; unknown-RR RDATA preservation; master-file generic RDATA syntax; and DNSSEC canonical-form details |
-| [RFC 6895](https://www.rfc-editor.org/rfc/rfc6895) | Current DNS RRTYPE, QTYPE, Meta-TYPE, CLASS, opcode, RCODE, and header-bit registry taxonomy used to delimit ordinary data-type queries and response flag policy | **Supporting taxonomy; no independent Level 1 implementation requirement** | IANA allocation procedures, OPT/EDNS semantics, TSIG/TKEY, arbitrary class support, and registry maintenance |
 | [RFC 4343](https://www.rfc-editor.org/rfc/rfc4343) | Case-insensitive DNS name matching for authoritative lookup and zone matching | **Gap: not fully covered** | Internationalized Domain Name handling and output-case preservation choices outside the lookup-result correctness requirement |
 | [RFC 4592](https://www.rfc-editor.org/rfc/rfc4592) | DNS owner-name existence rules, including empty non-terminals | **Gap: not fully covered** | Wildcard synthesis and wildcard-specific RRset behavior |
 | [RFC 8020](https://www.rfc-editor.org/rfc/rfc8020) | NXDOMAIN semantics and the required NODATA response for empty non-terminals | **Gap: not fully covered** | Recursive resolver NXDOMAIN-cut caching behavior and DNSSEC proof reuse |
@@ -135,7 +139,6 @@ The current main table covers every RFC that defines behavior in the Level 1 tar
 
 - core DNS authority and wire behavior: RFC 1034, RFC 1035, RFC 1123, RFC 2181, RFC 2308, and RFC 9619
 - Level 1-specific updates for serials, opcodes, unknown types, case, name existence, TTLs, and robustness: RFC 1982, RFC 3425, RFC 3597, RFC 4343, RFC 4592, RFC 8020, RFC 8767, and RFC 8906
-- supporting registry taxonomy used to delimit the target: RFC 6895
 
 The following commonly adjacent RFC areas were reviewed but are not Level 1 conformance dependencies under the current target:
 
@@ -144,6 +147,9 @@ The following commonly adjacent RFC areas were reviewed but are not Level 1 conf
 | TCP transport | RFC 7766, RFC 5966 | Level 1 is explicitly UDP-only. Oversized UDP answers set `TC`, but TCP retry/service is outside the target. |
 | EDNS(0) and OPT processing | RFC 6891 | Level 1 uses the classic 512-byte UDP payload limit and does not negotiate EDNS payload size, extended RCODEs, or EDNS options. |
 | Zone transfers, update, and notify | RFC 1995, RFC 1996, RFC 2136, RFC 5936 | The server does not implement AXFR, IXFR, dynamic update, notify, secondary replication, or transfer-specific compression behavior. |
+| DNS registry taxonomy | RFC 6895 | Useful vocabulary for distinguishing data TYPEs, QTYPEs, and Meta-TYPEs, but it does not add an independent Level 1 response-correctness requirement. |
+| DNS Stateful Operations | RFC 8490 | Level 1 is UDP-only and does not establish stateful DNS sessions. The DSO opcode is outside the Level 1 product target; generic unsupported-opcode response robustness is assessed under RFC 8906. |
+| xNAME redirection and redirection-chain status | RFC 6604, RFC 6672 | Level 1 does not publish CNAME or DNAME data, synthesize CNAMEs, or follow redirection chains. RCODE and AA rules specific to xNAME chains therefore do not add a Level 1 requirement. |
 | Referral glue | RFC 9471 | Level 1 does not serve delegation referrals or referral glue. It serves authoritative answers for hosted and alias zones only. |
 | QTYPE=ANY response policy | RFC 8482 | `ANY` response minimization is explicitly outside Level 1. |
 | Resolver/cache-only behavior | RFC 5452, RFC 9520 | The server is authoritative-only and does not send resolver queries, cache upstream answers, or cache resolution failures. |
@@ -239,22 +245,7 @@ Remaining Level 1 gap: add automated unknown numeric non-meta `TYPE####` query t
 
 ---
 
-### 5.6 RFC 6895 — Domain Name System (DNS) IANA Considerations
-
-RFC 6895 — https://www.rfc-editor.org/rfc/rfc6895: updates RFC 3597 and specifies the modern DNS registry taxonomy for RRTYPEs, QTYPEs, Meta-TYPEs, CLASSes, opcodes, RCODEs, and DNS header bits. For Level 1, it is necessary only as a supporting taxonomy source for deciding which queries are ordinary data lookups and which protocol elements are special, meta, or outside the declared target.
-
-| Behaviour or taxonomy point | Status | Notes |
-|---|---|---|
-| Data TYPE / QTYPE / Meta-TYPE distinction used by the Level 1 `Non-meta RR type` definition | **Reflected** | The glossary and Level 1 target limit unknown-type robustness to ordinary data-type queries such as `TYPE####`. Special query or meta types including `ANY`, `AXFR`, `IXFR`, and `OPT`/EDNS(0) remain outside Level 1. |
-| IN class as the only supported DNS data class | **Implemented** | RFC 6895 preserves the current DNS CLASS taxonomy, including IN as class 1. `DnsServerUdpHandler.handle()` accepts IN queries and returns REFUSED without AA for non-IN classes. |
-| Opcode, RCODE, and DNS header-bit registry context | **Reflected** | RFC 6895 supplies registry context for the opcode, RCODE, and header-bit fields used by RFC 1035 and RFC 8906. Level 1 response behavior and remaining raw-header test gaps are assessed under RFC 1035, RFC 1123, RFC 3425, RFC 8906, and RFC 9619 rather than as an independent RFC 6895 conformance target. |
-| IANA allocation procedures and registry maintenance | **Out of Level 1 scope** | The server does not allocate DNS parameters or implement registry-management behavior. |
-
-No separate RFC 6895 implementation gap is tracked. The behavior that depends on this taxonomy is covered or gapped under RFC 1123, RFC 3597, and RFC 8906.
-
----
-
-### 5.7 RFC 2181 — Clarifications to the DNS Specification
+### 5.6 RFC 2181 — Clarifications to the DNS Specification
 
 RFC 2181 — https://www.rfc-editor.org/rfc/rfc2181: §6.1 clarifies zone authority and says a server for one zone should not return authoritative answers for names in another zone.
 
@@ -275,7 +266,7 @@ No remaining Level 1 gaps in RFC 2181 coverage.
 
 ---
 
-### 5.8 RFC 1982 — Serial Number Arithmetic
+### 5.7 RFC 1982 — Serial Number Arithmetic
 
 RFC 1982 — https://www.rfc-editor.org/rfc/rfc1982: updates RFC 1034 and RFC 1035 by defining serial number arithmetic for DNS SOA serial numbers. For Level 1, the applicable behavior is publication of an SOA serial in the 32-bit unsigned DNS SOA serial number space.
 
@@ -289,7 +280,7 @@ No remaining Level 1 gaps in RFC 1982 coverage.
 
 ---
 
-### 5.9 RFC 4343 — DNS Case Insensitivity Clarification
+### 5.8 RFC 4343 — DNS Case Insensitivity Clarification
 
 RFC 4343 — https://www.rfc-editor.org/rfc/rfc4343: updates RFC 1034, RFC 1035, and RFC 2181 by clarifying that ASCII DNS label matching is case-insensitive while output case may be preserved or normalized without changing RRset completeness.
 
@@ -303,7 +294,7 @@ Remaining Level 1 gap: add automated mixed-case query coverage for positive host
 
 ---
 
-### 5.10 RFC 4592 — The Role of Wildcards in the Domain Name System
+### 5.9 RFC 4592 — The Role of Wildcards in the Domain Name System
 
 RFC 4592 — https://www.rfc-editor.org/rfc/rfc4592: updates RFC 1034 by refining DNS name-existence rules. For Level 1, the applicable material is not wildcard synthesis; it is the definition that a node exists when it owns at least one RRset or has descendants that own RRsets. That makes empty non-terminals existing names.
 
@@ -317,7 +308,7 @@ Remaining Level 1 gap: implement and test empty non-terminal recognition for nes
 
 ---
 
-### 5.11 RFC 8020 — NXDOMAIN: There Really Is Nothing Underneath
+### 5.10 RFC 8020 — NXDOMAIN: There Really Is Nothing Underneath
 
 RFC 8020 — https://www.rfc-editor.org/rfc/rfc8020: updates RFC 1034 and RFC 2308 by clarifying that NXDOMAIN means the queried name and its descendants do not exist, and that empty non-terminals must receive NODATA.
 
@@ -331,7 +322,7 @@ Remaining Level 1 gap: add empty non-terminal response semantics and tests for p
 
 ---
 
-### 5.12 RFC 8767 — Serving Stale Data to Improve DNS Resiliency
+### 5.11 RFC 8767 — Serving Stale Data to Improve DNS Resiliency
 
 RFC 8767 — https://www.rfc-editor.org/rfc/rfc8767: defines recursive resolver serve-stale behavior and updates the DNS TTL definition used by RFC 1035 and RFC 2181. For Level 1, only the updated TTL definition for TTL-bearing authoritative responses applies.
 
@@ -344,7 +335,7 @@ Remaining Level 1 gap: define and test the TTL cap/range policy for all generate
 
 ---
 
-### 5.13 RFC 8906 — A Common Operational Problem in DNS Servers: Failure to Communicate
+### 5.12 RFC 8906 — A Common Operational Problem in DNS Servers: Failure to Communicate
 
 RFC 8906 — https://www.rfc-editor.org/rfc/rfc8906: documents Best Current Practice for avoiding DNS server non-response or incorrect response structure. For Level 1, the applicable material is the Basic DNS guidance for zone-existence queries, unknown or unsupported RR types, DNS request flags, recursive queries sent to non-recursive servers, and unknown opcodes.
 
@@ -362,7 +353,7 @@ Remaining Level 1 gap: add automated robustness coverage for unknown numeric non
 
 ---
 
-### 5.14 RFC 9619 — In the DNS, QDCOUNT Is (Usually) One
+### 5.13 RFC 9619 — In the DNS, QDCOUNT Is (Usually) One
 
 RFC 9619 — https://www.rfc-editor.org/rfc/rfc9619: updates RFC 1035 by forbidding standard-query (`OPCODE=0`) messages with `QDCOUNT > 1` and requiring `FORMERR` for those messages.
 
@@ -375,7 +366,7 @@ No remaining Level 1 gaps in RFC 9619 coverage.
 
 ---
 
-### 5.15 RFC 2308 — Negative Caching of DNS Queries
+### 5.14 RFC 2308 — Negative Caching of DNS Queries
 
 RFC 2308 — https://www.rfc-editor.org/rfc/rfc2308: NXDOMAIN (§3) and NODATA/NOERROR (§2.1) responses must include the matched zone apex SOA in the authority section for correct negative caching. §5 defines the negative-response TTL as the minimum of the SOA RR TTL and `SOA.MINIMUM`; `SOA.MINIMUM` is populated here via `calculate_soa_min_ttl()` in `records/time.py`, and the emitted authority SOA RRset TTL is trimmed in the UDP handler.
 
