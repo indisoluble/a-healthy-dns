@@ -802,6 +802,7 @@ def test_handle_malformed_dns_response_packet_logs_warning_and_drops(
 @pytest.mark.parametrize(
     "opcode",
     [
+        dns.opcode.IQUERY,
         dns.opcode.STATUS,
         dns.opcode.NOTIFY,
     ],
