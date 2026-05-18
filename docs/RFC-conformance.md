@@ -23,7 +23,7 @@ Do not use this document as an unqualified claim that A Healthy DNS implements e
 
 ## 2. Current conformance claim
 
-Current claim: **not every necessary Level 1 RFC is fully covered under this document's definition**. The core Level 1 behaviours previously documented here are implemented and covered by automated tests, and the remaining Level 1 gaps are tracked for RFC 1123, RFC 3425, RFC 3597, RFC 4343, RFC 4592, RFC 8020, RFC 8767, and RFC 8906.
+Current claim: **not every necessary Level 1 RFC is fully covered under this document's definition**. The RFC applicability table below contains the complete RFC set needed to judge the declared Level 1 target. The core Level 1 behaviours previously documented here are implemented and covered by automated tests, and the remaining Level 1 gaps are tracked for RFC 1123, RFC 3425, RFC 3597, RFC 4343, RFC 4592, RFC 8020, RFC 8767, and RFC 8906.
 
 That claim is scoped. For broad DNS RFCs such as RFC 1034 and RFC 1035, "covered" means the implementation satisfies the RFC requirements that apply to the declared Level 1 authoritative UDP target. It does not mean full-document compliance for unrelated resolver behavior, zone transfers, TCP transport, unsupported record types, EDNS(0), or DNSSEC proof semantics.
 
@@ -82,11 +82,12 @@ Level 1 covers the minimum behaviour required to be a correct authoritative UDP 
 ### What Level 1 does not cover
 
 - Recursive or iterative resolution
-- Zone transfers (AXFR / IXFR)
-- EDNS(0) extension processing
-- TCP transport
+- Zone transfers (AXFR / IXFR), including RFC 5936 AXFR behavior
+- EDNS(0) extension processing, including RFC 6891 OPT processing
+- TCP transport, including RFC 7766 DNS-over-TCP requirements
 - IPv6 (AAAA records)
 - QTYPE=ANY response policy (RFC 8482)
+- Delegation referral and glue response construction, including RFC 9471 referral-glue behavior
 - Full DNSSEC authoritative-server behavior, including EDNS(0)/DO processing, automatic inclusion of RRSIG RRsets with signed answers, DNSSEC negative-denial proofs, DNSSEC algorithm policy enforcement, and complete DNSKEY / NSEC / RRSIG query semantics, even though the current signing path publishes DNSKEY, NSEC, and RRSIG RRsets when DNSSEC is enabled
 
 ### Key term glossary
@@ -106,7 +107,9 @@ Level 1 covers the minimum behaviour required to be a correct authoritative UDP 
 
 ## 4. RFC applicability and compliance summary
 
-The table below identifies the smallest RFC set needed to judge the Level 1 protocol target. The project does not claim unqualified full-document compliance with these broad RFCs; it claims full coverage only when the status column says so. RFCs that update the core DNS specifications only for TCP transport, EDNS(0), DNSSEC, QTYPE=ANY policy, zone transfer/update/notify, TSIG, DNS Stateful Operations, referral glue, resolver/cache behavior, terminology, IANA registry allocation procedures without Level 1 taxonomy impact, experimental record types, or record families outside A/SOA/NS are not listed in the main table because those behaviours are outside Level 1.
+The table below identifies the smallest complete RFC set needed to judge the Level 1 protocol target. The project does not claim unqualified full-document compliance with these broad RFCs; it claims full coverage only when the status column says so.
+
+Completeness is based on the declared behaviour in [Level 1 protocol target](#3-level-1-protocol-target) and the current RFC Editor update chains for the DNS base specifications and the Level 1-dependent updates. If an RFC defines behavior inside the Level 1 target, it must appear in this table with an implemented, gap, or supporting-taxonomy status. RFCs that update the core DNS specifications only for TCP transport, EDNS(0), DNSSEC, QTYPE=ANY policy, zone transfer/update/notify, TSIG, DNS Stateful Operations, referral glue, resolver/cache behavior, terminology, IANA registry allocation procedures without Level 1 taxonomy impact, experimental record types, or record families outside A/SOA/NS are not listed in the main table because those behaviours are outside Level 1.
 
 | RFC | Applies to Level 1 because it defines | Current Level 1 status | Broader material not claimed |
 |---|---|---|---|
@@ -125,6 +128,27 @@ The table below identifies the smallest RFC set needed to judge the Level 1 prot
 | [RFC 8767](https://www.rfc-editor.org/rfc/rfc8767) | Updated DNS TTL definition for TTL-bearing authoritative responses | **Gap: not fully covered** | Recursive resolver serve-stale behavior, stale-answer timers, and cache-refresh semantics |
 | [RFC 8906](https://www.rfc-editor.org/rfc/rfc8906) | Best Current Practice for responding to basic DNS queries, unknown or unsupported RR types, DNS request flags, and unknown opcodes | **Gap: not fully covered** | TCP, EDNS, firewalls, packet scrubbers, whole-answer caches, remediation procedures, and operator testing guidance |
 | [RFC 9619](https://www.rfc-editor.org/rfc/rfc9619) | Standard-query `QDCOUNT > 1` validation and required FORMERR response | **Fully covered for Level 1** | Non-standard operation modes outside this server's query-handling target |
+
+### Level 1 RFC selection audit
+
+The current main table covers every RFC that defines behavior in the Level 1 target:
+
+- core DNS authority and wire behavior: RFC 1034, RFC 1035, RFC 1123, RFC 2181, RFC 2308, and RFC 9619
+- Level 1-specific updates for serials, opcodes, unknown types, case, name existence, TTLs, and robustness: RFC 1982, RFC 3425, RFC 3597, RFC 4343, RFC 4592, RFC 8020, RFC 8767, and RFC 8906
+- supporting registry taxonomy used to delimit the target: RFC 6895
+
+The following commonly adjacent RFC areas were reviewed but are not Level 1 conformance dependencies under the current target:
+
+| RFC area | Examples | Why not Level 1 |
+|---|---|---|
+| TCP transport | RFC 7766, RFC 5966 | Level 1 is explicitly UDP-only. Oversized UDP answers set `TC`, but TCP retry/service is outside the target. |
+| EDNS(0) and OPT processing | RFC 6891 | Level 1 uses the classic 512-byte UDP payload limit and does not negotiate EDNS payload size, extended RCODEs, or EDNS options. |
+| Zone transfers, update, and notify | RFC 1995, RFC 1996, RFC 2136, RFC 5936 | The server does not implement AXFR, IXFR, dynamic update, notify, secondary replication, or transfer-specific compression behavior. |
+| Referral glue | RFC 9471 | Level 1 does not serve delegation referrals or referral glue. It serves authoritative answers for hosted and alias zones only. |
+| QTYPE=ANY response policy | RFC 8482 | `ANY` response minimization is explicitly outside Level 1. |
+| Resolver/cache-only behavior | RFC 5452, RFC 9520 | The server is authoritative-only and does not send resolver queries, cache upstream answers, or cache resolution failures. |
+| DNS terminology-only updates | RFC 9499 | Terminology helps describe DNS concepts but does not add an independent Level 1 implementation requirement. |
+| DNSSEC protocol behavior | RFC 4033, RFC 4034, RFC 4035, RFC 6840, RFC 9364, RFC 9904 | Optional signing can publish DNSSEC artifacts, but full DNSSEC authoritative-server behavior is outside Level 1. See [Out-of-scope but related RFCs](#7-out-of-scope-but-related-rfcs). |
 
 ---
 
