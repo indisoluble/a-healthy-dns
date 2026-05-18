@@ -24,7 +24,7 @@ Dependencies are managed in `setup.py`. Do not introduce a `requirements.txt` or
 
 Dev/test packages (`pytest`, `pytest-cov`) are installed directly in CI and are not declared in `setup.py`.
 
-Keep upper-bound pins tight at the minor version level. Both runtime libraries have historically introduced breaking API changes across minor versions.
+Keep upper-bound pins at the next major version so minor and patch updates are allowed automatically.
 
 ## Naming Rules
 
