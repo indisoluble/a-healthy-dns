@@ -24,7 +24,7 @@ Do not use this document as an unqualified claim that A Healthy DNS implements e
 
 ## 2. Current conformance claim
 
-Current claim: **not every necessary Level 1 RFC is fully covered under this document's definition**. The RFC applicability table below contains the complete RFC set needed to judge the declared Level 1 target. The core Level 1 behaviours previously documented here are implemented and covered by automated tests, and the remaining Level 1 gaps are tracked for RFC 1123, RFC 4343, RFC 4592, RFC 8020, RFC 8767, and RFC 8906.
+Current claim: **not every necessary Level 1 RFC is fully covered under this document's definition**. The RFC applicability table below contains the complete RFC set needed to judge the declared Level 1 target. The core Level 1 behaviours previously documented here are implemented and covered by automated tests, and the remaining Level 1 gaps are tracked for RFC 1123, RFC 4592, RFC 8020, RFC 8767, and RFC 8906.
 
 That claim is scoped. For broad DNS RFCs such as RFC 1034 and RFC 1035, "covered" means the implementation satisfies the RFC requirements that apply to the declared Level 1 authoritative UDP target. It does not mean full-document compliance for unrelated resolver behavior, zone transfers, TCP transport, unsupported record types, EDNS(0), or DNSSEC proof semantics.
 
@@ -40,7 +40,6 @@ When this document says an RFC is fully covered for Level 1, it means:
 When an RFC is necessary for the product but not fully covered under that definition, this document must say so explicitly. Current known gaps:
 
 - RFC 1123 requires DNS name servers to service UDP queries and use DNS name compression in responses. UDP service is covered by integration tests, and response serialization is delegated to `dnspython`, but there is no dedicated automated test proving response name compression or unsupported response header-bit handling.
-- RFC 4343 case-insensitive DNS name matching lacks dedicated automated tests for mixed-case queries, so full Level 1 coverage is not confirmed even though the implementation relies on `dnspython` DNS name handling.
 - RFC 4592 and RFC 8020 empty non-terminal semantics are not fully implemented or tested. A configured nested name can imply an existing ancestor owner name with no RRsets, and the correct response for that ancestor is NODATA, not NXDOMAIN.
 - RFC 8767 updates DNS TTL handling for TTL-bearing records. Level 1 publishes TTLs for A, NS, SOA, and negative-response SOA authority RRsets, but there is no documented or tested TTL cap/range policy aligned with RFC 8767's updated TTL definition.
 - RFC 8906 says authoritative servers should respond correctly to basic DNS robustness probes, including unknown or unsupported RR types, DNS request flags, and unknown opcodes. The generic implementation paths exist, but dedicated robustness tests for unknown numeric non-meta RR types, request flags, and an unassigned opcode are missing.
@@ -124,7 +123,7 @@ Completeness is based on the declared behaviour in [Level 1 protocol target](#3-
 | [RFC 2308](https://www.rfc-editor.org/rfc/rfc2308) | NXDOMAIN and NODATA authority-section SOA requirements and negative-response TTL handling | **Fully covered for Level 1** | Referral response details and server-side negative caching |
 | [RFC 3425](https://www.rfc-editor.org/rfc/rfc3425) | IQUERY obsolescence and NOTIMP handling for IQUERY requests | **Fully covered for Level 1** | Historical inverse-query semantics, which are obsolete and not implemented |
 | [RFC 3597](https://www.rfc-editor.org/rfc/rfc3597) | Unknown DNS RR type handling for ordinary non-meta `TYPE####` queries | **Fully covered for Level 1** | Loading, storing, transferring, and serving arbitrary unknown RR data; unknown-RR RDATA preservation; master-file generic RDATA syntax; and DNSSEC canonical-form details |
-| [RFC 4343](https://www.rfc-editor.org/rfc/rfc4343) | Case-insensitive DNS name matching for authoritative lookup and zone matching | **Gap: not fully covered** | Internationalized Domain Name handling and output-case preservation choices outside the lookup-result correctness requirement |
+| [RFC 4343](https://www.rfc-editor.org/rfc/rfc4343) | Case-insensitive DNS name matching for authoritative lookup and zone matching | **Fully covered for Level 1** | Internationalized Domain Name handling and output-case preservation choices outside the lookup-result correctness requirement |
 | [RFC 4592](https://www.rfc-editor.org/rfc/rfc4592) | DNS owner-name existence rules, including empty non-terminals | **Gap: not fully covered** | Wildcard synthesis and wildcard-specific RRset behavior |
 | [RFC 8020](https://www.rfc-editor.org/rfc/rfc8020) | NXDOMAIN semantics and the required NODATA response for empty non-terminals | **Gap: not fully covered** | Recursive resolver NXDOMAIN-cut caching behavior and DNSSEC proof reuse |
 | [RFC 8767](https://www.rfc-editor.org/rfc/rfc8767) | Updated DNS TTL definition for TTL-bearing authoritative responses | **Gap: not fully covered** | Recursive resolver serve-stale behavior, stale-answer timers, and cache-refresh semantics |
@@ -284,11 +283,11 @@ RFC 4343 — https://www.rfc-editor.org/rfc/rfc4343: updates RFC 1034, RFC 1035,
 
 | Behaviour | Status | Notes |
 |---|---|---|
-| Case-insensitive hosted-zone and alias-zone matching | **Implemented but not fully covered** | `ZoneOrigins.origin_for()` delegates subdomain checks to `dns.name.Name.is_subdomain()`. This is expected to use DNS name comparison semantics, but there is no dedicated automated test proving mixed-case primary-zone or alias-zone queries are accepted as in-zone. |
-| Case-insensitive owner-node lookup | **Implemented but not fully covered** | `_update_response()` passes the relativized `dns.name.Name` to the `dns.versioned.Zone` reader. This is expected to use DNS name comparison semantics, but there is no dedicated automated test proving mixed-case owner names retrieve the same A/SOA/NS data as lowercase queries. |
+| Case-insensitive hosted-zone and alias-zone matching | **Implemented** | `tests/indisoluble/a_healthy_dns/test_dns_server_udp_integration.py` exercises mixed-case queries for primary-zone and alias-zone names and asserts they are treated as in-zone (AA set, expected response code). |
+| Case-insensitive owner-node lookup | **Implemented** | `tests/indisoluble/a_healthy_dns/test_dns_server_udp_integration.py` exercises mixed-case queries for existing owner names and asserts they retrieve the same A answers and NODATA semantics as lowercase queries. |
 | Output case preservation | **Out of Level 1 scope** | Level 1 requires lookup-result correctness and RRset completeness, not a specific output capitalization policy. RFC 4343 permits multiple output-case choices as long as retrieval is case-insensitive. |
 
-Remaining Level 1 gap: add automated mixed-case query coverage for positive hosted-zone answers, alias-zone answers, NODATA, NXDOMAIN, and out-of-zone rejection before marking RFC 4343 fully covered.
+No remaining Level 1 gaps in RFC 4343 coverage.
 
 ---
 
@@ -431,7 +430,6 @@ When DNSSEC is enabled, `DnsServerZoneUpdater._sign_zone()` delegates to `dns.dn
 | Gap | Needed before claiming full coverage |
 |---|---|
 | RFC 1123 response wire encoding coverage | Add automated wire-byte tests proving response name compression is applied when repeated names are present and unsupported DNS response header bits remain clear. |
-| RFC 4343 case-insensitive DNS name lookup | Add automated mixed-case query tests for primary-zone answers, alias-zone answers, NODATA, NXDOMAIN, and out-of-zone rejection. |
 | RFC 4592 / RFC 8020 empty non-terminal semantics | Implement and test NODATA responses for empty non-terminal ancestors of nested configured names in primary and alias zones. |
 | RFC 8767 TTL definition coverage | Define and test the TTL cap/range policy for generated A, NS, SOA, and negative-response SOA authority RRsets. |
 | RFC 8906 basic DNS response robustness | Add automated tests proving unknown numeric non-meta RR types receive normal DNS responses, request flags such as `RD`, `AD`, `CD`, and still-reserved bits follow the Level 1 response flag policy, and an unassigned opcode returns NOTIMP without AA. |

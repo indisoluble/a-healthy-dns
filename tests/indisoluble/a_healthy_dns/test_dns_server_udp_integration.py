@@ -45,6 +45,12 @@ _OUT_OF_ZONE_FQDN = "www.unrelated.test."
 # unknown numeric data type and the server treats it as a non-meta lookup type.
 _UNKNOWN_NON_META_RDTYPE = dns.rdatatype.from_text("TYPE65280")
 
+_MIXED_CASE_SUBDOMAIN_FQDN = "WwW.ExAmPlE.InTeGrAtIoN.TeSt."
+_MIXED_CASE_ALIAS_SUBDOMAIN_FQDN = "WwW.AlIaS.InTeGrAtIoN.TeSt."
+_MIXED_CASE_ABSENT_FQDN = "MiSsInG.ExAmPlE.InTeGrAtIoN.TeSt."
+_MIXED_CASE_ALIAS_ABSENT_FQDN = "MiSsInG.AlIaS.InTeGrAtIoN.TeSt."
+_MIXED_CASE_OUT_OF_ZONE_FQDN = "WwW.UnReLaTeD.TeSt."
+
 # A wire payload that is ≥ 12 bytes (DNS header is readable) but not a valid
 # DNS message.  The handler must recover the transaction ID and return FORMERR
 # (RFC 1035 §4.1.1).  Exactly 12 bytes: valid DNS header with QDCOUNT=1 but
@@ -213,6 +219,28 @@ class TestPositiveResponses:
 
         _assert_response_flags(resp)
 
+    @pytest.mark.parametrize(
+        "qname",
+        [
+            _MIXED_CASE_SUBDOMAIN_FQDN,
+            _MIXED_CASE_ALIAS_SUBDOMAIN_FQDN,
+        ],
+        ids=["mixed-case-primary", "mixed-case-alias"],
+    )
+    def test_mixed_case_a_query_returns_noerror_expected_ip(self, live_server, qname):
+        host, port = live_server
+        query = dns.message.make_query(qname, dns.rdatatype.A)
+        resp = _udp_query(host, port, query)
+
+        assert resp.rcode() == dns.rcode.NOERROR
+        assert resp.id == query.id
+
+        _assert_section_counts(resp, answer=1)
+        assert resp.answer[0].rdtype == dns.rdatatype.A
+        assert any(str(rdata) == _SUBDOMAIN_IP for rdata in resp.answer[0])
+
+        _assert_response_flags(resp)
+
     def test_soa_query_answer_contains_soa_at_apex(self, live_server):
         host, port = live_server
         query = dns.message.make_query(_ZONE_FQDN, dns.rdatatype.SOA)
@@ -350,6 +378,59 @@ class TestNegativeResponses:
 
         _assert_response_flags(resp)
 
+    @pytest.mark.parametrize(
+        "qname,rdtype,expected_rcode,expected_soa_name",
+        [
+            (
+                _MIXED_CASE_ABSENT_FQDN,
+                dns.rdatatype.A,
+                dns.rcode.NXDOMAIN,
+                _ZONE_FQDN,
+            ),
+            (
+                _MIXED_CASE_SUBDOMAIN_FQDN,
+                dns.rdatatype.AAAA,
+                dns.rcode.NOERROR,
+                _ZONE_FQDN,
+            ),
+            (
+                _MIXED_CASE_ALIAS_ABSENT_FQDN,
+                dns.rdatatype.A,
+                dns.rcode.NXDOMAIN,
+                _ALIAS_ZONE_FQDN,
+            ),
+            (
+                _MIXED_CASE_ALIAS_SUBDOMAIN_FQDN,
+                dns.rdatatype.AAAA,
+                dns.rcode.NOERROR,
+                _ALIAS_ZONE_FQDN,
+            ),
+        ],
+        ids=[
+            "mixed-case-nxdomain-absent-owner",
+            "mixed-case-nodata-absent-type",
+            "mixed-case-alias-nxdomain-absent-owner",
+            "mixed-case-alias-nodata-absent-type",
+        ],
+    )
+    def test_mixed_case_negative_response_has_soa_authority(
+        self, live_server, qname, rdtype, expected_rcode, expected_soa_name
+    ):
+        host, port = live_server
+        query = dns.message.make_query(qname, rdtype)
+        resp = _udp_query(host, port, query)
+
+        assert resp.rcode() == expected_rcode
+        assert resp.id == query.id
+
+        _assert_section_counts(resp, authority=1)
+        assert resp.authority[0].rdtype == dns.rdatatype.SOA
+        assert resp.authority[0].name.to_text().lower() == expected_soa_name.lower()
+        soa_rdata = next(iter(resp.authority[0]))
+        assert resp.authority[0].ttl == soa_rdata.minimum
+
+        _assert_response_flags(resp)
+
 
 # ---------------------------------------------------------------------------
 # Rejected queries — RFC 1034 §6.2, RFC 1035 §4.1.1, RFC 9619
@@ -368,6 +449,10 @@ class TestRejectedQueries:
                 dns.rcode.REFUSED,
             ),
             (
+                dns.message.make_query(_MIXED_CASE_OUT_OF_ZONE_FQDN, dns.rdatatype.A),
+                dns.rcode.REFUSED,
+            ),
+            (
                 dns.message.make_query(
                     _SUBDOMAIN_FQDN, dns.rdatatype.A, rdclass=dns.rdataclass.CH
                 ),
@@ -376,7 +461,7 @@ class TestRejectedQueries:
             # dns.message.Message() with no questions produces QDCOUNT=0; handler returns FORMERR per Level 1 policy.
             (dns.message.Message(), dns.rcode.FORMERR),
         ],
-        ids=["out-of-zone", "non-in-class", "zero-question"],
+        ids=["out-of-zone", "mixed-case-out-of-zone", "non-in-class", "zero-question"],
     )
     def test_rejected_query_returns_expected_rcode(
         self, live_server, query, expected_rcode
