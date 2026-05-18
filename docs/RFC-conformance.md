@@ -24,7 +24,7 @@ Do not use this document as an unqualified claim that A Healthy DNS implements e
 
 ## 2. Current conformance claim
 
-Current claim: **not every necessary Level 1 RFC is fully covered under this document's definition**. The RFC applicability table below contains the complete RFC set needed to judge the declared Level 1 target. The core Level 1 behaviours previously documented here are implemented and covered by automated tests, and the remaining Level 1 gaps are tracked for RFC 1123, RFC 3597, RFC 4343, RFC 4592, RFC 8020, RFC 8767, and RFC 8906.
+Current claim: **not every necessary Level 1 RFC is fully covered under this document's definition**. The RFC applicability table below contains the complete RFC set needed to judge the declared Level 1 target. The core Level 1 behaviours previously documented here are implemented and covered by automated tests, and the remaining Level 1 gaps are tracked for RFC 1123, RFC 4343, RFC 4592, RFC 8020, RFC 8767, and RFC 8906.
 
 That claim is scoped. For broad DNS RFCs such as RFC 1034 and RFC 1035, "covered" means the implementation satisfies the RFC requirements that apply to the declared Level 1 authoritative UDP target. It does not mean full-document compliance for unrelated resolver behavior, zone transfers, TCP transport, unsupported record types, EDNS(0), or DNSSEC proof semantics.
 
@@ -40,7 +40,6 @@ When this document says an RFC is fully covered for Level 1, it means:
 When an RFC is necessary for the product but not fully covered under that definition, this document must say so explicitly. Current known gaps:
 
 - RFC 1123 requires DNS name servers to service UDP queries and use DNS name compression in responses. UDP service is covered by integration tests, and response serialization is delegated to `dnspython`, but there is no dedicated automated test proving response name compression or unsupported response header-bit handling.
-- RFC 3597 defines unknown DNS RR type handling. Level 1 does not load or serve arbitrary unknown RR data, but it does accept unknown numeric non-meta RR type queries through the normal lookup path. There is no dedicated automated test proving those queries receive normal NODATA or NXDOMAIN responses instead of being dropped, refused, or treated as malformed.
 - RFC 4343 case-insensitive DNS name matching lacks dedicated automated tests for mixed-case queries, so full Level 1 coverage is not confirmed even though the implementation relies on `dnspython` DNS name handling.
 - RFC 4592 and RFC 8020 empty non-terminal semantics are not fully implemented or tested. A configured nested name can imply an existing ancestor owner name with no RRsets, and the correct response for that ancestor is NODATA, not NXDOMAIN.
 - RFC 8767 updates DNS TTL handling for TTL-bearing records. Level 1 publishes TTLs for A, NS, SOA, and negative-response SOA authority RRsets, but there is no documented or tested TTL cap/range policy aligned with RFC 8767's updated TTL definition.
@@ -124,7 +123,7 @@ Completeness is based on the declared behaviour in [Level 1 protocol target](#3-
 | [RFC 2181](https://www.rfc-editor.org/rfc/rfc2181) | Clarifications for UDP reply routing, RRset handling, zone authority, AA flag behavior, SOA placement/MNAME, and TC flag behavior | **Fully covered for Level 1** | Clarifications for DNS behavior outside the supported authoritative UDP response set |
 | [RFC 2308](https://www.rfc-editor.org/rfc/rfc2308) | NXDOMAIN and NODATA authority-section SOA requirements and negative-response TTL handling | **Fully covered for Level 1** | Referral response details and server-side negative caching |
 | [RFC 3425](https://www.rfc-editor.org/rfc/rfc3425) | IQUERY obsolescence and NOTIMP handling for IQUERY requests | **Fully covered for Level 1** | Historical inverse-query semantics, which are obsolete and not implemented |
-| [RFC 3597](https://www.rfc-editor.org/rfc/rfc3597) | Unknown DNS RR type handling for ordinary non-meta `TYPE####` queries | **Gap: not fully covered** | Loading, storing, transferring, and serving arbitrary unknown RR data; unknown-RR RDATA preservation; master-file generic RDATA syntax; and DNSSEC canonical-form details |
+| [RFC 3597](https://www.rfc-editor.org/rfc/rfc3597) | Unknown DNS RR type handling for ordinary non-meta `TYPE####` queries | **Fully covered for Level 1** | Loading, storing, transferring, and serving arbitrary unknown RR data; unknown-RR RDATA preservation; master-file generic RDATA syntax; and DNSSEC canonical-form details |
 | [RFC 4343](https://www.rfc-editor.org/rfc/rfc4343) | Case-insensitive DNS name matching for authoritative lookup and zone matching | **Gap: not fully covered** | Internationalized Domain Name handling and output-case preservation choices outside the lookup-result correctness requirement |
 | [RFC 4592](https://www.rfc-editor.org/rfc/rfc4592) | DNS owner-name existence rules, including empty non-terminals | **Gap: not fully covered** | Wildcard synthesis and wildcard-specific RRset behavior |
 | [RFC 8020](https://www.rfc-editor.org/rfc/rfc8020) | NXDOMAIN semantics and the required NODATA response for empty non-terminals | **Gap: not fully covered** | Recursive resolver NXDOMAIN-cut caching behavior and DNSSEC proof reuse |
@@ -235,12 +234,12 @@ RFC 3597 — https://www.rfc-editor.org/rfc/rfc3597: defines how DNS implementat
 
 | Behaviour | Status | Notes |
 |---|---|---|
-| Unknown numeric non-meta RR type query at an existing owner name receives a normal NODATA response | **Implemented but not fully covered** | `DnsServerUdpHandler.handle()` passes parsed QTYPE values to `_update_response()` without rejecting unknown numeric data types. `_update_response()` performs a normal rdataset lookup; when the owner exists and that rdataset is absent, it returns NOERROR with an empty answer section and SOA authority. There is no dedicated automated test using an unknown numeric `TYPE####` query. |
-| Unknown numeric non-meta RR type query at an absent in-zone owner name receives NXDOMAIN | **Implemented but not fully covered** | The same generic lookup path returns NXDOMAIN with SOA authority when the owner name is absent. There is no dedicated automated test proving unknown numeric data types follow this path instead of being dropped, refused, or treated as malformed. |
+| Unknown numeric non-meta RR type query at an existing owner name receives a normal NODATA response | **Implemented** | `tests/indisoluble/a_healthy_dns/test_dns_server_udp_integration.py` sends an unknown numeric `TYPE####` query for an existing owner name and asserts a normal NOERROR/empty-answer response with SOA authority. |
+| Unknown numeric non-meta RR type query at an absent in-zone owner name receives NXDOMAIN | **Implemented** | `tests/indisoluble/a_healthy_dns/test_dns_server_udp_integration.py` sends an unknown numeric `TYPE####` query for an absent in-zone owner name and asserts NXDOMAIN with SOA authority. |
 | Transparent loading, storage, transfer, and serving of unknown RR data | **Out of Level 1 scope** | Level 1 generates A, NS, and SOA records only, plus optional DNSSEC artifacts when signing is enabled. The server does not load arbitrary zone files, accept zone transfers, or publish unknown-RR RDATA. |
 | Generic master-file representation and DNSSEC canonical form for unknown RR data | **Out of Level 1 scope** | These requirements apply to arbitrary unknown RR data handling, which is not a Level 1 product capability. |
-
-Remaining Level 1 gap: add automated unknown numeric non-meta `TYPE####` query tests for existing-owner NODATA and absent-owner NXDOMAIN before marking RFC 3597 fully covered.
+ 
+No remaining Level 1 gaps in RFC 3597 coverage.
 
 ---
 
@@ -342,7 +341,7 @@ RFC 8906 — https://www.rfc-editor.org/rfc/rfc8906: documents Best Current Prac
 |---|---|---|
 | SOA query for a served zone receives an SOA answer | **Implemented** | Positive SOA queries for the hosted apex return NOERROR with the apex SOA in the answer section. |
 | Unsupported known RR type at an existing owner name receives NODATA | **Implemented** | Existing tests query AAAA at an owner name that exists with A data and assert NOERROR with an empty answer and SOA authority. |
-| Unknown numeric RR type receives a normal DNS response instead of being dropped | **Implemented but not fully covered** | The handler treats every parsed non-meta QTYPE through the same rdataset lookup path. If no rdataset exists, it returns NODATA for existing owners or NXDOMAIN for absent owners. There is no dedicated test using an unknown numeric `TYPE####` query. See also RFC 3597 above. |
+| Unknown numeric RR type receives a normal DNS response instead of being dropped | **Implemented** | `tests/indisoluble/a_healthy_dns/test_dns_server_udp_integration.py` sends an unknown numeric `TYPE####` query and asserts the response is NODATA (existing owner) or NXDOMAIN (absent owner), with SOA authority. |
 | DNS queries with request flags set receive a response and unsupported response header bits are not copied | **Implemented but not fully covered** | Parsed queries with `RD` are answered through the ordinary authoritative path with `RA` clear, and response construction delegates most response-flag handling to `dnspython`. The FORMERR recovery path preserves only the request opcode and `RD`. There is no dedicated test proving the Level 1 response flag policy for `RD`, `RA`, `AD`, `CD`, or still-reserved request flags. |
 | Unknown or unimplemented opcodes return NOTIMP | **Implemented but not fully covered** | Generic non-QUERY opcode handling returns NOTIMP without AA. Tests cover IQUERY, STATUS, NOTIFY, and UPDATE; they do not cover an unassigned opcode value. |
 | TCP and EDNS response robustness | **Out of Level 1 scope** | Level 1 is UDP-only and deliberately does not implement EDNS(0). |
@@ -391,7 +390,7 @@ No remaining Level 1 gaps in RFC 2308 coverage.
 | Out-of-zone REFUSED | `tests/indisoluble/a_healthy_dns/test_dns_server_udp_integration.py` (component integration) |
 | Non-IN-class REFUSED | `tests/indisoluble/a_healthy_dns/test_dns_server_udp_integration.py` (component integration) |
 | Unsupported known RR type NODATA at existing owner names | `tests/indisoluble/a_healthy_dns/test_dns_server_udp_integration.py` (component integration) |
-| Unknown numeric non-meta RR type response robustness | **Missing** |
+| Unknown numeric non-meta RR type response robustness | `tests/indisoluble/a_healthy_dns/test_dns_server_udp_integration.py` (component integration) |
 | SOA serial generation uses an unsigned 32-bit value and avoids duplicate consecutive values | `tests/indisoluble/a_healthy_dns/records/test_soa_record.py` (unit) + `tests/indisoluble/a_healthy_dns/tools/test_uint32_current_time.py` (unit) |
 | NOTIMP for unsupported opcodes | `tests/indisoluble/a_healthy_dns/test_dns_server_udp_integration.py` (component integration) + `tests/indisoluble/a_healthy_dns/test_dns_server_udp_handler.py` (unit) |
 | NOTIMP for obsolete IQUERY opcode | `tests/indisoluble/a_healthy_dns/test_dns_server_udp_handler.py` (unit) |
@@ -432,7 +431,6 @@ When DNSSEC is enabled, `DnsServerZoneUpdater._sign_zone()` delegates to `dns.dn
 | Gap | Needed before claiming full coverage |
 |---|---|
 | RFC 1123 response wire encoding coverage | Add automated wire-byte tests proving response name compression is applied when repeated names are present and unsupported DNS response header bits remain clear. |
-| RFC 3597 unknown RR type query coverage | Add dedicated automated tests proving unknown numeric non-meta `TYPE####` queries receive normal NODATA or NXDOMAIN responses instead of being dropped, refused, or treated as malformed. |
 | RFC 4343 case-insensitive DNS name lookup | Add automated mixed-case query tests for primary-zone answers, alias-zone answers, NODATA, NXDOMAIN, and out-of-zone rejection. |
 | RFC 4592 / RFC 8020 empty non-terminal semantics | Implement and test NODATA responses for empty non-terminal ancestors of nested configured names in primary and alias zones. |
 | RFC 8767 TTL definition coverage | Define and test the TTL cap/range policy for generated A, NS, SOA, and negative-response SOA authority RRsets. |

@@ -41,6 +41,10 @@ _ABSENT_FQDN = f"{_ABSENT_SUBDOMAIN}.{_ZONE}."
 _ALIAS_ABSENT_FQDN = f"{_ABSENT_SUBDOMAIN}.{_ALIAS_ZONE}."
 _OUT_OF_ZONE_FQDN = "www.unrelated.test."
 
+# RFC 3597: use a private-use RR type code to ensure dnspython parses it as an
+# unknown numeric data type and the server treats it as a non-meta lookup type.
+_UNKNOWN_NON_META_RDTYPE = dns.rdatatype.from_text("TYPE65280")
+
 # A wire payload that is ≥ 12 bytes (DNS header is readable) but not a valid
 # DNS message.  The handler must recover the transaction ID and return FORMERR
 # (RFC 1035 §4.1.1).  Exactly 12 bytes: valid DNS header with QDCOUNT=1 but
@@ -281,6 +285,18 @@ class TestNegativeResponses:
                 _ZONE_FQDN,
             ),
             (
+                _SUBDOMAIN_FQDN,
+                _UNKNOWN_NON_META_RDTYPE,
+                dns.rcode.NOERROR,
+                _ZONE_FQDN,
+            ),
+            (
+                _ABSENT_FQDN,
+                _UNKNOWN_NON_META_RDTYPE,
+                dns.rcode.NXDOMAIN,
+                _ZONE_FQDN,
+            ),
+            (
                 _ALIAS_ABSENT_FQDN,
                 dns.rdatatype.A,
                 dns.rcode.NXDOMAIN,
@@ -292,12 +308,28 @@ class TestNegativeResponses:
                 dns.rcode.NOERROR,
                 _ALIAS_ZONE_FQDN,
             ),
+            (
+                _ALIAS_SUBDOMAIN_FQDN,
+                _UNKNOWN_NON_META_RDTYPE,
+                dns.rcode.NOERROR,
+                _ALIAS_ZONE_FQDN,
+            ),
+            (
+                _ALIAS_ABSENT_FQDN,
+                _UNKNOWN_NON_META_RDTYPE,
+                dns.rcode.NXDOMAIN,
+                _ALIAS_ZONE_FQDN,
+            ),
         ],
         ids=[
             "nxdomain-absent-owner",
             "nodata-absent-type",
+            "nodata-unknown-type",
+            "nxdomain-absent-owner-unknown-type",
             "alias-nxdomain-absent-owner",
             "alias-nodata-absent-type",
+            "alias-nodata-unknown-type",
+            "alias-nxdomain-absent-owner-unknown-type",
         ],
     )
     def test_negative_response_has_soa_authority(
