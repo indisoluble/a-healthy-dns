@@ -16,6 +16,22 @@ class RRSigLifetime(NamedTuple):
     expiration: int
 
 
+RFC8767_MAX_TTL = (1 << 31) - 1
+
+
+def clamp_ttl(ttl: int) -> int:
+    """Clamp DNS TTL values per RFC 8767's updated TTL definition.
+
+    RFC 8767 updates the DNS TTL field definition to treat TTL values as
+    unsigned and recommends a maximum caching TTL of 2^31-1 seconds.
+    """
+    if ttl <= 0:
+        return 0
+    if ttl > RFC8767_MAX_TTL:
+        return RFC8767_MAX_TTL
+    return ttl
+
+
 def calculate_a_ttl(max_interval: int) -> int:
     """Calculate A record TTL as 2x test interval to ensure clients get
     reasonably fresh data while reducing DNS server pressure."""

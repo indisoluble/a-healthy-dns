@@ -14,14 +14,14 @@ import dns.rdatatype
 
 from typing import FrozenSet
 
-from indisoluble.a_healthy_dns.records.time import calculate_ns_ttl
+from indisoluble.a_healthy_dns.records.time import calculate_ns_ttl, clamp_ttl
 
 
 def make_ns_record(
     max_interval: int, name_servers: FrozenSet[str]
 ) -> dns.rdataset.Rdataset:
     """Create DNS NS record with calculated TTL for given name servers."""
-    ttl = calculate_ns_ttl(max_interval)
+    ttl = clamp_ttl(calculate_ns_ttl(max_interval))
     rdataset = dns.rdataset.from_text(
         dns.rdataclass.IN, dns.rdatatype.NS, ttl, *name_servers
     )

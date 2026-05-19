@@ -7,6 +7,7 @@ import dns.rdatatype
 from indisoluble.a_healthy_dns.records.a_healthy_ip import AHealthyIp
 from indisoluble.a_healthy_dns.records.a_healthy_record import AHealthyRecord
 from indisoluble.a_healthy_dns.records.a_record import make_a_record
+from indisoluble.a_healthy_dns.records.time import RFC8767_MAX_TTL
 
 
 def test_make_a_record_with_healthy_ips():
@@ -65,3 +66,17 @@ def test_make_a_record_with_no_healthy_ips():
     result = make_a_record(max_interval, healthy_record)
 
     assert result is None
+
+
+def test_make_a_record_caps_ttl_to_rfc8767_max():
+    max_interval = 1_500_000_000  # 2x interval exceeds RFC8767_MAX_TTL
+    subdomain = dns.name.from_text("test.example.com")
+    healthy_record = AHealthyRecord(
+        subdomain=subdomain,
+        healthy_ips=[AHealthyIp("192.168.1.1", 80, True)],
+    )
+
+    result = make_a_record(max_interval, healthy_record)
+
+    assert result is not None
+    assert result.ttl == RFC8767_MAX_TTL

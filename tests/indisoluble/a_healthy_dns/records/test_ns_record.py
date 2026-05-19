@@ -4,6 +4,7 @@ import dns.rdataclass
 import dns.rdatatype
 
 from indisoluble.a_healthy_dns.records.ns_record import make_ns_record
+from indisoluble.a_healthy_dns.records.time import RFC8767_MAX_TTL
 
 
 def test_make_ns_record_with_valid_name_servers():
@@ -35,3 +36,13 @@ def test_make_ns_record_with_single_name_server():
     assert result.rdclass == dns.rdataclass.IN
 
     assert "ns1.example.com" in str(result)
+
+
+def test_make_ns_record_caps_ttl_to_rfc8767_max():
+    max_interval = 100_000_000  # 2x interval * 30 exceeds both u32 and RFC8767_MAX_TTL
+    name_servers = frozenset(["ns1.example.com"])
+
+    result = make_ns_record(max_interval, name_servers)
+
+    assert result is not None
+    assert result.ttl == RFC8767_MAX_TTL
