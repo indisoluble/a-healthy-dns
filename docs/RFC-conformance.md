@@ -24,7 +24,7 @@ Do not use this document as an unqualified claim that A Healthy DNS implements e
 
 ## 2. Current conformance claim
 
-Current claim: **not every necessary Level 1 RFC is fully covered under this document's definition**. The RFC applicability table below contains the complete RFC set needed to judge the declared Level 1 target. The core Level 1 behaviours previously documented here are implemented and covered by automated tests, and the remaining Level 1 gaps are tracked for RFC 1123, RFC 4592, RFC 8020, RFC 8767, and RFC 8906.
+Current claim: **not every necessary Level 1 RFC is fully covered under this document's definition**. The RFC applicability table below contains the complete RFC set needed to judge the declared Level 1 target. The core Level 1 behaviours previously documented here are implemented and covered by automated tests, and the remaining Level 1 gaps are tracked for RFC 4592, RFC 8020, RFC 8767, and RFC 8906.
 
 That claim is scoped. For broad DNS RFCs such as RFC 1034 and RFC 1035, "covered" means the implementation satisfies the RFC requirements that apply to the declared Level 1 authoritative UDP target. It does not mean full-document compliance for unrelated resolver behavior, zone transfers, TCP transport, unsupported record types, EDNS(0), or DNSSEC proof semantics.
 
@@ -38,8 +38,6 @@ When this document says an RFC is fully covered for Level 1, it means:
 - and any broader RFC material outside the target is listed as out of scope rather than treated as a hidden gap.
 
 When an RFC is necessary for the product but not fully covered under that definition, this document must say so explicitly. Current known gaps:
-
-- RFC 1123 requires DNS name servers to service UDP queries and use DNS name compression in responses. UDP service is covered by integration tests, and response serialization is delegated to `dnspython`, but there is no dedicated automated test proving response name compression or unsupported response header-bit handling.
 - RFC 4592 and RFC 8020 empty non-terminal semantics are not fully implemented or tested. A configured nested name can imply an existing ancestor owner name with no RRsets, and the correct response for that ancestor is NODATA, not NXDOMAIN.
 - RFC 8767 updates DNS TTL handling for TTL-bearing records. Level 1 publishes TTLs for A, NS, SOA, and negative-response SOA authority RRsets, but there is no documented or tested TTL cap/range policy aligned with RFC 8767's updated TTL definition.
 - RFC 8906 says authoritative servers should respond correctly to basic DNS robustness probes, including unknown or unsupported RR types, DNS request flags, and unknown opcodes. The generic implementation paths exist, but dedicated robustness tests for unknown numeric non-meta RR types, request flags, and an unassigned opcode are missing.
@@ -117,7 +115,7 @@ Completeness is based on the declared behaviour in [Level 1 protocol target](#3-
 |---|---|---|---|
 | [RFC 1034](https://www.rfc-editor.org/rfc/rfc1034) | Authoritative server model, zone concept, NXDOMAIN, and NOERROR/NODATA semantics | **Fully covered for Level 1** | Recursive resolution, resolver algorithms, referrals, and delegation behavior outside this server's scope |
 | [RFC 1035](https://www.rfc-editor.org/rfc/rfc1035) | DNS message wire format, header flags, QDCOUNT, opcode field, response codes, UDP payload limit, TC flag, and response serialization | **Fully covered for Level 1** | TCP transport, zone transfers, EDNS(0) payload negotiation, unsupported classes, and record families beyond the declared response scope |
-| [RFC 1123](https://www.rfc-editor.org/rfc/rfc1123) | DNS host requirements for UDP query service, response compression, and DNS response header correctness | **Gap: not fully covered** | TCP service, resolver behavior, arbitrary zone-file loading, broadcast/multicast DNS queries, and broad Internet host requirements |
+| [RFC 1123](https://www.rfc-editor.org/rfc/rfc1123) | DNS host requirements for UDP query service, response compression, and DNS response header correctness | **Fully covered for Level 1** | TCP service, resolver behavior, arbitrary zone-file loading, broadcast/multicast DNS queries, and broad Internet host requirements |
 | [RFC 1982](https://www.rfc-editor.org/rfc/rfc1982) | DNS SOA serial number space for the SOA responses this server publishes | **Fully covered for Level 1 publication semantics** | Secondary-server comparison arithmetic, serial-increment policy for zone transfers, and replication behavior |
 | [RFC 2181](https://www.rfc-editor.org/rfc/rfc2181) | Clarifications for UDP reply routing, RRset handling, zone authority, AA flag behavior, SOA placement/MNAME, and TC flag behavior | **Fully covered for Level 1** | Clarifications for DNS behavior outside the supported authoritative UDP response set |
 | [RFC 2308](https://www.rfc-editor.org/rfc/rfc2308) | NXDOMAIN and NODATA authority-section SOA requirements and negative-response TTL handling | **Fully covered for Level 1** | Referral response details and server-side negative caching |
@@ -203,14 +201,14 @@ RFC 1123 — https://www.rfc-editor.org/rfc/rfc1123: supplements the DNS base sp
 | Behaviour | Status | Notes |
 |---|---|---|
 | DNS server services UDP queries | **Implemented** | The runtime uses `socketserver.UDPServer`, and component integration tests exercise positive, negative, malformed, and rejected DNS queries over real UDP sockets. |
-| DNS responses use standard name compression | **Implemented but not fully covered** | Responses are serialized through `dns.message.Message.to_wire()` in `_response_to_udp_wire()`, which delegates DNS wire encoding to `dnspython`. There is no dedicated automated test inspecting response wire bytes to prove compression is applied when repeated names are present. |
-| Unused or unsupported DNS response header bits remain clear | **Implemented but not fully covered** | Response construction and serialization are delegated to `dnspython`, and tests assert expected high-level flags (`QR`, `AA`, `RA`, `TC`) on parsed responses. There is no dedicated automated test asserting the raw DNS response header bits that Level 1 does not use are clear for all response classes. |
+| DNS responses use standard name compression | **Implemented** | `tests/indisoluble/a_healthy_dns/test_dns_server_udp_integration.py` inspects response wire bytes and confirms DNS name compression pointers are used when repeated names are present. |
+| Unused or unsupported DNS response header bits remain clear | **Implemented** | `tests/indisoluble/a_healthy_dns/test_dns_server_udp_integration.py` inspects response wire header flags and asserts Level 1-unused bits remain clear (`RA`, `AD`, `CD`, and reserved bits). |
 | TCP query service and TCP retry after truncation | **Out of Level 1 scope** | RFC 1123 recommends TCP service for DNS servers, and later DNS transport RFCs strengthen TCP requirements. Level 1 deliberately remains UDP-only and signals oversized UDP answers with `TC`. |
 | Zero-TTL record handling | **Out of Level 1 scope** | Level 1 generated records use TTLs derived from positive health-check timing configuration; the server does not load arbitrary zone data containing zero-TTL records. |
 | DNS software extensibility and arbitrary RR type loading | **Out of Level 1 scope** | Level 1 is restricted to generated A, SOA, and NS responses. The server does not implement arbitrary master-file loading or transparent support for every RR type. |
 | Resolver behavior, root hints, and broadcast/multicast DNS queries | **Out of Level 1 scope** | The server is authoritative-only, does not implement recursive resolution or cache management, and does not issue resolver queries. |
 
-Remaining Level 1 gap: add automated wire-level coverage for response name compression and unsupported response header-bit handling before marking RFC 1123 fully covered.
+No remaining Level 1 gaps in RFC 1123 coverage.
 
 ---
 
@@ -405,7 +403,7 @@ No remaining Level 1 gaps in RFC 2308 coverage.
 | Oversized UDP responses are truncated to the classic 512-byte limit and set TC | `tests/indisoluble/a_healthy_dns/test_dns_server_udp_handler.py` (unit) |
 | Parsed response header fields (QR, ID, AA, RA, TC), including non-AA rejected responses | `tests/indisoluble/a_healthy_dns/test_dns_server_udp_integration.py` (component integration) |
 | DNS request-flag robustness for `AD`, `CD`, and still-reserved flags | **Missing** |
-| Raw response name compression and unsupported response header bits | **Missing** |
+| Raw response name compression and unsupported response header bits | `tests/indisoluble/a_healthy_dns/test_dns_server_udp_integration.py` (component integration; wire-byte assertions) |
 | Health-check-driven A-record addition/removal | `.github/workflows/test-integration.yml` (Docker end-to-end) |
 | Container startup, Docker networking, alias zone routing | `.github/workflows/test-integration.yml` (Docker end-to-end) |
 
@@ -429,7 +427,6 @@ When DNSSEC is enabled, `DnsServerZoneUpdater._sign_zone()` delegates to `dns.dn
 
 | Gap | Needed before claiming full coverage |
 |---|---|
-| RFC 1123 response wire encoding coverage | Add automated wire-byte tests proving response name compression is applied when repeated names are present and unsupported DNS response header bits remain clear. |
 | RFC 4592 / RFC 8020 empty non-terminal semantics | Implement and test NODATA responses for empty non-terminal ancestors of nested configured names in primary and alias zones. |
 | RFC 8767 TTL definition coverage | Define and test the TTL cap/range policy for generated A, NS, SOA, and negative-response SOA authority RRsets. |
 | RFC 8906 basic DNS response robustness | Add automated tests proving unknown numeric non-meta RR types receive normal DNS responses, request flags such as `RD`, `AD`, `CD`, and still-reserved bits follow the Level 1 response flag policy, and an unassigned opcode returns NOTIMP without AA. |

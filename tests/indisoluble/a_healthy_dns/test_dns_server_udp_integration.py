@@ -102,6 +102,23 @@ def _udp_raw_query(
         sock.close()
 
 
+def _udp_query_wire(
+    host: str,
+    port: int,
+    query: dns.message.Message,
+    timeout: float = 2.0,
+) -> bytes:
+    """Send *query* over UDP and return raw response wire bytes."""
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    sock.settimeout(timeout)
+    try:
+        sock.sendto(query.to_wire(), (host, port))
+        data, _ = sock.recvfrom(4096)
+        return data
+    finally:
+        sock.close()
+
+
 def _make_two_question_wire(name1: str, name2: str) -> bytes:
     """Build a valid DNS wire message with QDCOUNT=2.
 
@@ -116,6 +133,81 @@ def _make_two_question_wire(name1: str, name2: str) -> bytes:
     wire[4:6] = (2).to_bytes(2, byteorder="big")
     wire.extend(q2.to_wire()[12:])
     return bytes(wire)
+
+
+def _make_status_query() -> dns.message.Message:
+    query = dns.message.make_query(_SUBDOMAIN_FQDN, dns.rdatatype.A)
+    query.set_opcode(dns.opcode.STATUS)
+    return query
+
+
+def _scan_wire_for_compressed_names(wire: bytes) -> bool:
+    """Return True when *wire* uses DNS name compression pointers.
+
+    This is a minimal wire parser for RFC 1035 name encoding, sufficient for
+    asserting that at least one parsed name uses the compression pointer form.
+    """
+    flags = int.from_bytes(wire[2:4], "big")
+    qdcount = int.from_bytes(wire[4:6], "big")
+    ancount = int.from_bytes(wire[6:8], "big")
+    nscount = int.from_bytes(wire[8:10], "big")
+    arcount = int.from_bytes(wire[10:12], "big")
+
+    # If this isn't a DNS message, bail out quickly.
+    if len(wire) < 12 or not (flags & dns.flags.QR):
+        return False
+
+    def parse_name(offset: int) -> tuple[int, bool]:
+        used_pointer = False
+        while True:
+            length = wire[offset]
+            if length == 0:
+                return offset + 1, used_pointer
+            if length & 0xC0 == 0xC0:
+                # Compression pointer, ends the current name.
+                return offset + 2, True
+            offset += 1 + length
+
+    used_pointer_anywhere = False
+    offset = 12
+
+    for _ in range(qdcount):
+        offset, used_pointer = parse_name(offset)
+        used_pointer_anywhere |= used_pointer
+        offset += 4  # QTYPE + QCLASS
+
+    def parse_rr(offset: int) -> int:
+        nonlocal used_pointer_anywhere
+        offset, used_pointer = parse_name(offset)
+        used_pointer_anywhere |= used_pointer
+
+        rrtype = int.from_bytes(wire[offset : offset + 2], "big")
+        offset += 2  # TYPE
+        offset += 2  # CLASS
+        offset += 4  # TTL
+        rdlength = int.from_bytes(wire[offset : offset + 2], "big")
+        offset += 2  # RDLENGTH
+
+        rdata_start = offset
+        if rrtype == dns.rdatatype.SOA:
+            offset, used_pointer = parse_name(offset)  # MNAME
+            used_pointer_anywhere |= used_pointer
+            offset, used_pointer = parse_name(offset)  # RNAME
+            used_pointer_anywhere |= used_pointer
+            offset += 20  # SERIAL, REFRESH, RETRY, EXPIRE, MINIMUM
+        else:
+            offset += rdlength
+
+        # Defensive: ensure we always advance at least the declared rdata length.
+        if offset < rdata_start + rdlength:
+            offset = rdata_start + rdlength
+
+        return offset
+
+    for _ in range(ancount + nscount + arcount):
+        offset = parse_rr(offset)
+
+    return used_pointer_anywhere
 
 
 def _assert_response_flags(resp: dns.message.Message, *, aa: bool = True):
@@ -522,3 +614,42 @@ class TestMalformedWireInput:
 
         _assert_section_counts(resp)
         _assert_response_flags(resp, aa=False)
+
+
+# ---------------------------------------------------------------------------
+# Response wire encoding — RFC 1123
+# ---------------------------------------------------------------------------
+
+
+class TestResponseWireEncoding:
+    def test_response_wire_uses_name_compression(self, live_server):
+        host, port = live_server
+        query = dns.message.make_query(_ZONE_FQDN, dns.rdatatype.SOA)
+        wire = _udp_query_wire(host, port, query)
+
+        resp = dns.message.from_wire(wire)
+        assert resp.rcode() == dns.rcode.NOERROR
+        assert resp.id == query.id
+
+        assert _scan_wire_for_compressed_names(wire)
+
+    @pytest.mark.parametrize(
+        "query_factory",
+        [
+            lambda: dns.message.make_query(_ZONE_FQDN, dns.rdatatype.SOA),
+            _make_status_query,
+        ],
+        ids=["noerror-soa", "notimp-status"],
+    )
+    def test_response_wire_header_bits_are_clear(self, live_server, query_factory):
+        host, port = live_server
+        query = query_factory()
+        wire = _udp_query_wire(host, port, query)
+
+        flags = int.from_bytes(wire[2:4], "big")
+        assert flags & dns.flags.QR
+        assert (flags & dns.flags.RD) == (query.flags & dns.flags.RD)
+        assert not (flags & dns.flags.RA)
+        assert not (flags & dns.flags.AD)
+        assert not (flags & dns.flags.CD)
+        assert not (flags & 0x0040)  # Reserved Z bit (RFC 1035 §4.1.1)
