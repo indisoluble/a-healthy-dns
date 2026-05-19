@@ -322,7 +322,7 @@ RFC 8767 — https://www.rfc-editor.org/rfc/rfc8767: defines recursive resolver 
 
 | Behaviour | Status | Notes |
 |---|---|---|
-| A, NS, SOA, and negative-response SOA authority RRsets carry TTL values | **Implemented** | All emitted TTLs are clamped to the RFC 8767 updated TTL definition range: `0 <= TTL <= 2^31-1`. Record factories clamp generated TTLs in `records/time.py` and response construction clamps RRset TTLs in the UDP handler. |
+| A, NS, SOA, and negative-response SOA authority RRsets carry TTL values | **Implemented** | All generated TTLs are clamped to the RFC 8767 updated TTL definition range: `0 <= TTL <= 2^31-1`. Record factories clamp generated TTLs in `records/time.py`, and negative-response SOA authority TTL is computed as `min(SOA TTL, SOA.MINIMUM)` from those clamped values. |
 | Recursive resolver serve-stale behavior and stale-cache timers | **Out of Level 1 scope** | The server is authoritative-only and does not cache resolver data or serve stale resolver answers. |
 
 No remaining Level 1 gaps in RFC 8767 TTL definition coverage.
@@ -396,7 +396,7 @@ No remaining Level 1 gaps in RFC 2308 coverage.
 | Drop and log inbound DNS response packets (`QR=1`) | `tests/indisoluble/a_healthy_dns/test_dns_server_udp_handler.py` (unit) |
 | Drop without response for malformed wire shorter than 12 bytes | `tests/indisoluble/a_healthy_dns/test_dns_server_udp_handler.py` (unit — no transaction ID to reply to) |
 | Negative-response SOA TTL is trimmed for RFC 2308 negative caching | `tests/indisoluble/a_healthy_dns/test_dns_server_udp_handler.py` (unit) + `tests/indisoluble/a_healthy_dns/test_dns_server_udp_integration.py` (component integration) |
-| RFC 8767 TTL cap/range policy for generated TTL-bearing responses | `tests/indisoluble/a_healthy_dns/records/test_a_record.py` (unit) + `tests/indisoluble/a_healthy_dns/records/test_ns_record.py` (unit) + `tests/indisoluble/a_healthy_dns/test_dns_server_udp_handler.py` (unit) |
+| RFC 8767 TTL cap/range policy for generated TTL-bearing responses | `tests/indisoluble/a_healthy_dns/records/test_a_record.py` (unit) + `tests/indisoluble/a_healthy_dns/records/test_ns_record.py` (unit) + `tests/indisoluble/a_healthy_dns/records/test_soa_record.py` (unit) |
 | UDP response send path uses the query source address and port | `tests/indisoluble/a_healthy_dns/test_dns_server_udp_integration.py` (component integration over real UDP sockets) + `tests/indisoluble/a_healthy_dns/test_dns_server_udp_handler.py` (unit handler send path) |
 | RRset construction from zone rdatasets and oversized RRset truncation | `tests/indisoluble/a_healthy_dns/test_dns_server_udp_handler.py` (unit) + `tests/indisoluble/a_healthy_dns/records/test_a_record.py` (unit) |
 | Oversized UDP responses are truncated to the classic 512-byte limit and set TC | `tests/indisoluble/a_healthy_dns/test_dns_server_udp_handler.py` (unit) |

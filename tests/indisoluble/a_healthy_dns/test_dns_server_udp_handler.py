@@ -30,7 +30,6 @@ from indisoluble.a_healthy_dns.dns_server_config_factory import DnsServerConfig
 from indisoluble.a_healthy_dns.dns_server_zone_updater import DnsServerZoneUpdater
 from indisoluble.a_healthy_dns.records.a_healthy_ip import AHealthyIp
 from indisoluble.a_healthy_dns.records.a_healthy_record import AHealthyRecord
-from indisoluble.a_healthy_dns.records.time import RFC8767_MAX_TTL
 from indisoluble.a_healthy_dns.records.zone_origins import ZoneOrigins
 
 # Captured before any test patches dns.message.from_wire so we can still parse
@@ -211,40 +210,6 @@ def test_update_response_with_relative_name_found(
     assert f"id={_TEST_QUERY_ID}" in caplog.text
     assert "qname=test" in caplog.text
     assert "qtype=A" in caplog.text
-
-
-def test_update_response_caps_answer_ttl_to_rfc8767_max(
-    mock_zone,
-    mock_reader,
-    mock_rdata,
-    mock_rdataset,
-    mock_dns_response,
-    mock_zone_origins,
-):
-    query_name = dns.name.from_text("test", origin=None)
-    query_type = dns.rdatatype.A
-
-    mock_rdataset.ttl = RFC8767_MAX_TTL + 1
-    mock_rdataset.__iter__.return_value = [mock_rdata]
-
-    mock_node = MagicMock()
-    mock_node.get_rdataset.return_value = mock_rdataset
-    mock_reader.get_node.return_value = mock_node
-    mock_zone.reader.return_value.__enter__.return_value = mock_reader
-
-    _update_response(
-        mock_dns_response,
-        query_name,
-        query_type,
-        mock_zone,
-        mock_zone_origins,
-        _TEST_QUERY_ID,
-        _TEST_SOURCE_HOST,
-        _TEST_SOURCE_PORT,
-    )
-
-    assert len(mock_dns_response.answer) == 1
-    assert mock_dns_response.answer[0].ttl == RFC8767_MAX_TTL
 
 
 def test_update_response_with_absolute_name_found(
@@ -507,40 +472,6 @@ def test_update_response_record_type_not_found(
     )
     assert f"source={_TEST_SOURCE_HOST}:{_TEST_SOURCE_PORT}" in caplog.text
     assert f"id={_TEST_QUERY_ID}" in caplog.text
-
-
-def test_update_response_caps_negative_response_soa_ttl_to_rfc8767_max(
-    mock_zone,
-    mock_reader,
-    mock_dns_response,
-    mock_zone_origins,
-    mock_soa_rdata,
-    mock_soa_rdataset,
-):
-    query_name = dns.name.from_text("nonexistent", origin=mock_zone_origins.primary)
-    query_type = dns.rdatatype.A
-
-    mock_reader.get_node.return_value = None
-    mock_zone.reader.return_value.__enter__.return_value = mock_reader
-
-    mock_soa_rdataset.ttl = RFC8767_MAX_TTL + 10
-    mock_soa_rdata.minimum = RFC8767_MAX_TTL + 5
-    mock_reader.get.return_value = mock_soa_rdataset
-
-    _update_response(
-        mock_dns_response,
-        query_name,
-        query_type,
-        mock_zone,
-        mock_zone_origins,
-        _TEST_QUERY_ID,
-        _TEST_SOURCE_HOST,
-        _TEST_SOURCE_PORT,
-    )
-
-    assert mock_dns_response.rcode() == dns.rcode.NXDOMAIN
-    assert len(mock_dns_response.authority) == 1
-    assert mock_dns_response.authority[0].ttl == RFC8767_MAX_TTL
 
 
 @patch("indisoluble.a_healthy_dns.dns_server_udp_handler._update_response")

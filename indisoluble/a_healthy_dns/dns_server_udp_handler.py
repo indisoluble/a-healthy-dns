@@ -24,7 +24,6 @@ import dns.zone
 from typing import List
 
 from indisoluble.a_healthy_dns.records.zone_origins import ZoneOrigins
-from indisoluble.a_healthy_dns.records.time import clamp_ttl
 
 
 _DNS_HEADER_LENGTH = 12
@@ -63,7 +62,7 @@ def _build_authority_with_apex_soa(
         return []
 
     soa_rrset = dns.rrset.RRset(apex_name, soa_rdataset.rdclass, soa_rdataset.rdtype)
-    soa_rrset.ttl = clamp_ttl(min(soa_rdataset.ttl, soa_rdata.minimum))
+    soa_rrset.ttl = min(soa_rdataset.ttl, soa_rdata.minimum)
     soa_rrset.add(soa_rdata)
 
     return [soa_rrset]
@@ -73,7 +72,7 @@ def _build_answer(
     query_name: dns.name.Name, rdataset: dns.rdataset.Rdataset
 ) -> List[dns.rrset.RRset]:
     rrset = dns.rrset.RRset(query_name, rdataset.rdclass, rdataset.rdtype)
-    rrset.ttl = clamp_ttl(rdataset.ttl)
+    rrset.ttl = rdataset.ttl
     for rdata in rdataset:
         rrset.add(rdata)
 
