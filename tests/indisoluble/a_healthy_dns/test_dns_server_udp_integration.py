@@ -622,6 +622,18 @@ class TestRejectedQueries:
         _assert_section_counts(resp)
         _assert_response_flags(resp, aa=False)
 
+    def test_unassigned_opcode_returns_notimp(self, live_server):
+        host, port = live_server
+        query = dns.message.make_query(_SUBDOMAIN_FQDN, dns.rdatatype.A)
+        query.set_opcode(15)
+        resp = _udp_query(host, port, query)
+
+        assert resp.rcode() == dns.rcode.NOTIMP
+        assert resp.id == query.id
+
+        _assert_section_counts(resp)
+        _assert_response_flags(resp, aa=False)
+
 
 # ---------------------------------------------------------------------------
 # Malformed wire input — RFC 1035 §4.1.1

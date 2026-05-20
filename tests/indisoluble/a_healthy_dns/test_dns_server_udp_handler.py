@@ -860,6 +860,7 @@ def test_handle_malformed_dns_response_packet_logs_warning_and_drops(
         dns.opcode.IQUERY,
         dns.opcode.STATUS,
         dns.opcode.NOTIFY,
+        15,  # Unassigned opcode value; should also receive NOTIMP without AA.
     ],
 )
 @patch("indisoluble.a_healthy_dns.dns_server_udp_handler._update_response")
