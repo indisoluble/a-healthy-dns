@@ -4,7 +4,7 @@ import dns.rdataclass
 import dns.rdatatype
 
 from indisoluble.a_healthy_dns.records.ns_record import make_ns_record
-RFC8767_MAX_TTL = (1 << 31) - 1
+from indisoluble.a_healthy_dns.records.time import _RFC8767_MAX_TTL as RFC8767_MAX_TTL
 
 
 def test_make_ns_record_with_valid_name_servers():
