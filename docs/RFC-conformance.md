@@ -322,7 +322,7 @@ RFC 8767 — https://www.rfc-editor.org/rfc/rfc8767: defines recursive resolver 
 
 | Behaviour | Status | Notes |
 |---|---|---|
-| A, NS, SOA, and negative-response SOA authority RRsets carry TTL values | **Implemented** | All generated TTLs are clamped to the RFC 8767 updated TTL definition range: `0 <= TTL <= 2^31-1`. Record factories clamp generated TTLs in `records/time.py`, and negative-response SOA authority TTL is computed as `min(SOA TTL, SOA.MINIMUM)` from those clamped values. |
+| A, NS, SOA, and negative-response SOA authority RRsets carry TTL values | **Implemented** | All generated TTLs are clamped to the RFC 8767 updated TTL definition range: `0 <= TTL <= 2^31-1`. TTL calculator helpers in `records/time.py` are decorated to clamp their outputs, and negative-response SOA authority TTL is computed as `min(SOA TTL, SOA.MINIMUM)` from those clamped values. |
 | Recursive resolver serve-stale behavior and stale-cache timers | **Out of Level 1 scope** | The server is authoritative-only and does not cache resolver data or serve stale resolver answers. |
 
 No remaining Level 1 gaps in RFC 8767 TTL definition coverage.

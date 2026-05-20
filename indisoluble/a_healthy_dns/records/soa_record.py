@@ -22,7 +22,6 @@ from indisoluble.a_healthy_dns.records.time import (
     calculate_soa_refresh,
     calculate_soa_retry,
     calculate_soa_ttl,
-    clamp_ttl,
 )
 from indisoluble.a_healthy_dns.tools.uint32_current_time import uint32_current_time
 
@@ -48,13 +47,13 @@ def iter_soa_record(
     max_interval: int, origin_name: dns.name.Name, primary_ns: str
 ) -> Iterator[dns.rdataset.Rdataset]:
     """Generate SOA records with dynamic serial numbers and timing parameters."""
-    ttl = clamp_ttl(calculate_soa_ttl(max_interval))
+    ttl = calculate_soa_ttl(max_interval)
     responsible = f"hostmaster.{origin_name}"
     serial = _iter_soa_serial()
     refresh = str(calculate_soa_refresh(max_interval))
     retry = str(calculate_soa_retry(max_interval))
     expire = str(calculate_soa_expire(max_interval))
-    min_ttl = str(clamp_ttl(calculate_soa_min_ttl(max_interval)))
+    min_ttl = str(calculate_soa_min_ttl(max_interval))
 
     while True:
         admin_info = " ".join(

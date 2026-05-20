@@ -16,7 +16,6 @@ from typing import Iterator, List, NamedTuple, Tuple
 from indisoluble.a_healthy_dns.records.time import (
     calculate_dnskey_ttl,
     calculate_rrsig_lifetime,
-    clamp_ttl,
 )
 
 
@@ -48,7 +47,7 @@ def iter_rrsig_key(
 ) -> Iterator[ExtendedRRSigKey]:
     """Generate DNSSEC signature keys with automatic timing management."""
     dnskey = (ext_private_key.private_key, ext_private_key.dnskey)
-    ttl = clamp_ttl(calculate_dnskey_ttl(max_interval))
+    ttl = calculate_dnskey_ttl(max_interval)
     lifetime = calculate_rrsig_lifetime(max_interval)
 
     while True:
