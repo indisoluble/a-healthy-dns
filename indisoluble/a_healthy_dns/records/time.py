@@ -22,25 +22,17 @@ class RRSigLifetime(NamedTuple):
 RFC8767_MAX_TTL = (1 << 31) - 1
 
 
-def clamp_ttl(ttl: int) -> int:
-    """Clamp DNS TTL values per RFC 8767's updated TTL definition.
-
-    RFC 8767 updates the DNS TTL field definition to treat TTL values as
-    unsigned and recommends a maximum caching TTL of 2^31-1 seconds.
-    """
-    if ttl <= 0:
-        return 0
-    if ttl > RFC8767_MAX_TTL:
-        return RFC8767_MAX_TTL
-    return ttl
-
-
 def ttl_clamped(ttl_calculator: Callable[..., int]) -> Callable[..., int]:
     """Decorate a TTL calculator so its output complies with RFC 8767."""
 
     @functools.wraps(ttl_calculator)
     def wrapper(*args, **kwargs) -> int:
-        return clamp_ttl(ttl_calculator(*args, **kwargs))
+        ttl = ttl_calculator(*args, **kwargs)
+        if ttl <= 0:
+            return 0
+        if ttl > RFC8767_MAX_TTL:
+            return RFC8767_MAX_TTL
+        return ttl
 
     return wrapper
 
