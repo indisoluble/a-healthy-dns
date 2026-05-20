@@ -24,7 +24,7 @@ Do not use this document as an unqualified claim that A Healthy DNS implements e
 
 ## 2. Current conformance claim
 
-Current claim: **not every necessary Level 1 RFC is fully covered under this document's definition**. The RFC applicability table below contains the complete RFC set needed to judge the declared Level 1 target. The core Level 1 behaviours previously documented here are implemented and covered by automated tests, and the remaining Level 1 gaps are tracked for RFC 8906.
+Current claim: **every necessary Level 1 RFC is fully covered under this document's definition**. The RFC applicability table below contains the complete RFC set needed to judge the declared Level 1 target, and the Level 1 behaviours documented here are implemented and covered by automated tests.
 
 That claim is scoped. For broad DNS RFCs such as RFC 1034 and RFC 1035, "covered" means the implementation satisfies the RFC requirements that apply to the declared Level 1 authoritative UDP target. It does not mean full-document compliance for unrelated resolver behavior, zone transfers, TCP transport, unsupported record types, EDNS(0), or DNSSEC proof semantics.
 
@@ -37,8 +37,7 @@ When this document says an RFC is fully covered for Level 1, it means:
 - the behavior is covered by automated tests listed in the test coverage mapping,
 - and any broader RFC material outside the target is listed as out of scope rather than treated as a hidden gap.
 
-When an RFC is necessary for the product but not fully covered under that definition, this document must say so explicitly. Current known gaps:
-- RFC 8906 says authoritative servers should respond correctly to basic DNS robustness probes, including unknown or unsupported RR types, DNS request flags, and unknown opcodes. The generic implementation paths exist, but dedicated robustness tests for unknown numeric non-meta RR types, request flags, and an unassigned opcode are missing.
+When an RFC is necessary for the product but not fully covered under that definition, this document must say so explicitly. Current known gaps: none.
 
 ## 3. Level 1 protocol target
 
@@ -123,7 +122,7 @@ Completeness is based on the declared behaviour in [Level 1 protocol target](#3-
 | [RFC 4592](https://www.rfc-editor.org/rfc/rfc4592) | DNS owner-name existence rules, including empty non-terminals | **Fully covered for Level 1** | Wildcard synthesis and wildcard-specific RRset behavior |
 | [RFC 8020](https://www.rfc-editor.org/rfc/rfc8020) | NXDOMAIN semantics and the required NODATA response for empty non-terminals | **Fully covered for Level 1** | Recursive resolver NXDOMAIN-cut caching behavior and DNSSEC proof reuse |
 | [RFC 8767](https://www.rfc-editor.org/rfc/rfc8767) | Updated DNS TTL definition for TTL-bearing authoritative responses | **Fully covered for Level 1** | Recursive resolver serve-stale behavior, stale-answer timers, and cache-refresh semantics |
-| [RFC 8906](https://www.rfc-editor.org/rfc/rfc8906) | Best Current Practice for responding to basic DNS queries, unknown or unsupported RR types, DNS request flags, and unknown opcodes | **Gap: not fully covered** | TCP, EDNS, firewalls, packet scrubbers, whole-answer caches, remediation procedures, and operator testing guidance |
+| [RFC 8906](https://www.rfc-editor.org/rfc/rfc8906) | Best Current Practice for responding to basic DNS queries, unknown or unsupported RR types, DNS request flags, and unknown opcodes | **Fully covered for Level 1** | TCP, EDNS, firewalls, packet scrubbers, whole-answer caches, remediation procedures, and operator testing guidance |
 | [RFC 9619](https://www.rfc-editor.org/rfc/rfc9619) | Standard-query `QDCOUNT > 1` validation and required FORMERR response | **Fully covered for Level 1** | Non-standard operation modes outside this server's query-handling target |
 
 ### Level 1 RFC selection audit
@@ -337,12 +336,12 @@ RFC 8906 — https://www.rfc-editor.org/rfc/rfc8906: documents Best Current Prac
 | SOA query for a served zone receives an SOA answer | **Implemented** | Positive SOA queries for the hosted apex return NOERROR with the apex SOA in the answer section. |
 | Unsupported known RR type at an existing owner name receives NODATA | **Implemented** | Existing tests query AAAA at an owner name that exists with A data and assert NOERROR with an empty answer and SOA authority. |
 | Unknown numeric RR type receives a normal DNS response instead of being dropped | **Implemented** | `tests/indisoluble/a_healthy_dns/test_dns_server_udp_integration.py` sends an unknown numeric `TYPE####` query and asserts the response is NODATA (existing owner) or NXDOMAIN (absent owner), with SOA authority. |
-| DNS queries with request flags set receive a response and unsupported response header bits are not copied | **Implemented but not fully covered** | Parsed queries with `RD` are answered through the ordinary authoritative path with `RA` clear, and response construction delegates most response-flag handling to `dnspython`. The FORMERR recovery path preserves only the request opcode and `RD`. There is no dedicated test proving the Level 1 response flag policy for `RD`, `RA`, `AD`, `CD`, or still-reserved request flags. |
-| Unknown or unimplemented opcodes return NOTIMP | **Implemented but not fully covered** | Generic non-QUERY opcode handling returns NOTIMP without AA. Tests cover IQUERY, STATUS, NOTIFY, and UPDATE; they do not cover an unassigned opcode value. |
+| DNS queries with request flags set receive a response and unsupported response header bits are not copied | **Implemented** | `tests/indisoluble/a_healthy_dns/test_dns_server_udp_integration.py` asserts RD is preserved and RA/AD/CD/Z are clear in NOERROR and NOTIMP responses; `tests/indisoluble/a_healthy_dns/test_dns_server_udp_handler.py` asserts FORMERR header recovery preserves only opcode and RD. |
+| Unknown or unimplemented opcodes return NOTIMP | **Implemented** | `tests/indisoluble/a_healthy_dns/test_dns_server_udp_handler.py` and `tests/indisoluble/a_healthy_dns/test_dns_server_udp_integration.py` cover IQUERY, STATUS, NOTIFY, UPDATE, and an unassigned opcode value, all returning NOTIMP without AA. |
 | TCP and EDNS response robustness | **Out of Level 1 scope** | Level 1 is UDP-only and deliberately does not implement EDNS(0). |
 | Firewall, packet scrubber, whole-answer cache, remediation, and operator testing guidance | **Out of Level 1 scope** | These are operational deployment and ecosystem testing topics, not in-process authoritative UDP response semantics. |
 
-Remaining Level 1 gap: add automated robustness coverage for unknown numeric non-meta RR types, DNS request flags, an unassigned opcode, and the raw Level 1 response flag policy before marking RFC 8906 fully covered.
+No remaining Level 1 gaps in RFC 8906 basic DNS response robustness coverage.
 
 ---
 
@@ -389,7 +388,7 @@ No remaining Level 1 gaps in RFC 2308 coverage.
 | SOA serial generation uses an unsigned 32-bit value and avoids duplicate consecutive values | `tests/indisoluble/a_healthy_dns/records/test_soa_record.py` (unit) + `tests/indisoluble/a_healthy_dns/tools/test_uint32_current_time.py` (unit) |
 | NOTIMP for unsupported opcodes | `tests/indisoluble/a_healthy_dns/test_dns_server_udp_integration.py` (component integration) + `tests/indisoluble/a_healthy_dns/test_dns_server_udp_handler.py` (unit) |
 | NOTIMP for obsolete IQUERY opcode | `tests/indisoluble/a_healthy_dns/test_dns_server_udp_handler.py` (unit) |
-| NOTIMP for unassigned opcode values | **Missing** |
+| NOTIMP for unassigned opcode values | `tests/indisoluble/a_healthy_dns/test_dns_server_udp_integration.py` (component integration) + `tests/indisoluble/a_healthy_dns/test_dns_server_udp_handler.py` (unit) |
 | FORMERR for QDCOUNT ≠ 1 (wire-level) | `tests/indisoluble/a_healthy_dns/test_dns_server_udp_integration.py` (component integration) |
 | FORMERR for malformed wire with recoverable header (≥ 12 bytes) | `tests/indisoluble/a_healthy_dns/test_dns_server_udp_integration.py` (component integration) + `tests/indisoluble/a_healthy_dns/test_dns_server_udp_handler.py` (unit) |
 | Drop and log inbound DNS response packets (`QR=1`) | `tests/indisoluble/a_healthy_dns/test_dns_server_udp_handler.py` (unit) |
@@ -400,7 +399,7 @@ No remaining Level 1 gaps in RFC 2308 coverage.
 | RRset construction from zone rdatasets and oversized RRset truncation | `tests/indisoluble/a_healthy_dns/test_dns_server_udp_handler.py` (unit) + `tests/indisoluble/a_healthy_dns/records/test_a_record.py` (unit) |
 | Oversized UDP responses are truncated to the classic 512-byte limit and set TC | `tests/indisoluble/a_healthy_dns/test_dns_server_udp_handler.py` (unit) |
 | Parsed response header fields (QR, ID, AA, RA, TC), including non-AA rejected responses | `tests/indisoluble/a_healthy_dns/test_dns_server_udp_integration.py` (component integration) |
-| DNS request-flag robustness for `AD`, `CD`, and still-reserved flags | **Missing** |
+| DNS request-flag robustness for `AD`, `CD`, and still-reserved flags | `tests/indisoluble/a_healthy_dns/test_dns_server_udp_integration.py` (component integration; wire-byte assertions) |
 | Raw response name compression and unsupported response header bits | `tests/indisoluble/a_healthy_dns/test_dns_server_udp_integration.py` (component integration; wire-byte assertions) |
 | Health-check-driven A-record addition/removal | `.github/workflows/test-integration.yml` (Docker end-to-end) |
 | Container startup, Docker networking, alias zone routing | `.github/workflows/test-integration.yml` (Docker end-to-end) |
@@ -423,6 +422,4 @@ When DNSSEC is enabled, `DnsServerZoneUpdater._sign_zone()` delegates to `dns.dn
 
 ## 8. Coverage gaps
 
-| Gap | Needed before claiming full coverage |
-|---|---|
-| RFC 8906 basic DNS response robustness | Add automated tests proving unknown numeric non-meta RR types receive normal DNS responses, request flags such as `RD`, `AD`, `CD`, and still-reserved bits follow the Level 1 response flag policy, and an unassigned opcode returns NOTIMP without AA. |
+No remaining Level 1 gaps for the current protocol target.
