@@ -24,7 +24,7 @@ Do not use this document as an unqualified claim that A Healthy DNS implements e
 
 ## 2. Current conformance claim
 
-Current claim: **not every necessary Level 1 RFC is fully covered under this document's definition**. The RFC applicability table below contains the complete RFC set needed to judge the declared Level 1 target. The core Level 1 behaviours previously documented here are implemented and covered by automated tests, and the remaining Level 1 gaps are tracked for RFC 4592, RFC 8020, and RFC 8906.
+Current claim: **not every necessary Level 1 RFC is fully covered under this document's definition**. The RFC applicability table below contains the complete RFC set needed to judge the declared Level 1 target. The core Level 1 behaviours previously documented here are implemented and covered by automated tests, and the remaining Level 1 gaps are tracked for RFC 8906.
 
 That claim is scoped. For broad DNS RFCs such as RFC 1034 and RFC 1035, "covered" means the implementation satisfies the RFC requirements that apply to the declared Level 1 authoritative UDP target. It does not mean full-document compliance for unrelated resolver behavior, zone transfers, TCP transport, unsupported record types, EDNS(0), or DNSSEC proof semantics.
 
@@ -38,7 +38,6 @@ When this document says an RFC is fully covered for Level 1, it means:
 - and any broader RFC material outside the target is listed as out of scope rather than treated as a hidden gap.
 
 When an RFC is necessary for the product but not fully covered under that definition, this document must say so explicitly. Current known gaps:
-- RFC 4592 and RFC 8020 empty non-terminal semantics are not fully implemented or tested. A configured nested name can imply an existing ancestor owner name with no RRsets, and the correct response for that ancestor is NODATA, not NXDOMAIN.
 - RFC 8906 says authoritative servers should respond correctly to basic DNS robustness probes, including unknown or unsupported RR types, DNS request flags, and unknown opcodes. The generic implementation paths exist, but dedicated robustness tests for unknown numeric non-meta RR types, request flags, and an unassigned opcode are missing.
 
 ## 3. Level 1 protocol target
@@ -121,8 +120,8 @@ Completeness is based on the declared behaviour in [Level 1 protocol target](#3-
 | [RFC 3425](https://www.rfc-editor.org/rfc/rfc3425) | IQUERY obsolescence and NOTIMP handling for IQUERY requests | **Fully covered for Level 1** | Historical inverse-query semantics, which are obsolete and not implemented |
 | [RFC 3597](https://www.rfc-editor.org/rfc/rfc3597) | Unknown DNS RR type handling for ordinary non-meta `TYPE####` queries | **Fully covered for Level 1** | Loading, storing, transferring, and serving arbitrary unknown RR data; unknown-RR RDATA preservation; master-file generic RDATA syntax; and DNSSEC canonical-form details |
 | [RFC 4343](https://www.rfc-editor.org/rfc/rfc4343) | Case-insensitive DNS name matching for authoritative lookup and zone matching | **Fully covered for Level 1** | Internationalized Domain Name handling and output-case preservation choices outside the lookup-result correctness requirement |
-| [RFC 4592](https://www.rfc-editor.org/rfc/rfc4592) | DNS owner-name existence rules, including empty non-terminals | **Gap: not fully covered** | Wildcard synthesis and wildcard-specific RRset behavior |
-| [RFC 8020](https://www.rfc-editor.org/rfc/rfc8020) | NXDOMAIN semantics and the required NODATA response for empty non-terminals | **Gap: not fully covered** | Recursive resolver NXDOMAIN-cut caching behavior and DNSSEC proof reuse |
+| [RFC 4592](https://www.rfc-editor.org/rfc/rfc4592) | DNS owner-name existence rules, including empty non-terminals | **Fully covered for Level 1** | Wildcard synthesis and wildcard-specific RRset behavior |
+| [RFC 8020](https://www.rfc-editor.org/rfc/rfc8020) | NXDOMAIN semantics and the required NODATA response for empty non-terminals | **Fully covered for Level 1** | Recursive resolver NXDOMAIN-cut caching behavior and DNSSEC proof reuse |
 | [RFC 8767](https://www.rfc-editor.org/rfc/rfc8767) | Updated DNS TTL definition for TTL-bearing authoritative responses | **Fully covered for Level 1** | Recursive resolver serve-stale behavior, stale-answer timers, and cache-refresh semantics |
 | [RFC 8906](https://www.rfc-editor.org/rfc/rfc8906) | Best Current Practice for responding to basic DNS queries, unknown or unsupported RR types, DNS request flags, and unknown opcodes | **Gap: not fully covered** | TCP, EDNS, firewalls, packet scrubbers, whole-answer caches, remediation procedures, and operator testing guidance |
 | [RFC 9619](https://www.rfc-editor.org/rfc/rfc9619) | Standard-query `QDCOUNT > 1` validation and required FORMERR response | **Fully covered for Level 1** | Non-standard operation modes outside this server's query-handling target |
@@ -295,10 +294,10 @@ RFC 4592 — https://www.rfc-editor.org/rfc/rfc4592: updates RFC 1034 by refinin
 | Behaviour | Status | Notes |
 |---|---|---|
 | Exact owner names with RRsets exist | **Implemented** | `_update_response()` treats a zone node returned by `txn.get_node(relative_name)` as an existing owner name and returns either an answer or NODATA depending on whether the requested rdataset exists. |
-| Empty non-terminal owner names exist and return NODATA | **Gap: not fully implemented** | Dotted configured subdomain names are valid, so a name such as `bar.foo.example.` implies `foo.example.` exists as an empty non-terminal. Current handler logic only checks for an exact stored zone node and therefore can return NXDOMAIN for the empty ancestor instead of NODATA. |
+| Empty non-terminal owner names exist and return NODATA | **Implemented** | `_update_response()` treats a missing node as an empty non-terminal when `txn.iterate_names()` contains a descendant name, and returns NOERROR/empty-answer with SOA authority. Coverage: `tests/indisoluble/a_healthy_dns/test_dns_server_udp_integration.py` and `tests/indisoluble/a_healthy_dns/test_dns_server_udp_handler.py`. |
 | Wildcard synthesis | **Out of Level 1 scope** | The configuration validator does not support wildcard labels, and Level 1 does not claim wildcard behavior. |
 
-Remaining Level 1 gap: implement and test empty non-terminal recognition for nested configured names before marking RFC 4592 fully covered.
+No remaining Level 1 gaps in RFC 4592 empty non-terminal coverage.
 
 ---
 
@@ -308,11 +307,11 @@ RFC 8020 — https://www.rfc-editor.org/rfc/rfc8020: updates RFC 1034 and RFC 23
 
 | Behaviour | Status | Notes |
 |---|---|---|
-| NXDOMAIN only when the queried owner name and its subtree do not exist | **Gap: not fully implemented** | Current handler logic can return NXDOMAIN for an empty non-terminal ancestor of a configured nested name because it only checks `txn.get_node(relative_name)`. That NXDOMAIN would incorrectly imply that the existing descendant subtree does not exist. |
-| Empty non-terminal receives NODATA | **Gap: not fully implemented** | Same gap as RFC 4592: empty non-terminal ancestors need NOERROR/empty answer with SOA authority instead of NXDOMAIN. |
+| NXDOMAIN only when the queried owner name and its subtree do not exist | **Implemented** | `_update_response()` checks for an empty non-terminal (a missing owner node with existing descendants) before returning NXDOMAIN, so NXDOMAIN is reserved for names with no node and no descendant nodes in the served zone view. |
+| Empty non-terminal receives NODATA | **Implemented** | Missing owner nodes with descendants receive NOERROR/empty-answer with the matched zone apex SOA in authority (RFC 2308). Coverage: `tests/indisoluble/a_healthy_dns/test_dns_server_udp_integration.py` and `tests/indisoluble/a_healthy_dns/test_dns_server_udp_handler.py`. |
 | Resolver NXDOMAIN-cut caching behavior | **Out of Level 1 scope** | The server is authoritative-only and does not implement recursive resolver caching. |
 
-Remaining Level 1 gap: add empty non-terminal response semantics and tests for primary and alias zones before marking RFC 8020 fully covered.
+No remaining Level 1 gaps in RFC 8020 empty non-terminal coverage.
 
 ---
 
@@ -382,7 +381,7 @@ No remaining Level 1 gaps in RFC 2308 coverage.
 | Positive A/SOA/NS responses (NOERROR) | `tests/indisoluble/a_healthy_dns/test_dns_server_udp_integration.py` (component integration) |
 | NXDOMAIN with SOA in authority, including alias-zone authority owner | `tests/indisoluble/a_healthy_dns/test_dns_server_udp_integration.py` (component integration) |
 | NODATA with SOA in authority, including alias-zone authority owner | `tests/indisoluble/a_healthy_dns/test_dns_server_udp_integration.py` (component integration) |
-| Empty non-terminal NODATA for nested configured names | **Missing** |
+| Empty non-terminal NODATA for nested configured names | `tests/indisoluble/a_healthy_dns/test_dns_server_udp_integration.py` (component integration) |
 | Out-of-zone REFUSED | `tests/indisoluble/a_healthy_dns/test_dns_server_udp_integration.py` (component integration) |
 | Non-IN-class REFUSED | `tests/indisoluble/a_healthy_dns/test_dns_server_udp_integration.py` (component integration) |
 | Unsupported known RR type NODATA at existing owner names | `tests/indisoluble/a_healthy_dns/test_dns_server_udp_integration.py` (component integration) |
@@ -426,5 +425,4 @@ When DNSSEC is enabled, `DnsServerZoneUpdater._sign_zone()` delegates to `dns.dn
 
 | Gap | Needed before claiming full coverage |
 |---|---|
-| RFC 4592 / RFC 8020 empty non-terminal semantics | Implement and test NODATA responses for empty non-terminal ancestors of nested configured names in primary and alias zones. |
 | RFC 8906 basic DNS response robustness | Add automated tests proving unknown numeric non-meta RR types receive normal DNS responses, request flags such as `RD`, `AD`, `CD`, and still-reserved bits follow the Level 1 response flag policy, and an unassigned opcode returns NOTIMP without AA. |

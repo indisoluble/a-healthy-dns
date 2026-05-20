@@ -324,6 +324,7 @@ def test_update_response_domain_not_found(
 
     # Mock zone.reader.get_node to return None
     mock_reader.get_node.return_value = None
+    mock_reader.iterate_names.return_value = iter([])
     mock_reader.get.return_value = mock_soa_rdataset
 
     mock_zone.reader.return_value.__enter__.return_value = mock_reader
@@ -346,6 +347,7 @@ def test_update_response_domain_not_found(
     mock_reader.get_node.assert_called_once_with(
         query_name.relativize(mock_zone_origins.primary)
     )
+    mock_reader.iterate_names.assert_called_once_with()
     mock_reader.get.assert_called_once_with(dns.name.empty, dns.rdatatype.SOA)
 
     assert mock_dns_response.rcode() == dns.rcode.NXDOMAIN
@@ -364,6 +366,58 @@ def test_update_response_domain_not_found(
     )
     assert f"source={_TEST_SOURCE_HOST}:{_TEST_SOURCE_PORT}" in caplog.text
     assert f"id={_TEST_QUERY_ID}" in caplog.text
+
+
+def test_update_response_empty_non_terminal_returns_nodata(
+    mock_zone,
+    mock_reader,
+    mock_dns_response,
+    mock_zone_origins,
+    mock_soa_rdata,
+    mock_soa_rdataset,
+    caplog,
+):
+    query_name = dns.name.from_text("empty", origin=mock_zone_origins.primary)
+    query_type = dns.rdatatype.A
+
+    mock_reader.get_node.return_value = None
+    mock_reader.iterate_names.return_value = iter(
+        [dns.name.from_text("leaf.empty", origin=None)]
+    )
+    mock_reader.get.return_value = mock_soa_rdataset
+    mock_zone.reader.return_value.__enter__.return_value = mock_reader
+
+    with caplog.at_level(logging.INFO):
+        _update_response(
+            mock_dns_response,
+            query_name,
+            query_type,
+            mock_zone,
+            mock_zone_origins,
+            _TEST_QUERY_ID,
+            _TEST_SOURCE_HOST,
+            _TEST_SOURCE_PORT,
+        )
+
+    mock_zone.reader.assert_called_once()
+    mock_reader.get_node.assert_called_once_with(
+        query_name.relativize(mock_zone_origins.primary)
+    )
+    mock_reader.iterate_names.assert_called_once_with()
+    mock_reader.get.assert_called_once_with(dns.name.empty, dns.rdatatype.SOA)
+
+    assert mock_dns_response.rcode() == dns.rcode.NOERROR
+    assert bool(mock_dns_response.flags & dns.flags.AA)
+    assert len(mock_dns_response.answer) == 0
+
+    assert len(mock_dns_response.authority) == 1
+    assert mock_dns_response.authority[0].rdtype == dns.rdatatype.SOA
+    assert mock_dns_response.authority[0].name == mock_zone_origins.primary
+    assert mock_dns_response.authority[0].ttl == mock_soa_rdata.minimum
+
+    _assert_log_record(
+        caplog, logging.INFO, "returning NODATA", _DNS_TRAFFIC_NORMAL
+    )
 
 
 @pytest.mark.parametrize(
@@ -393,6 +447,7 @@ def test_update_response_domain_not_found_without_soa_authority(
     query_type = dns.rdatatype.A
 
     mock_reader.get_node.return_value = None
+    mock_reader.iterate_names.return_value = iter([])
     mock_reader.get.return_value = soa_rdataset
     mock_zone.reader.return_value.__enter__.return_value = mock_reader
 

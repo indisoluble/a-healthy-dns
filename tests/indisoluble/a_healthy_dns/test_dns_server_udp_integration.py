@@ -32,6 +32,9 @@ _NS = "ns1.integration.test."
 _SUBDOMAIN = "www"
 _SUBDOMAIN_IP = "192.0.2.1"  # RFC 5737 TEST-NET-1
 _ABSENT_SUBDOMAIN = "missing"
+_NESTED_SUBDOMAIN = "leaf.parent"
+_NESTED_SUBDOMAIN_IP = "192.0.2.2"  # RFC 5737 TEST-NET-1
+_EMPTY_NON_TERMINAL = "parent"
 
 _ZONE_FQDN = f"{_ZONE}."
 _ALIAS_ZONE_FQDN = f"{_ALIAS_ZONE}."
@@ -39,6 +42,8 @@ _SUBDOMAIN_FQDN = f"{_SUBDOMAIN}.{_ZONE}."
 _ALIAS_SUBDOMAIN_FQDN = f"{_SUBDOMAIN}.{_ALIAS_ZONE}."
 _ABSENT_FQDN = f"{_ABSENT_SUBDOMAIN}.{_ZONE}."
 _ALIAS_ABSENT_FQDN = f"{_ABSENT_SUBDOMAIN}.{_ALIAS_ZONE}."
+_EMPTY_NON_TERMINAL_FQDN = f"{_EMPTY_NON_TERMINAL}.{_ZONE}."
+_ALIAS_EMPTY_NON_TERMINAL_FQDN = f"{_EMPTY_NON_TERMINAL}.{_ALIAS_ZONE}."
 _OUT_OF_ZONE_FQDN = "www.unrelated.test."
 
 # RFC 3597: use a private-use RR type code to ensure dnspython parses it as an
@@ -244,6 +249,7 @@ def live_server():
       NS   @ → ns1.integration.test.
       SOA  @ (auto-generated via DnsServerZoneUpdater)
       A    www → 192.0.2.1  (RFC 5737 TEST-NET-1)
+      A    leaf.parent → 192.0.2.2  (RFC 5737 TEST-NET-1)
 
     IPs are pre-marked healthy so initialize_zone() populates the zone
     immediately without making real TCP connections.
@@ -255,11 +261,18 @@ def live_server():
         healthy_ips=[AHealthyIp(ip=_SUBDOMAIN_IP, health_port=8080, is_healthy=True)],
     )
 
+    nested_record = AHealthyRecord(
+        subdomain=dns.name.from_text(_NESTED_SUBDOMAIN, origin=zone_origins.primary),
+        healthy_ips=[
+            AHealthyIp(ip=_NESTED_SUBDOMAIN_IP, health_port=8080, is_healthy=True)
+        ],
+    )
+
     config = DnsServerConfig(
         zone_origins=zone_origins,
         primary_name_server=_NS,
         name_servers=frozenset([_NS]),
-        a_records=frozenset([a_record]),
+        a_records=frozenset([a_record, nested_record]),
         ext_private_key=None,
     )
 
@@ -440,6 +453,18 @@ class TestNegativeResponses:
                 dns.rcode.NXDOMAIN,
                 _ALIAS_ZONE_FQDN,
             ),
+            (
+                _EMPTY_NON_TERMINAL_FQDN,
+                dns.rdatatype.A,
+                dns.rcode.NOERROR,
+                _ZONE_FQDN,
+            ),
+            (
+                _ALIAS_EMPTY_NON_TERMINAL_FQDN,
+                dns.rdatatype.A,
+                dns.rcode.NOERROR,
+                _ALIAS_ZONE_FQDN,
+            ),
         ],
         ids=[
             "nxdomain-absent-owner",
@@ -450,6 +475,8 @@ class TestNegativeResponses:
             "alias-nodata-absent-type",
             "alias-nodata-unknown-type",
             "alias-nxdomain-absent-owner-unknown-type",
+            "empty-non-terminal-nodata",
+            "alias-empty-non-terminal-nodata",
         ],
     )
     def test_negative_response_has_soa_authority(
