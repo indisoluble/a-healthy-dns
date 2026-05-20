@@ -11,7 +11,7 @@ from indisoluble.a_healthy_dns.records.soa_record import (
     iter_soa_record,
     _iter_soa_serial,
 )
-from indisoluble.a_healthy_dns.records.time import RFC8767_MAX_TTL
+RFC8767_MAX_TTL = (1 << 31) - 1
 
 
 @unittest.mock.patch("indisoluble.a_healthy_dns.records.soa_record._iter_soa_serial")

@@ -19,10 +19,10 @@ class RRSigLifetime(NamedTuple):
     expiration: int
 
 
-RFC8767_MAX_TTL = (1 << 31) - 1
+_RFC8767_MAX_TTL = (1 << 31) - 1
 
 
-def ttl_clamped(ttl_calculator: Callable[..., int]) -> Callable[..., int]:
+def _ttl_clamped(ttl_calculator: Callable[..., int]) -> Callable[..., int]:
     """Decorate a TTL calculator so its output complies with RFC 8767."""
 
     @functools.wraps(ttl_calculator)
@@ -30,28 +30,27 @@ def ttl_clamped(ttl_calculator: Callable[..., int]) -> Callable[..., int]:
         ttl = ttl_calculator(*args, **kwargs)
         if ttl <= 0:
             return 0
-        if ttl > RFC8767_MAX_TTL:
-            return RFC8767_MAX_TTL
+        if ttl > _RFC8767_MAX_TTL:
+            return _RFC8767_MAX_TTL
         return ttl
 
     return wrapper
 
 
-@ttl_clamped
+@_ttl_clamped
 def calculate_a_ttl(max_interval: int) -> int:
     """Calculate A record TTL as 2x test interval to ensure clients get
     reasonably fresh data while reducing DNS server pressure."""
     return max_interval * 2
 
 
-@ttl_clamped
+@_ttl_clamped
 def calculate_ns_ttl(max_interval: int) -> int:
     """Calculate NS record TTL as 30x A record TTL for highly dynamic
     environments where new VMs/baremetal deploy in ~15 minutes."""
     return calculate_a_ttl(max_interval) * 30
 
 
-@ttl_clamped
 def calculate_soa_ttl(max_interval: int) -> int:
     """Calculate SOA record TTL using NS record TTL as SOA contains
     the primary name server information."""
@@ -76,14 +75,13 @@ def calculate_soa_expire(max_interval: int) -> int:
     return calculate_soa_retry(max_interval) * 5
 
 
-@ttl_clamped
 def calculate_soa_min_ttl(max_interval: int) -> int:
     """Calculate SOA minimum TTL using A record TTL as baseline
     for negative caching in dynamic environments."""
     return calculate_a_ttl(max_interval)
 
 
-@ttl_clamped
+@_ttl_clamped
 def calculate_dnskey_ttl(max_interval: int) -> int:
     """Calculate DNSKEY TTL as 10x A record TTL, allowing ~5 minutes
     for manual key updates and redeployment in dynamic environments."""

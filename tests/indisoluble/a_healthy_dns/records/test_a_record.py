@@ -7,7 +7,7 @@ import dns.rdatatype
 from indisoluble.a_healthy_dns.records.a_healthy_ip import AHealthyIp
 from indisoluble.a_healthy_dns.records.a_healthy_record import AHealthyRecord
 from indisoluble.a_healthy_dns.records.a_record import make_a_record
-from indisoluble.a_healthy_dns.records.time import RFC8767_MAX_TTL
+RFC8767_MAX_TTL = (1 << 31) - 1
 
 
 def test_make_a_record_with_healthy_ips():
