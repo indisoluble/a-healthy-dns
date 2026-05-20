@@ -80,12 +80,9 @@ def _build_answer(
 
 
 def _is_empty_non_terminal(query_name: dns.name.Name, txn: dns.zone.Transaction) -> bool:
-    """Return True when *query_name* has descendants in *txn* but no node of its own.
+    """Return True when *query_name* exists only via descendants (empty non-terminal).
 
-    RFC 4592 and RFC 8020 clarify that an owner name exists when it owns RRsets
-    *or* has descendants that own RRsets. A node with only descendants is an
-    "empty non-terminal" and must return NOERROR/empty-answer (NODATA), not
-    NXDOMAIN.
+    See `docs/RFC-conformance.md` (RFC 4592 / RFC 8020) for details.
     """
 
     return any(name.is_subdomain(query_name) for name in txn.iterate_names())
