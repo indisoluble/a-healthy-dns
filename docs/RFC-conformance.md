@@ -232,7 +232,7 @@ RFC 3597 — https://www.rfc-editor.org/rfc/rfc3597: defines how DNS implementat
 | Unknown numeric non-meta RR type query at an absent in-zone owner name receives NXDOMAIN | **Implemented** | `tests/indisoluble/a_healthy_dns/test_dns_server_udp_integration.py` sends an unknown numeric `TYPE####` query for an absent in-zone owner name and asserts NXDOMAIN with SOA authority. |
 | Transparent loading, storage, transfer, and serving of unknown RR data | **Out of Level 1 scope** | Level 1 generates A, NS, and SOA records only, plus optional DNSSEC artifacts when signing is enabled. The server does not load arbitrary zone files, accept zone transfers, or publish unknown-RR RDATA. |
 | Generic master-file representation and DNSSEC canonical form for unknown RR data | **Out of Level 1 scope** | These requirements apply to arbitrary unknown RR data handling, which is not a Level 1 product capability. |
- 
+
 No remaining Level 1 gaps in RFC 3597 coverage.
 
 ---

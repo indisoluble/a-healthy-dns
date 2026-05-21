@@ -83,15 +83,20 @@ def test_iter_soa_serial_waits_on_duplicate(mock_uint32_current_time, mock_sleep
 
 
 @unittest.mock.patch("indisoluble.a_healthy_dns.records.soa_record._iter_soa_serial")
-def test_iter_soa_record_caps_ttls_to_rfc8767_max(mock_iter_soa_serial):
+def test_iter_soa_record_caps_ttls_and_soa_time_values_to_rfc8767_max(
+    mock_iter_soa_serial,
+):
     mock_serial = 1234567890
     mock_iter_soa_serial.return_value = iter([mock_serial])
 
-    max_interval = 100_000_000  # derived SOA TTL exceeds RFC8767_MAX_TTL
+    max_interval = 500_000_000  # derived SOA expire exceeds the DNS TTL range
     origin_name = dns.name.from_text("example.com")
     primary_ns = "ns1.example.com."
 
     soa_record_iterator = iter_soa_record(max_interval, origin_name, primary_ns)
     result = next(soa_record_iterator)
+    soa_rdata = next(iter(result))
 
     assert result.ttl == RFC8767_MAX_TTL
+    assert soa_rdata.refresh == RFC8767_MAX_TTL
+    assert soa_rdata.expire == RFC8767_MAX_TTL

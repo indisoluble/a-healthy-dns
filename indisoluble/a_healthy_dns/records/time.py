@@ -23,7 +23,7 @@ _RFC8767_MAX_TTL = (1 << 31) - 1
 
 
 def _ttl_clamped(ttl_calculator: Callable[..., int]) -> Callable[..., int]:
-    """Decorate a TTL calculator so its output complies with RFC 8767."""
+    """Decorate a DNS TTL/timing calculator so output complies with RFC 8767."""
 
     @functools.wraps(ttl_calculator)
     def wrapper(*args, **kwargs) -> int:
@@ -69,6 +69,7 @@ def calculate_soa_retry(max_interval: int) -> int:
     return calculate_a_ttl(max_interval)
 
 
+@_ttl_clamped
 def calculate_soa_expire(max_interval: int) -> int:
     """Calculate SOA expire time as 5x retry interval to handle
     extended connectivity issues between primary and secondary DNS."""

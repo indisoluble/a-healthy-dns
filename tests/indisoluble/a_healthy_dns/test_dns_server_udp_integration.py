@@ -55,6 +55,7 @@ _MIXED_CASE_ALIAS_SUBDOMAIN_FQDN = "WwW.AlIaS.InTeGrAtIoN.TeSt."
 _MIXED_CASE_ABSENT_FQDN = "MiSsInG.ExAmPlE.InTeGrAtIoN.TeSt."
 _MIXED_CASE_ALIAS_ABSENT_FQDN = "MiSsInG.AlIaS.InTeGrAtIoN.TeSt."
 _MIXED_CASE_OUT_OF_ZONE_FQDN = "WwW.UnReLaTeD.TeSt."
+_RESERVED_HEADER_FLAG = 0x0040
 
 # A wire payload that is ≥ 12 bytes (DNS header is readable) but not a valid
 # DNS message.  The handler must recover the transaction ID and return FORMERR
@@ -683,7 +684,12 @@ class TestResponseWireEncoding:
     def test_response_wire_header_bits_are_clear(self, live_server, query_factory):
         host, port = live_server
         query = query_factory()
+        query.flags |= dns.flags.AD | dns.flags.CD | _RESERVED_HEADER_FLAG
         wire = _udp_query_wire(host, port, query)
+
+        assert query.flags & dns.flags.AD
+        assert query.flags & dns.flags.CD
+        assert query.flags & _RESERVED_HEADER_FLAG
 
         flags = int.from_bytes(wire[2:4], "big")
         assert flags & dns.flags.QR
@@ -691,4 +697,4 @@ class TestResponseWireEncoding:
         assert not (flags & dns.flags.RA)
         assert not (flags & dns.flags.AD)
         assert not (flags & dns.flags.CD)
-        assert not (flags & 0x0040)  # Reserved Z bit (RFC 1035 §4.1.1)
+        assert not (flags & _RESERVED_HEADER_FLAG)
