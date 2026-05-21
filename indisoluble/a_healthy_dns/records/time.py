@@ -8,8 +8,10 @@ record types based on health check intervals and zone update frequency.
 
 import functools
 
-from collections.abc import Callable
-from typing import NamedTuple
+from typing import Callable, NamedTuple, ParamSpec
+
+
+_P = ParamSpec("_P")
 
 
 class RRSigLifetime(NamedTuple):
@@ -22,11 +24,11 @@ class RRSigLifetime(NamedTuple):
 _RFC8767_MAX_TTL = (1 << 31) - 1
 
 
-def _ttl_clamped(ttl_calculator: Callable[..., int]) -> Callable[..., int]:
+def _ttl_clamped(ttl_calculator: Callable[_P, int]) -> Callable[_P, int]:
     """Decorate a DNS TTL/timing calculator so output complies with RFC 8767."""
 
     @functools.wraps(ttl_calculator)
-    def wrapper(*args, **kwargs) -> int:
+    def wrapper(*args: _P.args, **kwargs: _P.kwargs) -> int:
         ttl = ttl_calculator(*args, **kwargs)
         if ttl <= 0:
             return 0

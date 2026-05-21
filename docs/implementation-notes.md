@@ -41,7 +41,7 @@ Keep upper-bound pins at the next major version so minor and patch updates are a
 
 ## Import Ordering
 
-Each source module organizes imports into five groups, each separated by a blank line:
+Each source and test module organizes imports into five groups, each separated by a blank line:
 
 1. Standard-library direct imports (`import X`)
 2. Third-party direct imports (`import X`)
@@ -64,11 +64,48 @@ from indisoluble.a_healthy_dns import dns_server_config_factory as dscf
 from indisoluble.a_healthy_dns.records.a_healthy_ip import AHealthyIp
 ```
 
-Skip groups that are not needed; do not collapse remaining groups together. Local imports normally use `from ... import ...`; aliasing the imported symbol or submodule is acceptable when repeated constant access would otherwise add noise. Test files follow the same rule.
+Skip groups that are not needed; do not collapse remaining groups together. Local imports normally use `from ... import ...`; aliasing the imported symbol or submodule is acceptable when repeated constant access would otherwise add noise.
+
+## Module-Level Constants And Type Parameters
+
+For this section, **constant** means a module-level `UPPER_SNAKE_CASE` or `_UPPER_SNAKE_CASE` assignment intended to behave as a stable value. Lowercase module-level assignments are not constants.
+
+Use this module-level declaration order:
+
+1. Type definitions used by module-level constants, helpers, or public APIs: `TypeVar`, `ParamSpec`, type aliases, `NamedTuple`, and `Enum`.
+2. Private constants.
+3. Public constants.
+4. Helper functions, public functions, and ordinary classes with methods or runtime behavior.
+
+Keep each group separated by a blank line. If a module has both private and public constants, private constants come first:
+
+```python
+_P = ParamSpec("_P")
+
+
+class RRSigLifetime(NamedTuple):
+    resign: int
+    expiration: int
+
+
+_MAX_TTL = (1 << 31) - 1
+
+DEFAULT_TTL = 60
+```
+
+Ordinary classes normally belong below constants. The exception is when a module-level constant is constructed from an ordinary class defined in the same module; in that case, define the class before the constant so the assignment can run.
+
+```python
+class DefaultPolicy:
+    ...
+
+
+_DEFAULT_POLICY = DefaultPolicy()
+```
 
 ## Module Headers
 
-Executable source modules start with the shebang line and, unless the file is an intentionally empty package `__init__.py`, immediately follow it with a module-level docstring:
+Non-empty source modules start with the shebang line and, unless the file is an intentionally empty package `__init__.py`, immediately follow it with a module-level docstring:
 
 ```python
 #!/usr/bin/env python3
@@ -146,7 +183,7 @@ logging.debug("Created A record with ttl: %d, and IPs: %s", ttl, ips)
 
 ## Type Annotations
 
-All function and method signatures include parameter type annotations and return type annotations. Use `Any` only where the function intentionally accepts unvalidated external input, such as validator parameters.
+In source modules, all function and method signatures include parameter type annotations and return type annotations. Use `Any` only where the function intentionally accepts unvalidated external input, such as validator parameters.
 
 ```python
 def is_valid_ip(ip: Any) -> Tuple[bool, str]:

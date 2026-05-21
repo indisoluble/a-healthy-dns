@@ -46,6 +46,7 @@ class RefreshARecordsResult(Enum):
 
 
 _DELTA_PER_RECORD_SIGN = 2
+
 DELTA_PER_RECORD_MANAGEMENT = 1
 
 
