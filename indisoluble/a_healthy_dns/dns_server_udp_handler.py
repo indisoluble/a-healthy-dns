@@ -82,7 +82,8 @@ def _build_answer(
 def _is_empty_non_terminal(query_name: dns.name.Name, txn: dns.zone.Transaction) -> bool:
     """Return True when *query_name* exists only via descendants (empty non-terminal).
 
-    See `docs/RFC-conformance.md` (RFC 4592 / RFC 8020) for details.
+    See `docs/RFC-conformance.md#3-level-1-protocol-target` for the
+    empty non-terminal response contract (RFC 4592 / RFC 8020).
     """
 
     return any(name.is_subdomain(query_name) for name in txn.iterate_names())

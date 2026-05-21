@@ -75,7 +75,8 @@ Argument details
 {len(_GRP_ZONE_RESOLUTIONS) * '-'}
 --{_NAME_HOSTED_ZONE}: The domain name for which this DNS server is authoritative.
 --{_NAME_ALIAS_ZONES}: Additional domain names that resolve to the same records.
---{_NAME_ZONE_RESOLUTIONS}: JSON configuration defining subdomains, their IP addresses, and optional health check ports.
+--{_NAME_ZONE_RESOLUTIONS}: JSON configuration defining each subdomain as either
+  a static IP list or a health-checked IP list with health_port.
 
 Examples:
     --{_NAME_HOSTED_ZONE} example.com
@@ -157,9 +158,9 @@ Example usage
         required=True,
         dest=ARG_ZONE_RESOLUTIONS,
         help=(
-            f"Subdomains with IPs and optional health ports as JSON string "
-            f"(ex. {{sd1: {{'{ARG_SUBDOMAIN_IP_LIST}': [ip1, ip2, ...], "
-            f"'{ARG_SUBDOMAIN_HEALTH_PORT}': port}}, sd2: [ip3, ...]}})"
+            f"Subdomain A records as JSON string "
+            f'(ex. {{"www": {{"{ARG_SUBDOMAIN_IP_LIST}": ["192.0.2.10"], '
+            f'"{ARG_SUBDOMAIN_HEALTH_PORT}": 8080}}, "static": ["192.0.2.20"]}})'
         ),
     )
     conn_group = parser.add_argument_group(_GRP_CONNECTIVITY_TESTS)

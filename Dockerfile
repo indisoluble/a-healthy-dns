@@ -26,7 +26,7 @@ ENV PATH="/app/venv/bin:$PATH" \
 WORKDIR /app
 
 # COPY defaults to root ownership; keep runtime files readable by the
-# Chainguard non-root uid 65532. See docs/docker.md for the runtime contract.
+# Chainguard non-root uid 65532. See docs/docker.md#1-runtime-contract for the runtime contract.
 COPY --from=builder --chown=65532:65532 /app/venv /app/venv
 COPY --from=builder --chown=65532:65532 --chmod=0700 /app/keys /app/keys
 

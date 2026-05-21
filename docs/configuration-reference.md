@@ -44,7 +44,8 @@ The domain name for which this server is authoritative.
 |---|
 | `--zone-resolutions` |
 
-JSON object mapping subdomain names to their IP list and optional health check port.
+JSON object mapping each subdomain to one of the two supported record modes:
+health-checked or standard static.
 
 There are two first-class record modes for each subdomain entry:
 
@@ -53,7 +54,7 @@ There are two first-class record modes for each subdomain entry:
 {
   "<subdomain>": {
     "ips": ["<ip1>", "<ip2>"],
-    "health_port": <port>
+    "health_port": 8080
   }
 }
 ```
@@ -87,6 +88,7 @@ Both modes can be mixed in the same configuration.
 - `health_port` is the TCP port used for health checks. It is required when using the dict format.
 - All IPs for a subdomain share the same health port.
 - Standard static entries are not TCP health-checked and remain publishable without a health probe.
+- Use the bare-list format for standard static entries; a dict with `health_port: null` is invalid.
 
 ### Name servers
 
@@ -162,7 +164,7 @@ The CLI parser accepts an integer. Listener-port bind validity and availability 
 |---|---|
 | `--log-level` | `info` |
 
-Log verbosity. Accepted values: `debug`, `info`, `warning`, `error`, `critical`. The CLI parser currently expects these lowercase tokens.
+Log verbosity. Accepted values are lowercase: `debug`, `info`, `warning`, `error`, `critical`.
 
 ### Minimum update interval
 

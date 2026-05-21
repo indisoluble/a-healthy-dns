@@ -5,7 +5,7 @@ services:
     build: .
     ports:
       # Publish standard DNS on the host while the process listens on a non-privileged container port.
-      # If you change the command to "--port 53", see docs/docker.md for the required sysctl/capability guidance.
+      # If you change the command to "--port 53", see docs/docker.md#bridge-mode-with-container-port-53 for sysctl guidance.
       - "53:53053/udp"
     command:
       # Required parameters
