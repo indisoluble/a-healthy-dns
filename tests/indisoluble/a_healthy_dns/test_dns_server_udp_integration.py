@@ -21,7 +21,6 @@ from indisoluble.a_healthy_dns.records.a_healthy_ip import AHealthyIp
 from indisoluble.a_healthy_dns.records.a_healthy_record import AHealthyRecord
 from indisoluble.a_healthy_dns.records.zone_origins import ZoneOrigins
 
-
 # ---------------------------------------------------------------------------
 # Zone constants used throughout all test classes
 # ---------------------------------------------------------------------------
@@ -32,6 +31,9 @@ _NS = "ns1.integration.test."
 _SUBDOMAIN = "www"
 _SUBDOMAIN_IP = "192.0.2.1"  # RFC 5737 TEST-NET-1
 _ABSENT_SUBDOMAIN = "missing"
+_NESTED_SUBDOMAIN = "leaf.parent"
+_NESTED_SUBDOMAIN_IP = "192.0.2.2"  # RFC 5737 TEST-NET-1
+_EMPTY_NON_TERMINAL = "parent"
 
 _ZONE_FQDN = f"{_ZONE}."
 _ALIAS_ZONE_FQDN = f"{_ALIAS_ZONE}."
@@ -39,7 +41,20 @@ _SUBDOMAIN_FQDN = f"{_SUBDOMAIN}.{_ZONE}."
 _ALIAS_SUBDOMAIN_FQDN = f"{_SUBDOMAIN}.{_ALIAS_ZONE}."
 _ABSENT_FQDN = f"{_ABSENT_SUBDOMAIN}.{_ZONE}."
 _ALIAS_ABSENT_FQDN = f"{_ABSENT_SUBDOMAIN}.{_ALIAS_ZONE}."
+_EMPTY_NON_TERMINAL_FQDN = f"{_EMPTY_NON_TERMINAL}.{_ZONE}."
+_ALIAS_EMPTY_NON_TERMINAL_FQDN = f"{_EMPTY_NON_TERMINAL}.{_ALIAS_ZONE}."
 _OUT_OF_ZONE_FQDN = "www.unrelated.test."
+
+# RFC 3597: use a private-use RR type code to ensure dnspython parses it as an
+# unknown numeric data type and the server treats it as a non-meta lookup type.
+_UNKNOWN_NON_META_RDTYPE = dns.rdatatype.from_text("TYPE65280")
+
+_MIXED_CASE_SUBDOMAIN_FQDN = "WwW.ExAmPlE.InTeGrAtIoN.TeSt."
+_MIXED_CASE_ALIAS_SUBDOMAIN_FQDN = "WwW.AlIaS.InTeGrAtIoN.TeSt."
+_MIXED_CASE_ABSENT_FQDN = "MiSsInG.ExAmPlE.InTeGrAtIoN.TeSt."
+_MIXED_CASE_ALIAS_ABSENT_FQDN = "MiSsInG.AlIaS.InTeGrAtIoN.TeSt."
+_MIXED_CASE_OUT_OF_ZONE_FQDN = "WwW.UnReLaTeD.TeSt."
+_RESERVED_HEADER_FLAG = 0x0040
 
 # A wire payload that is ≥ 12 bytes (DNS header is readable) but not a valid
 # DNS message.  The handler must recover the transaction ID and return FORMERR
@@ -58,6 +73,20 @@ _SERVER_READY_WAIT = 0.05
 # ---------------------------------------------------------------------------
 
 
+def _udp_exchange_wire(
+    host: str,
+    port: int,
+    wire: bytes,
+    timeout: float = 2.0,
+) -> bytes:
+    """Send raw *wire* bytes over UDP and return raw response wire bytes."""
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+        sock.settimeout(timeout)
+        sock.sendto(wire, (host, port))
+        data, _ = sock.recvfrom(4096)
+        return data
+
+
 def _udp_query(
     host: str,
     port: int,
@@ -65,14 +94,9 @@ def _udp_query(
     timeout: float = 2.0,
 ) -> dns.message.Message:
     """Send *query* over UDP and return the parsed response."""
-    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    sock.settimeout(timeout)
-    try:
-        sock.sendto(query.to_wire(), (host, port))
-        data, _ = sock.recvfrom(4096)
-        return dns.message.from_wire(data)
-    finally:
-        sock.close()
+    return dns.message.from_wire(
+        _udp_exchange_wire(host, port, query.to_wire(), timeout)
+    )
 
 
 def _udp_raw_query(
@@ -82,14 +106,17 @@ def _udp_raw_query(
     timeout: float = 2.0,
 ) -> dns.message.Message:
     """Send raw *wire* bytes over UDP and return the parsed response."""
-    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    sock.settimeout(timeout)
-    try:
-        sock.sendto(wire, (host, port))
-        data, _ = sock.recvfrom(4096)
-        return dns.message.from_wire(data)
-    finally:
-        sock.close()
+    return dns.message.from_wire(_udp_exchange_wire(host, port, wire, timeout))
+
+
+def _udp_query_wire(
+    host: str,
+    port: int,
+    query: dns.message.Message,
+    timeout: float = 2.0,
+) -> bytes:
+    """Send *query* over UDP and return raw response wire bytes."""
+    return _udp_exchange_wire(host, port, query.to_wire(), timeout)
 
 
 def _make_two_question_wire(name1: str, name2: str) -> bytes:
@@ -106,6 +133,85 @@ def _make_two_question_wire(name1: str, name2: str) -> bytes:
     wire[4:6] = (2).to_bytes(2, byteorder="big")
     wire.extend(q2.to_wire()[12:])
     return bytes(wire)
+
+
+def _make_status_query() -> dns.message.Message:
+    return _make_opcode_query(dns.opcode.STATUS)
+
+
+def _make_opcode_query(opcode: int) -> dns.message.Message:
+    query = dns.message.make_query(_SUBDOMAIN_FQDN, dns.rdatatype.A)
+    query.set_opcode(opcode)
+    return query
+
+
+def _scan_wire_for_compressed_names(wire: bytes) -> bool:
+    """Return True when *wire* uses DNS name compression pointers.
+
+    This is a minimal wire parser for RFC 1035 name encoding, sufficient for
+    asserting that at least one parsed name uses the compression pointer form.
+    """
+    flags = int.from_bytes(wire[2:4], "big")
+    qdcount = int.from_bytes(wire[4:6], "big")
+    ancount = int.from_bytes(wire[6:8], "big")
+    nscount = int.from_bytes(wire[8:10], "big")
+    arcount = int.from_bytes(wire[10:12], "big")
+
+    # If this isn't a DNS message, bail out quickly.
+    if len(wire) < 12 or not (flags & dns.flags.QR):
+        return False
+
+    def parse_name(offset: int) -> tuple[int, bool]:
+        used_pointer = False
+        while True:
+            length = wire[offset]
+            if length == 0:
+                return offset + 1, used_pointer
+            if length & 0xC0 == 0xC0:
+                # Compression pointer, ends the current name.
+                return offset + 2, True
+            offset += 1 + length
+
+    used_pointer_anywhere = False
+    offset = 12
+
+    for _ in range(qdcount):
+        offset, used_pointer = parse_name(offset)
+        used_pointer_anywhere |= used_pointer
+        offset += 4  # QTYPE + QCLASS
+
+    def parse_rr(offset: int) -> int:
+        nonlocal used_pointer_anywhere
+        offset, used_pointer = parse_name(offset)
+        used_pointer_anywhere |= used_pointer
+
+        rrtype = int.from_bytes(wire[offset : offset + 2], "big")
+        offset += 2  # TYPE
+        offset += 2  # CLASS
+        offset += 4  # TTL
+        rdlength = int.from_bytes(wire[offset : offset + 2], "big")
+        offset += 2  # RDLENGTH
+
+        rdata_start = offset
+        if rrtype == dns.rdatatype.SOA:
+            offset, used_pointer = parse_name(offset)  # MNAME
+            used_pointer_anywhere |= used_pointer
+            offset, used_pointer = parse_name(offset)  # RNAME
+            used_pointer_anywhere |= used_pointer
+            offset += 20  # SERIAL, REFRESH, RETRY, EXPIRE, MINIMUM
+        else:
+            offset += rdlength
+
+        # Defensive: ensure we always advance at least the declared rdata length.
+        if offset < rdata_start + rdlength:
+            offset = rdata_start + rdlength
+
+        return offset
+
+    for _ in range(ancount + nscount + arcount):
+        offset = parse_rr(offset)
+
+    return used_pointer_anywhere
 
 
 def _assert_response_flags(resp: dns.message.Message, *, aa: bool = True):
@@ -142,6 +248,7 @@ def live_server():
       NS   @ → ns1.integration.test.
       SOA  @ (auto-generated via DnsServerZoneUpdater)
       A    www → 192.0.2.1  (RFC 5737 TEST-NET-1)
+      A    leaf.parent → 192.0.2.2  (RFC 5737 TEST-NET-1)
 
     IPs are pre-marked healthy so initialize_zone() populates the zone
     immediately without making real TCP connections.
@@ -153,11 +260,18 @@ def live_server():
         healthy_ips=[AHealthyIp(ip=_SUBDOMAIN_IP, health_port=8080, is_healthy=True)],
     )
 
+    nested_record = AHealthyRecord(
+        subdomain=dns.name.from_text(_NESTED_SUBDOMAIN, origin=zone_origins.primary),
+        healthy_ips=[
+            AHealthyIp(ip=_NESTED_SUBDOMAIN_IP, health_port=8080, is_healthy=True)
+        ],
+    )
+
     config = DnsServerConfig(
         zone_origins=zone_origins,
         primary_name_server=_NS,
         name_servers=frozenset([_NS]),
-        a_records=frozenset([a_record]),
+        a_records=frozenset([a_record, nested_record]),
         ext_private_key=None,
     )
 
@@ -172,8 +286,7 @@ def live_server():
     server.zone = updater.zone
     server.zone_origins = zone_origins
 
-    thread = threading.Thread(target=server.serve_forever)
-    thread.daemon = True
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
 
     # Pause long enough for serve_forever() to enter its select loop.
@@ -184,6 +297,7 @@ def live_server():
 
     server.shutdown()
     thread.join(timeout=5)
+    server.server_close()
 
 
 # ---------------------------------------------------------------------------
@@ -198,6 +312,27 @@ class TestPositiveResponses:
     def test_a_query_returns_noerror_expected_ip_and_empty_authority(self, live_server):
         host, port = live_server
         query = dns.message.make_query(_SUBDOMAIN_FQDN, dns.rdatatype.A)
+        resp = _udp_query(host, port, query)
+
+        assert resp.rcode() == dns.rcode.NOERROR
+        assert resp.id == query.id
+
+        _assert_section_counts(resp, answer=1)
+        assert resp.answer[0].rdtype == dns.rdatatype.A
+        assert any(str(rdata) == _SUBDOMAIN_IP for rdata in resp.answer[0])
+
+        _assert_response_flags(resp)
+
+    @pytest.mark.parametrize(
+        "qname",
+        [
+            _MIXED_CASE_SUBDOMAIN_FQDN,
+            _MIXED_CASE_ALIAS_SUBDOMAIN_FQDN,
+        ],
+    )
+    def test_mixed_case_a_query_returns_noerror_expected_ip(self, live_server, qname):
+        host, port = live_server
+        query = dns.message.make_query(qname, dns.rdatatype.A)
         resp = _udp_query(host, port, query)
 
         assert resp.rcode() == dns.rcode.NOERROR
@@ -281,6 +416,18 @@ class TestNegativeResponses:
                 _ZONE_FQDN,
             ),
             (
+                _SUBDOMAIN_FQDN,
+                _UNKNOWN_NON_META_RDTYPE,
+                dns.rcode.NOERROR,
+                _ZONE_FQDN,
+            ),
+            (
+                _ABSENT_FQDN,
+                _UNKNOWN_NON_META_RDTYPE,
+                dns.rcode.NXDOMAIN,
+                _ZONE_FQDN,
+            ),
+            (
                 _ALIAS_ABSENT_FQDN,
                 dns.rdatatype.A,
                 dns.rcode.NXDOMAIN,
@@ -292,12 +439,42 @@ class TestNegativeResponses:
                 dns.rcode.NOERROR,
                 _ALIAS_ZONE_FQDN,
             ),
+            (
+                _ALIAS_SUBDOMAIN_FQDN,
+                _UNKNOWN_NON_META_RDTYPE,
+                dns.rcode.NOERROR,
+                _ALIAS_ZONE_FQDN,
+            ),
+            (
+                _ALIAS_ABSENT_FQDN,
+                _UNKNOWN_NON_META_RDTYPE,
+                dns.rcode.NXDOMAIN,
+                _ALIAS_ZONE_FQDN,
+            ),
+            (
+                _EMPTY_NON_TERMINAL_FQDN,
+                dns.rdatatype.A,
+                dns.rcode.NOERROR,
+                _ZONE_FQDN,
+            ),
+            (
+                _ALIAS_EMPTY_NON_TERMINAL_FQDN,
+                dns.rdatatype.A,
+                dns.rcode.NOERROR,
+                _ALIAS_ZONE_FQDN,
+            ),
         ],
         ids=[
             "nxdomain-absent-owner",
             "nodata-absent-type",
+            "nodata-unknown-type",
+            "nxdomain-absent-owner-unknown-type",
             "alias-nxdomain-absent-owner",
             "alias-nodata-absent-type",
+            "alias-nodata-unknown-type",
+            "alias-nxdomain-absent-owner-unknown-type",
+            "empty-non-terminal-nodata",
+            "alias-empty-non-terminal-nodata",
         ],
     )
     def test_negative_response_has_soa_authority(
@@ -313,6 +490,59 @@ class TestNegativeResponses:
         _assert_section_counts(resp, authority=1)
         assert resp.authority[0].rdtype == dns.rdatatype.SOA
         assert resp.authority[0].name == dns.name.from_text(expected_soa_name)
+        soa_rdata = next(iter(resp.authority[0]))
+        assert resp.authority[0].ttl == soa_rdata.minimum
+
+        _assert_response_flags(resp)
+
+    @pytest.mark.parametrize(
+        "qname,rdtype,expected_rcode,expected_soa_name",
+        [
+            (
+                _MIXED_CASE_ABSENT_FQDN,
+                dns.rdatatype.A,
+                dns.rcode.NXDOMAIN,
+                _ZONE_FQDN,
+            ),
+            (
+                _MIXED_CASE_SUBDOMAIN_FQDN,
+                dns.rdatatype.AAAA,
+                dns.rcode.NOERROR,
+                _ZONE_FQDN,
+            ),
+            (
+                _MIXED_CASE_ALIAS_ABSENT_FQDN,
+                dns.rdatatype.A,
+                dns.rcode.NXDOMAIN,
+                _ALIAS_ZONE_FQDN,
+            ),
+            (
+                _MIXED_CASE_ALIAS_SUBDOMAIN_FQDN,
+                dns.rdatatype.AAAA,
+                dns.rcode.NOERROR,
+                _ALIAS_ZONE_FQDN,
+            ),
+        ],
+        ids=[
+            "mixed-case-nxdomain-absent-owner",
+            "mixed-case-nodata-absent-type",
+            "mixed-case-alias-nxdomain-absent-owner",
+            "mixed-case-alias-nodata-absent-type",
+        ],
+    )
+    def test_mixed_case_negative_response_has_soa_authority(
+        self, live_server, qname, rdtype, expected_rcode, expected_soa_name
+    ):
+        host, port = live_server
+        query = dns.message.make_query(qname, rdtype)
+        resp = _udp_query(host, port, query)
+
+        assert resp.rcode() == expected_rcode
+        assert resp.id == query.id
+
+        _assert_section_counts(resp, authority=1)
+        assert resp.authority[0].rdtype == dns.rdatatype.SOA
+        assert resp.authority[0].name.to_text().lower() == expected_soa_name.lower()
         soa_rdata = next(iter(resp.authority[0]))
         assert resp.authority[0].ttl == soa_rdata.minimum
 
@@ -336,15 +566,20 @@ class TestRejectedQueries:
                 dns.rcode.REFUSED,
             ),
             (
+                dns.message.make_query(_MIXED_CASE_OUT_OF_ZONE_FQDN, dns.rdatatype.A),
+                dns.rcode.REFUSED,
+            ),
+            (
                 dns.message.make_query(
                     _SUBDOMAIN_FQDN, dns.rdatatype.A, rdclass=dns.rdataclass.CH
                 ),
                 dns.rcode.REFUSED,
             ),
-            # dns.message.Message() with no questions produces QDCOUNT=0; handler returns FORMERR per Level 1 policy.
+            # dns.message.Message() with no questions produces QDCOUNT=0;
+            # handler returns FORMERR per Level 1 policy.
             (dns.message.Message(), dns.rcode.FORMERR),
         ],
-        ids=["out-of-zone", "non-in-class", "zero-question"],
+        ids=["out-of-zone", "mixed-case-out-of-zone", "non-in-class", "zero-question"],
     )
     def test_rejected_query_returns_expected_rcode(
         self, live_server, query, expected_rcode
@@ -374,10 +609,16 @@ class TestRejectedQueries:
         _assert_section_counts(resp)
         _assert_response_flags(resp, aa=False)
 
-    def test_status_opcode_returns_notimp(self, live_server):
+    @pytest.mark.parametrize(
+        "opcode",
+        [
+            dns.opcode.STATUS,
+            15,
+        ],
+    )
+    def test_unsupported_opcode_returns_notimp(self, live_server, opcode):
         host, port = live_server
-        query = dns.message.make_query(_SUBDOMAIN_FQDN, dns.rdatatype.A)
-        query.set_opcode(dns.opcode.STATUS)
+        query = _make_opcode_query(opcode)
         resp = _udp_query(host, port, query)
 
         assert resp.rcode() == dns.rcode.NOTIMP
@@ -405,3 +646,47 @@ class TestMalformedWireInput:
 
         _assert_section_counts(resp)
         _assert_response_flags(resp, aa=False)
+
+
+# ---------------------------------------------------------------------------
+# Response wire encoding — RFC 1123
+# ---------------------------------------------------------------------------
+
+
+class TestResponseWireEncoding:
+    def test_response_wire_uses_name_compression(self, live_server):
+        host, port = live_server
+        query = dns.message.make_query(_ZONE_FQDN, dns.rdatatype.SOA)
+        wire = _udp_query_wire(host, port, query)
+
+        resp = dns.message.from_wire(wire)
+        assert resp.rcode() == dns.rcode.NOERROR
+        assert resp.id == query.id
+
+        assert _scan_wire_for_compressed_names(wire)
+
+    @pytest.mark.parametrize(
+        "query_factory",
+        [
+            lambda: dns.message.make_query(_ZONE_FQDN, dns.rdatatype.SOA),
+            _make_status_query,
+        ],
+        ids=["noerror-soa", "notimp-status"],
+    )
+    def test_response_wire_header_bits_are_clear(self, live_server, query_factory):
+        host, port = live_server
+        query = query_factory()
+        query.flags |= dns.flags.AD | dns.flags.CD | _RESERVED_HEADER_FLAG
+        wire = _udp_query_wire(host, port, query)
+
+        assert query.flags & dns.flags.AD
+        assert query.flags & dns.flags.CD
+        assert query.flags & _RESERVED_HEADER_FLAG
+
+        flags = int.from_bytes(wire[2:4], "big")
+        assert flags & dns.flags.QR
+        assert (flags & dns.flags.RD) == (query.flags & dns.flags.RD)
+        assert not (flags & dns.flags.RA)
+        assert not (flags & dns.flags.AD)
+        assert not (flags & dns.flags.CD)
+        assert not (flags & _RESERVED_HEADER_FLAG)

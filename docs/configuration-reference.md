@@ -44,7 +44,8 @@ The domain name for which this server is authoritative.
 |---|
 | `--zone-resolutions` |
 
-JSON object mapping subdomain names to their IP list and optional health check port.
+JSON object mapping each subdomain to one of the two supported record modes:
+health-checked or standard static.
 
 There are two first-class record modes for each subdomain entry:
 
@@ -53,7 +54,7 @@ There are two first-class record modes for each subdomain entry:
 {
   "<subdomain>": {
     "ips": ["<ip1>", "<ip2>"],
-    "health_port": <port>
+    "health_port": 8080
   }
 }
 ```
@@ -87,6 +88,7 @@ Both modes can be mixed in the same configuration.
 - `health_port` is the TCP port used for health checks. It is required when using the dict format.
 - All IPs for a subdomain share the same health port.
 - Standard static entries are not TCP health-checked and remain publishable without a health probe.
+- Use the bare-list format for standard static entries; a dict with `health_port: null` is invalid.
 
 ### Name servers
 
@@ -152,6 +154,8 @@ Use an in-zone nameserver hostname only when that owner name is also a real serv
 
 UDP port the DNS server listens on.
 
+The CLI parser accepts an integer. Listener-port bind validity and availability are enforced by `socketserver.UDPServer`; bind failures stop startup before the DNS server listens.
+
 > **Note:** `--port` controls the UDP listener inside the process. Docker host-port publishing, privileged bind handling, and hardening are deployment concerns owned by [`docs/docker.md`](docker.md).
 
 ### Log level
@@ -160,7 +164,7 @@ UDP port the DNS server listens on.
 |---|---|
 | `--log-level` | `info` |
 
-Log verbosity. Accepted values: `debug`, `info`, `warning`, `error`, `critical`. The CLI parser currently expects these lowercase tokens.
+Log verbosity. Accepted values are lowercase: `debug`, `info`, `warning`, `error`, `critical`.
 
 ### Minimum update interval
 
@@ -169,6 +173,8 @@ Log verbosity. Accepted values: `debug`, `info`, `warning`, `error`, `critical`.
 | `--test-min-interval` | `30` |
 
 Minimum seconds between consecutive zone update cycles. Entries with `health_port` are TCP health-checked during these cycles; standard static entries remain publishable without a TCP probe.
+
+Must be a positive integer. Invalid values fail during updater initialization, before the DNS server starts listening.
 
 The effective interval is `max(test-min-interval, sum of per-health-checked-IP timeout × count + per-record overhead)`. See [docs/architecture.md § 6](architecture.md#6-interval-calculation-pattern) for the full formula.
 
@@ -179,6 +185,8 @@ The effective interval is `max(test-min-interval, sum of per-health-checked-IP t
 | `--test-timeout` | `2` |
 
 Maximum seconds to wait for a TCP connection during a health check. If the connection does not succeed within this time the IP is considered unhealthy.
+
+Must be a positive integer. Invalid values fail during updater initialization, before the DNS server starts listening.
 
 ### Alias zones
 

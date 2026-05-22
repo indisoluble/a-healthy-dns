@@ -1,111 +1,81 @@
 #!/usr/bin/env python3
 
-import dns.dnssec
 import dns.name
 import dns.rdataclass
 import dns.rdataset
 import dns.rdatatype
 import dns.transaction
 import dns.versioned
-import dns.zone
 import pytest
 
-from dns.dnssecalgs.rsa import PrivateRSASHA256
+_ORIGIN = dns.name.from_text("example.com.")
+_TTL = 60
+
+
+def _absolute_name(label):
+    return dns.name.from_text(label, origin=_ORIGIN)
+
+
+def _a_rdataset(ip):
+    return dns.rdataset.from_text(dns.rdataclass.IN, dns.rdatatype.A, _TTL, ip)
 
 
 @pytest.fixture
-def dns_origin():
-    return dns.name.from_text("example.com.")
+def dns_versioned_zone():
+    return dns.versioned.Zone(_ORIGIN, dns.rdataclass.IN)
 
 
-@pytest.fixture
-def dns_versioned_zone(dns_origin):
-    return dns.versioned.Zone(dns_origin, dns.rdataclass.IN)
+class TestDnspythonVersionedZoneTransactions:
+    def test_writer_context_commits_changes_on_exit(self, dns_versioned_zone):
+        subdomain = _absolute_name("test")
+        a_rdataset = _a_rdataset("192.168.1.1")
 
+        with dns_versioned_zone.writer() as txn:
+            assert txn.changed() is False
 
-@pytest.fixture
-def dns_soa_record():
-    ttl = 3600
-    admin_info = (
-        "ns1.example.com. hostmaster.example.com 20250701 7200 3600 1209600 3600"
-    )
-    return dns.rdataset.from_text(dns.rdataclass.IN, dns.rdatatype.SOA, ttl, admin_info)
+            txn.add(subdomain, a_rdataset)
 
+            assert txn.changed() is True
+            assert txn.get(subdomain, dns.rdatatype.A) is not None
 
-@pytest.fixture
-def dns_key():
-    priv_key = PrivateRSASHA256.generate(key_size=2048)
-    dnskey = dns.dnssec.make_dnskey(priv_key.public_key(), dns.dnssec.RSASHA256)
+        with dns_versioned_zone.reader() as txn:
+            assert txn.get(subdomain, dns.rdatatype.A) is not None
 
-    return (priv_key, dnskey)
+    def test_transaction_cannot_be_used_after_explicit_commit(self, dns_versioned_zone):
+        subdomain = _absolute_name("www")
+        a_rdataset = _a_rdataset("192.168.1.1")
 
+        with dns_versioned_zone.writer() as txn:
+            assert txn.changed() is False
+            txn.add(subdomain, a_rdataset)
+            assert txn.changed() is True
 
-def test_transaction_write_without_commit(dns_origin, dns_versioned_zone):
-    subdomain = dns.name.from_text("test", origin=dns_origin)
-    a_rec = dns.rdataset.from_text(
-        dns.rdataclass.IN, dns.rdatatype.A, 60, "192.168.1.1"
-    )
+            txn.commit()
 
-    with dns_versioned_zone.writer() as txn:
-        assert txn.changed() is False
-        txn.add(subdomain, a_rec)
-        assert txn.changed() is True
+            with pytest.raises(dns.transaction.AlreadyEnded):
+                txn.changed()
 
-        assert txn.get(subdomain, dns.rdatatype.A) is not None
+    def test_replace_marks_transaction_changed_even_for_identical_rdataset(
+        self, dns_versioned_zone
+    ):
+        www_name = _absolute_name("www")
+        api_name = _absolute_name("api")
+        www_rdataset = _a_rdataset("192.168.1.1")
+        api_rdataset = _a_rdataset("192.168.1.2")
+        changed_api_rdataset = _a_rdataset("192.168.1.3")
 
-    with dns_versioned_zone.reader() as txn:
-        assert txn.get(subdomain, dns.rdatatype.A) is not None
+        with dns_versioned_zone.writer() as txn:
+            txn.add(www_name, www_rdataset)
+            txn.add(api_name, api_rdataset)
 
+        with dns_versioned_zone.writer() as txn:
+            assert txn.changed() is False
 
-def test_transaction_use_after_commit(dns_origin, dns_versioned_zone):
-    subdomain = dns.name.from_text("www", origin=dns_origin)
-    a_rec = dns.rdataset.from_text(
-        dns.rdataclass.IN, dns.rdatatype.A, 60, "192.168.1.1"
-    )
+            txn.replace(www_name, _a_rdataset("192.168.1.1"))
+            assert txn.changed() is True
 
-    with dns_versioned_zone.writer() as txn:
-        assert txn.changed() is False
-        txn.add(subdomain, a_rec)
-        assert txn.changed() is True
+            txn.replace(api_name, _a_rdataset("192.168.1.2"))
+            assert txn.changed() is True
 
-        txn.commit()
-
-        with pytest.raises(dns.transaction.AlreadyEnded):
-            txn.changed()
-
-
-def test_transaction_replace_identical_record(dns_origin, dns_versioned_zone):
-    subdomain1_name = "www"
-    ip1 = "192.168.1.1"
-    ip2 = "192.168.1.2"
-    ttl_a = 60
-
-    subdomain1 = dns.name.from_text(subdomain1_name, origin=dns_origin)
-    a_rec1 = dns.rdataset.from_text(dns.rdataclass.IN, dns.rdatatype.A, ttl_a, ip1)
-
-    same_subdomain1 = dns.name.from_text(subdomain1_name, origin=dns_origin)
-    same_a_rec1 = dns.rdataset.from_text(dns.rdataclass.IN, dns.rdatatype.A, ttl_a, ip1)
-
-    subdomain2 = dns.name.from_text("api", origin=dns_origin)
-    a_rec2 = dns.rdataset.from_text(dns.rdataclass.IN, dns.rdatatype.A, ttl_a, ip2)
-
-    same_a_rec2 = dns.rdataset.from_text(dns.rdataclass.IN, dns.rdatatype.A, ttl_a, ip2)
-    different_a_rec2 = dns.rdataset.from_text(
-        dns.rdataclass.IN, dns.rdatatype.A, ttl_a, "192.168.1.3"
-    )
-
-    with dns_versioned_zone.writer() as txn:
-        txn.add(subdomain1, a_rec1)
-        txn.add(subdomain2, a_rec2)
-
-    with dns_versioned_zone.writer() as txn:
-        assert txn.changed() is False
-
-        txn.replace(same_subdomain1, same_a_rec1)
-        assert txn.changed() is True
-
-        txn.replace(subdomain2, same_a_rec2)
-        assert txn.changed() is True
-
-        txn.replace(subdomain2, different_a_rec2)
-        assert txn.changed() is True
+            txn.replace(api_name, changed_api_rdataset)
+            assert txn.changed() is True

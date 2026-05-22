@@ -41,6 +41,7 @@ _GRP_DNSSEC_PARAMS = "dns security extensions (DNSSEC) arguments"
 _GRP_GENERAL = "general arguments"
 _GRP_NS_RECORDS = "name server (NS) arguments"
 _GRP_ZONE_RESOLUTIONS = "zone resolution arguments"
+_LOG_LEVEL_NAMES = ("debug", "info", "warning", "error", "critical")
 _NAME_ALIAS_ZONES = "alias-zones"
 _NAME_HOSTED_ZONE = "hosted-zone"
 _NAME_LOG_LEVEL = "log-level"
@@ -56,7 +57,7 @@ _VAL_CONNECTION_TIMEOUT = 2
 _VAL_DNSSEC_ALGORITHM = dns.dnssec.algorithm_to_text(
     dns.dnssectypes.Algorithm.RSASHA256
 )
-_VAL_LOG_LEVEL = logging._levelToName[logging.INFO].lower()
+_VAL_LOG_LEVEL = "info"
 _VAL_MIN_TEST_INTERVAL = 30
 _VAL_PORT = 53053
 
@@ -75,7 +76,8 @@ Argument details
 {len(_GRP_ZONE_RESOLUTIONS) * '-'}
 --{_NAME_HOSTED_ZONE}: The domain name for which this DNS server is authoritative.
 --{_NAME_ALIAS_ZONES}: Additional domain names that resolve to the same records.
---{_NAME_ZONE_RESOLUTIONS}: JSON configuration defining subdomains, their IP addresses, and optional health check ports.
+--{_NAME_ZONE_RESOLUTIONS}: JSON configuration defining each subdomain as either
+  a static IP list or a health-checked IP list with health_port.
 
 Examples:
     --{_NAME_HOSTED_ZONE} example.com
@@ -126,9 +128,7 @@ Example usage
     general_group.add_argument(
         f"--{_NAME_LOG_LEVEL}",
         type=str,
-        choices=[
-            name.lower() for name in logging._levelToName.values() if name != "NOTSET"
-        ],
+        choices=_LOG_LEVEL_NAMES,
         default=_VAL_LOG_LEVEL,
         dest=_ARG_LOG_LEVEL,
         help=f"Logging level (default: {_VAL_LOG_LEVEL})",
@@ -157,9 +157,9 @@ Example usage
         required=True,
         dest=ARG_ZONE_RESOLUTIONS,
         help=(
-            f"Subdomains with IPs and optional health ports as JSON string "
-            f"(ex. {{sd1: {{'{ARG_SUBDOMAIN_IP_LIST}': [ip1, ip2, ...], "
-            f"'{ARG_SUBDOMAIN_HEALTH_PORT}': port}}, sd2: [ip3, ...]}})"
+            f"Subdomain A records as JSON string "
+            f'(ex. {{"www": {{"{ARG_SUBDOMAIN_IP_LIST}": ["192.0.2.10"], '
+            f'"{ARG_SUBDOMAIN_HEALTH_PORT}": 8080}}, "static": ["192.0.2.20"]}})'
         ),
     )
     conn_group = parser.add_argument_group(_GRP_CONNECTIVITY_TESTS)

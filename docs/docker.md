@@ -17,7 +17,7 @@ Commands below use `docker compose` syntax. If you use the legacy standalone bin
 
 ## 1. Runtime contract
 
-The published image and the repository `Dockerfile` expose a few operator-visible behaviors that deployment configs should preserve.
+Supported deployment configurations preserve these operator-visible image and `Dockerfile` behaviors.
 
 | Aspect | Runtime behavior |
 |---|---|
@@ -258,14 +258,13 @@ For production deployments, pin a specific image tag instead of `latest`.
 
 ```bash
 docker pull indisoluble/a-healthy-dns:<version>
-docker run -d ... indisoluble/a-healthy-dns:<version>
 ```
 
 Use `latest` only for development or when you explicitly want the newest published image without pinning.
 
 When upgrading:
 1. pull the target image tag,
-2. recreate the container or Compose stack,
+2. recreate the container or Compose stack with the same runtime arguments and the pinned image tag,
 3. run the same DNS query checks you use for post-deploy verification.
 
 ---
@@ -294,7 +293,7 @@ If you deploy through Kubernetes, Swarm, Nomad, or another orchestrator, preserv
 
 For Amazon ECS external instances, use the `EXTERNAL` launch type. External instances do not support `awsvpc` networking, ECS service load balancing, or ECS service discovery, so authoritative DNS traffic must reach the VM directly. Publish the external VM addresses in your DNS delegation and allow inbound UDP `53` through the VM firewall and any upstream network firewall.
 
-Use `bridge` networking when you want Docker bridge isolation or want to publish VM UDP port `53` to a non-privileged container port. Use `host` networking when the task should answer directly on the VM's UDP port `53`. Host networking keeps DNS port ownership explicit: only one task per VM can bind host port `53`.
+Use `bridge` networking when you want Docker bridge isolation or need to publish VM UDP port `53` to a non-privileged container port. Use `host` networking when the task must answer directly on the VM's UDP port `53`. Host networking keeps DNS port ownership explicit: only one task per VM can bind host port `53`.
 
 Task definition shape for bridge networking:
 

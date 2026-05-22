@@ -72,7 +72,7 @@ Layer 3 – Records
   records/zone_origins.py               (primary + alias zone set)
   records/time.py                       (TTL and signature timing calculations)
 
-Layer 4 – Tools (pure utilities, no DNS dependencies)
+Layer 4 – Tools (low-level utilities, no DNS protocol dependencies)
   tools/can_create_connection.py        (TCP health check)
   tools/is_valid_ip.py
   tools/is_valid_port.py
@@ -85,9 +85,9 @@ Layer 4 – Tools (pure utilities, no DNS dependencies)
 
 ---
 
-## 3. Configuration as a validated NamedTuple
+## 3. DNS configuration as a validated NamedTuple
 
-All validated runtime configuration is assembled once at startup by `dns_server_config_factory.make_config()` and expressed as an immutable `DnsServerConfig` `NamedTuple`.
+Validated DNS zone configuration is assembled once at startup by `dns_server_config_factory.make_config()` and expressed as an immutable `DnsServerConfig` `NamedTuple`.
 
 ```python
 # dns_server_config_factory.py
@@ -99,11 +99,13 @@ class DnsServerConfig(NamedTuple):
     ext_private_key: Optional[ExtendedPrivateKey]
 ```
 
-The factory validates every field (zone names, IP addresses, optional ports, DNSSEC algorithm) before constructing the config. If any field is invalid the factory logs the error and returns `None`; `main()` exits with a non-zero status without starting a server.
+The factory validates every DNS configuration field (zone names, IP addresses, optional health-check ports, and DNSSEC algorithm) before constructing the config. If any field is invalid the factory logs the error and returns `None`; `main()` exits with a non-zero status without starting a server.
+
+Operational process arguments that are not part of DNS zone state stay outside `DnsServerConfig`: listener port, log level, minimum update interval, and health-check timeout. The argument parser validates syntax and choices, the updater constructors validate positive timing values at the component boundary, and `socketserver.UDPServer` owns listener-port bind validity and availability.
 
 The NS RRset is stored as a set because DNS RRset ordering is not meaningful. The SOA primary nameserver is stored separately as `primary_name_server`, derived from the first configured nameserver so SOA generation remains deterministic.
 
-**Convention:** all new configuration fields must be added to `DnsServerConfig` and validated inside `dns_server_config_factory.py`. No ad-hoc parsing elsewhere.
+**Convention:** new DNS zone, record, alias, nameserver, or DNSSEC configuration fields must be added to `DnsServerConfig` and validated inside `dns_server_config_factory.py`. Operational process arguments remain in `main.py` unless they become shared domain configuration.
 
 ---
 
@@ -209,7 +211,7 @@ This tree lists tracked, project-owned files and directories. Local generated ar
 indisoluble/              # regular Python package; package root for this repository's code
 └── a_healthy_dns/        # application package root; all source modules live here
     ├── records/          # DNS record construction and domain value objects (Layer 3)
-    ├── tools/            # pure utility functions with no DNS-specific dependencies (Layer 4)
+    ├── tools/            # low-level utilities with no DNS protocol dependencies (Layer 4)
     ├── dns_server_*.py   # server orchestration modules (Layers 1–2)
     └── main.py           # entry-point (Layer 0)
 ```
@@ -233,7 +235,7 @@ Groups all files responsible for constructing or assembling DNS resource records
 
 ### 7.4 Subpackage: `tools/`
 
-Groups stateless, pure utility functions that have **no DNS-specific knowledge** and no dependencies above Layer 4.
+Groups low-level utility functions that have **no DNS protocol knowledge** and no dependencies above Layer 4. Most helpers are pure validators or converters; the deliberate exception is the raw TCP connectivity probe used by the health-check loop.
 
 | File pattern | Belongs here if… |
 |---|---|

@@ -79,6 +79,16 @@ def _build_answer(
     return [rrset]
 
 
+def _is_empty_non_terminal(query_name: dns.name.Name, txn: dns.zone.Transaction) -> bool:
+    """Return True when *query_name* exists only via descendants (empty non-terminal).
+
+    See `docs/RFC-conformance.md#3-level-1-protocol-target` for the
+    empty non-terminal response contract (RFC 4592 / RFC 8020).
+    """
+
+    return any(name.is_subdomain(query_name) for name in txn.iterate_names())
+
+
 def _make_formerr_response_from_header(data: bytes) -> dns.message.Message:
     request_flags = int.from_bytes(data[2:4], "big")
     formerr = dns.message.Message(id=int.from_bytes(data[:2], "big"))
@@ -153,17 +163,29 @@ def _update_response(
                 )
                 authority = _build_authority_with_apex_soa(origin_name, txn)
         else:
-            logging.info(
-                "%s DNS owner name is not present in the active zone; returning NXDOMAIN: source=%s:%d id=%d qname=%s qtype=%s",
-                _DNS_TRAFFIC_NORMAL,
-                source_host,
-                source_port,
-                query_id,
-                query_name,
-                dns.rdatatype.to_text(query_type),
-            )
-            rcode = dns.rcode.NXDOMAIN
-            authority = _build_authority_with_apex_soa(origin_name, txn)
+            if _is_empty_non_terminal(relative_name, txn):
+                logging.info(
+                    "%s DNS owner name is an empty non-terminal in the active zone; returning NODATA: source=%s:%d id=%d qname=%s qtype=%s",
+                    _DNS_TRAFFIC_NORMAL,
+                    source_host,
+                    source_port,
+                    query_id,
+                    query_name,
+                    dns.rdatatype.to_text(query_type),
+                )
+                authority = _build_authority_with_apex_soa(origin_name, txn)
+            else:
+                logging.info(
+                    "%s DNS owner name is not present in the active zone; returning NXDOMAIN: source=%s:%d id=%d qname=%s qtype=%s",
+                    _DNS_TRAFFIC_NORMAL,
+                    source_host,
+                    source_port,
+                    query_id,
+                    query_name,
+                    dns.rdatatype.to_text(query_type),
+                )
+                rcode = dns.rcode.NXDOMAIN
+                authority = _build_authority_with_apex_soa(origin_name, txn)
 
     response.set_rcode(rcode)
     response.authority.extend(authority)

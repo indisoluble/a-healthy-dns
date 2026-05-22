@@ -2,9 +2,9 @@ from setuptools import setup, find_packages
 
 setup(
     name="a_healthy_dns",
-    version="0.1.45",
+    version="0.1.46",
     description="A healthy DNS project",
-    packages=find_packages(),
+    packages=find_packages(include=["indisoluble", "indisoluble.*"]),
     python_requires=">=3.10",
     install_requires=["cryptography>=46.0.5,<47.0.0", "dnspython>=2.8.0,<3.0.0"],
     entry_points={

@@ -4,175 +4,200 @@ import pytest
 
 from indisoluble.a_healthy_dns.records.a_healthy_ip import AHealthyIp
 
-
-def test_valid_initialization():
-    ip = AHealthyIp("192.168.1.1", 8080, True)
-    assert ip.ip == "192.168.1.1"
-    assert ip.health_port == 8080
-    assert ip.is_healthy is True
+_IP = "192.168.1.1"
+_NON_NORMALIZED_IP = "192.168.001.001"
+_HEALTH_PORT = 8080
+_OTHER_HEALTH_PORT = 9090
 
 
-@pytest.mark.parametrize(
-    "non_normalized_ip, expected_ip",
-    [("192.168.001.001", "192.168.1.1"), ("192.000.1.1", "192.0.1.1")],
-)
-def test_ip_normalization(non_normalized_ip, expected_ip):
-    ip = AHealthyIp(non_normalized_ip, 8080, True)
-    assert ip.ip == expected_ip
+def _make_ip(ip=_IP, health_port=_HEALTH_PORT, is_healthy=True):
+    return AHealthyIp(ip, health_port, is_healthy)
 
 
-@pytest.mark.parametrize(
-    "invalid_ip",
-    [
-        None,
-        123,
-        1.5,
-        [],
-        {},
-        "256.0.0.1",  # octet > 255
-        "192.168.1",  # not enough octets
-        "192.168.1.256",  # octet > 255
-        "192.168.1.a",  # non-digit octet
-        "192.168.1.1.5",  # too many octets
-    ],
-)
-def test_invalid_ip(invalid_ip):
-    with pytest.raises(ValueError):
-        AHealthyIp(invalid_ip, 8080, True)
+def _assert_ip_state(healthy_ip, *, ip=_IP, health_port=_HEALTH_PORT, is_healthy=True):
+    assert healthy_ip.ip == ip
+    assert healthy_ip.health_port == health_port
+    assert healthy_ip.is_healthy is is_healthy
 
 
-@pytest.mark.parametrize(
-    "invalid_port",
-    [
-        "8080",
-        1.5,
-        [],
-        {},
-        0,  # below range
-        65536,  # above range
-        -1,  # negative
-    ],
-)
-def test_invalid_port(invalid_port):
-    with pytest.raises(ValueError):
-        AHealthyIp("192.168.1.1", invalid_port, True)
+class TestAHealthyIpInitialization:
+    @pytest.mark.parametrize(
+        "health_port,is_healthy",
+        [
+            (_HEALTH_PORT, True),
+            (None, False),
+        ],
+    )
+    def test_valid_initialization(self, health_port, is_healthy):
+        healthy_ip = _make_ip(health_port=health_port, is_healthy=is_healthy)
+
+        _assert_ip_state(
+            healthy_ip,
+            health_port=health_port,
+            is_healthy=is_healthy,
+        )
+
+    @pytest.mark.parametrize(
+        "non_normalized_ip,expected_ip",
+        [
+            ("192.168.001.001", "192.168.1.1"),
+            ("192.000.1.1", "192.0.1.1"),
+        ],
+    )
+    def test_normalizes_ip_address(self, non_normalized_ip, expected_ip):
+        healthy_ip = _make_ip(ip=non_normalized_ip)
+
+        assert healthy_ip.ip == expected_ip
 
 
-def test_none_health_port_is_valid():
-    ip = AHealthyIp("192.168.1.1", None, False)
-    assert ip.health_port is None
-    assert ip.is_healthy is False
+class TestAHealthyIpValidation:
+    @pytest.mark.parametrize(
+        "invalid_ip",
+        [
+            None,
+            123,
+            1.5,
+            [],
+            {},
+            "256.0.0.1",
+            "192.168.1",
+            "192.168.1.256",
+            "192.168.1.a",
+            "192.168.1.1.5",
+        ],
+    )
+    def test_rejects_invalid_ip(self, invalid_ip):
+        with pytest.raises(ValueError):
+            _make_ip(ip=invalid_ip)
+
+    @pytest.mark.parametrize(
+        "invalid_port",
+        [
+            "8080",
+            1.5,
+            [],
+            {},
+            0,
+            65536,
+            -1,
+        ],
+    )
+    def test_rejects_invalid_health_port(self, invalid_port):
+        with pytest.raises(ValueError):
+            _make_ip(health_port=invalid_port)
 
 
-def test_none_health_port_equality():
-    ip1 = AHealthyIp("192.168.1.1", None, True)
-    ip2 = AHealthyIp("192.168.1.1", None, True)
-    ip3 = AHealthyIp("192.168.1.1", 8080, True)
+class TestAHealthyIpEqualityAndHashing:
+    def test_equal_when_all_value_fields_match_after_normalization(self):
+        healthy_ip = _make_ip()
 
-    assert ip1 == ip2
-    assert ip1 != ip3
+        assert healthy_ip == _make_ip()
+        assert healthy_ip == _make_ip(ip=_NON_NORMALIZED_IP)
 
+    @pytest.mark.parametrize(
+        "other",
+        [
+            AHealthyIp(_IP, _HEALTH_PORT, False),
+            AHealthyIp("192.168.1.2", _HEALTH_PORT, True),
+            AHealthyIp(_IP, _OTHER_HEALTH_PORT, True),
+            "not an AHealthyIp object",
+        ],
+    )
+    def test_not_equal_when_value_field_differs(self, other):
+        assert _make_ip() != other
 
-def test_none_health_port_repr():
-    ip = AHealthyIp("192.168.1.1", None, True)
-    assert repr(ip) == "AHealthyIp(ip='192.168.1.1', health_port=None, is_healthy=True)"
+    def test_none_health_port_participates_in_equality(self):
+        assert _make_ip(health_port=None) == _make_ip(health_port=None)
+        assert _make_ip(health_port=None) != _make_ip()
 
+    def test_hash_matches_equality_contract(self):
+        healthy_ip = _make_ip()
+        equivalent_ip = _make_ip()
+        equivalent_normalized_ip = _make_ip(ip="192.168.01.001")
+        unhealthy_ip = _make_ip(is_healthy=False)
+        different_ip = _make_ip(ip="192.168.1.2")
+        different_port = _make_ip(health_port=_OTHER_HEALTH_PORT)
 
-def test_none_health_port_status_can_be_updated():
-    ip = AHealthyIp("192.168.1.1", None, True)
-    updated_ip = ip.updated_status(False)
+        ip_dict = {healthy_ip: "server1"}
 
-    assert updated_ip is not ip
-    assert updated_ip.health_port is None
-    assert updated_ip.is_healthy is False
+        assert ip_dict[equivalent_ip] == "server1"
+        assert ip_dict[equivalent_normalized_ip] == "server1"
+        assert unhealthy_ip not in ip_dict
+        assert different_ip not in ip_dict
+        assert different_port not in ip_dict
 
-
-def test_equality():
-    ip1 = AHealthyIp("192.168.1.1", 8080, True)
-
-    ip2 = AHealthyIp("192.168.1.1", 8080, True)
-    assert ip1 == ip2
-
-    ip3 = AHealthyIp("192.168.001.01", 8080, True)
-    assert ip1 == ip3
-
-    ip4 = AHealthyIp("192.168.1.1", 8080, False)
-    assert ip1 != ip4
-
-    ip5 = AHealthyIp("192.168.1.2", 8080, True)
-    assert ip1 != ip5
-
-    ip6 = AHealthyIp("192.168.1.1", 9090, True)
-    assert ip1 != ip6
-
-    assert ip1 != "not a AHealthyIp object"
-
-
-def test_hash():
-    ip1 = AHealthyIp("192.168.1.1", 8080, True)
-    ip2 = AHealthyIp("192.168.1.1", 8080, True)
-    ip3 = AHealthyIp("192.168.01.001", 8080, True)
-    ip4 = AHealthyIp("192.168.1.1", 8080, False)
-    ip5 = AHealthyIp("192.168.1.2", 8080, True)
-    ip6 = AHealthyIp("192.168.1.1", 8080, True)
-    ip7 = AHealthyIp("192.168.1.1", 9090, True)
-
-    ip_dict = {ip1: "server1"}
-
-    assert ip_dict[ip1] == "server1"
-    assert ip_dict[ip2] == "server1"
-    assert ip_dict[ip3] == "server1"
-
-    with pytest.raises(KeyError):
-        _ = ip_dict[ip4]
-        _ = ip_dict[ip5]
-        _ = ip_dict[ip6]
-        _ = ip_dict[ip7]
-
-    assert {ip1, ip2, ip3} == {ip1}
-    assert {ip1, ip5, ip2, ip4, ip3} == {ip1, ip4, ip5}
+        assert {healthy_ip, equivalent_ip, equivalent_normalized_ip} == {healthy_ip}
+        assert {
+            healthy_ip,
+            equivalent_ip,
+            equivalent_normalized_ip,
+            unhealthy_ip,
+            different_ip,
+        } == {healthy_ip, unhealthy_ip, different_ip}
 
 
-def test_updated_status():
-    ip1 = AHealthyIp("192.168.1.1", 8080, True)
+class TestAHealthyIpStatusUpdates:
+    def test_updated_status_returns_same_instance_when_status_is_unchanged(self):
+        healthy_ip = _make_ip(is_healthy=True)
 
-    # Test when status doesn't change
-    ip2 = ip1.updated_status(True)
-    # Should be the same instance
-    assert ip2 is ip1
+        assert healthy_ip.updated_status(True) is healthy_ip
 
-    # Test when status changes
-    ip3 = ip1.updated_status(False)
-    assert ip3 is not ip1
-    assert ip3.ip == ip1.ip
-    assert ip3.health_port == ip1.health_port
-    assert ip3.is_healthy is False
-    assert ip1.is_healthy is True
+    def test_updated_status_returns_new_instance_when_status_changes(self):
+        healthy_ip = _make_ip(is_healthy=True)
+
+        updated_ip = healthy_ip.updated_status(False)
+
+        assert updated_ip is not healthy_ip
+        _assert_ip_state(updated_ip, is_healthy=False)
+        assert healthy_ip.is_healthy is True
+
+    def test_updated_status_preserves_none_health_port(self):
+        healthy_ip = _make_ip(health_port=None, is_healthy=True)
+
+        updated_ip = healthy_ip.updated_status(False)
+
+        assert updated_ip is not healthy_ip
+        _assert_ip_state(updated_ip, health_port=None, is_healthy=False)
+
+    def test_updated_status_maintains_equality_for_matching_values(self):
+        first_ip = _make_ip(is_healthy=True)
+        second_ip = _make_ip(is_healthy=True)
+
+        first_unhealthy_ip = first_ip.updated_status(False)
+        second_unhealthy_ip = second_ip.updated_status(False)
+
+        assert first_unhealthy_ip != first_ip
+        assert second_unhealthy_ip != second_ip
+        assert first_unhealthy_ip == second_unhealthy_ip
 
 
-def test_updated_status_maintains_equality():
-    ip1 = AHealthyIp("192.168.1.1", 8080, True)
-    ip2 = AHealthyIp("192.168.1.1", 8080, True)
-
-    assert ip1.updated_status(True) is ip1
-    assert ip2.updated_status(True) is ip2
-
-    ip1_unhealthy = ip1.updated_status(False)
-    ip2_unhealthy = ip2.updated_status(False)
-
-    assert ip1_unhealthy != ip1
-    assert ip2_unhealthy != ip2
-    assert ip1_unhealthy == ip2_unhealthy
-
-
-def test_repr():
-    ip1 = AHealthyIp("192.168.1.1", 8080, True)
-    ip2 = AHealthyIp("192.168.1.1", 8080, False)
-    ip3 = AHealthyIp("192.168.001.001", 8080, False)
-
-    expected1 = "AHealthyIp(ip='192.168.1.1', health_port=8080, is_healthy=True)"
-    expected2 = "AHealthyIp(ip='192.168.1.1', health_port=8080, is_healthy=False)"
-
-    assert repr(ip1) == expected1
-    assert repr(ip2) == expected2
-    assert repr(ip3) == expected2
+class TestAHealthyIpRepresentation:
+    @pytest.mark.parametrize(
+        "healthy_ip,expected_repr",
+        [
+            (
+                AHealthyIp(_IP, _HEALTH_PORT, True),
+                "AHealthyIp(ip='192.168.1.1', health_port=8080, is_healthy=True)",
+            ),
+            (
+                AHealthyIp(_IP, _HEALTH_PORT, False),
+                "AHealthyIp(ip='192.168.1.1', health_port=8080, is_healthy=False)",
+            ),
+            (
+                AHealthyIp(_NON_NORMALIZED_IP, _HEALTH_PORT, False),
+                "AHealthyIp(ip='192.168.1.1', health_port=8080, is_healthy=False)",
+            ),
+            (
+                AHealthyIp(_IP, None, True),
+                "AHealthyIp(ip='192.168.1.1', health_port=None, is_healthy=True)",
+            ),
+        ],
+        ids=[
+            "healthy-with-port",
+            "unhealthy-with-port",
+            "normalized-ip",
+            "without-port",
+        ],
+    )
+    def test_repr_shows_normalized_value_fields(self, healthy_ip, expected_repr):
+        assert repr(healthy_ip) == expected_repr
