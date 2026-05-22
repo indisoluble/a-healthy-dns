@@ -12,6 +12,7 @@ from indisoluble.a_healthy_dns.main import (
     _ARG_LOG_LEVEL,
     _ARG_MIN_TEST_INTERVAL,
     _ARG_PORT,
+    _make_arg_parser,
     _main,
 )
 
@@ -134,3 +135,51 @@ class TestMainConfigurationFailure:
         mock_make_config.assert_called_once_with(default_args)
         mock_zone_updater.assert_not_called()
         mock_udp_server.assert_not_called()
+
+
+class TestMainArgumentParser:
+    @pytest.mark.parametrize(
+        "log_level",
+        [
+            "debug",
+            "info",
+            "warning",
+            "error",
+            "critical",
+        ],
+    )
+    def test_accepts_documented_log_levels(self, log_level):
+        parser = _make_arg_parser()
+
+        args = parser.parse_args(
+            [
+                "--hosted-zone",
+                "example.com",
+                "--zone-resolutions",
+                '{"www":["192.168.1.1"]}',
+                "--ns",
+                '["ns1.dns.example.net"]',
+                "--log-level",
+                log_level,
+            ]
+        )
+
+        assert getattr(args, _ARG_LOG_LEVEL) == log_level
+
+    @pytest.mark.parametrize("log_level", ["warn", "fatal", "INFO"])
+    def test_rejects_undocumented_log_level_aliases(self, log_level):
+        parser = _make_arg_parser()
+
+        with pytest.raises(SystemExit):
+            parser.parse_args(
+                [
+                    "--hosted-zone",
+                    "example.com",
+                    "--zone-resolutions",
+                    '{"www":["192.168.1.1"]}',
+                    "--ns",
+                    '["ns1.dns.example.net"]',
+                    "--log-level",
+                    log_level,
+                ]
+            )

@@ -41,6 +41,7 @@ _GRP_DNSSEC_PARAMS = "dns security extensions (DNSSEC) arguments"
 _GRP_GENERAL = "general arguments"
 _GRP_NS_RECORDS = "name server (NS) arguments"
 _GRP_ZONE_RESOLUTIONS = "zone resolution arguments"
+_LOG_LEVEL_NAMES = ("debug", "info", "warning", "error", "critical")
 _NAME_ALIAS_ZONES = "alias-zones"
 _NAME_HOSTED_ZONE = "hosted-zone"
 _NAME_LOG_LEVEL = "log-level"
@@ -56,7 +57,7 @@ _VAL_CONNECTION_TIMEOUT = 2
 _VAL_DNSSEC_ALGORITHM = dns.dnssec.algorithm_to_text(
     dns.dnssectypes.Algorithm.RSASHA256
 )
-_VAL_LOG_LEVEL = logging._levelToName[logging.INFO].lower()
+_VAL_LOG_LEVEL = "info"
 _VAL_MIN_TEST_INTERVAL = 30
 _VAL_PORT = 53053
 
@@ -127,9 +128,7 @@ Example usage
     general_group.add_argument(
         f"--{_NAME_LOG_LEVEL}",
         type=str,
-        choices=[
-            name.lower() for name in logging._levelToName.values() if name != "NOTSET"
-        ],
+        choices=_LOG_LEVEL_NAMES,
         default=_VAL_LOG_LEVEL,
         dest=_ARG_LOG_LEVEL,
         help=f"Logging level (default: {_VAL_LOG_LEVEL})",
