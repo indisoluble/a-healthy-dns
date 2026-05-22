@@ -2,10 +2,11 @@
 
 import pytest
 
-from typing import Dict, Any
-from unittest.mock import ANY, patch, MagicMock
+from typing import Any, Dict
+from unittest.mock import MagicMock, patch
 
 from indisoluble.a_healthy_dns import dns_server_config_factory as dscf
+from indisoluble.a_healthy_dns.dns_server_udp_handler import DnsServerUdpHandler
 from indisoluble.a_healthy_dns.main import (
     _ARG_CONNECTION_TIMEOUT,
     _ARG_LOG_LEVEL,
@@ -37,92 +38,99 @@ def mock_config():
     return mock
 
 
-@patch("indisoluble.a_healthy_dns.main.logging")
-@patch("indisoluble.a_healthy_dns.main.make_config")
-@patch("indisoluble.a_healthy_dns.main.DnsServerZoneUpdaterThreaded")
-@patch("indisoluble.a_healthy_dns.main.socketserver.UDPServer")
-def test_main_success(
-    mock_udp_server,
-    mock_zone_updater,
-    mock_make_config,
-    mock_logging,
-    default_args,
-    mock_config,
-):
-    # Setup mocks
-    mock_make_config.return_value = mock_config
-
-    mock_zone_updater_instance = MagicMock()
-    mock_zone_updater.return_value = mock_zone_updater_instance
-
-    mock_server_instance = MagicMock()
-    mock_udp_server.return_value.__enter__.return_value = mock_server_instance
-
-    # Call function
-    exit_code = _main(default_args)
-
-    # Assert
-    assert exit_code == 0
-    mock_logging.basicConfig.assert_called_once()
-
-    mock_make_config.assert_called_once()
-
-    mock_zone_updater.assert_called_once_with(1, 2, mock_config)
-    mock_zone_updater_instance.start.assert_called_once()
-
-    mock_udp_server.assert_called_once_with(("", default_args[_ARG_PORT]), ANY)
-
-    assert mock_server_instance.zone == mock_zone_updater_instance.zone
-    assert mock_server_instance.zone_origins == mock_config.zone_origins
-    mock_server_instance.serve_forever.assert_called_once()
-
-    mock_zone_updater_instance.stop.assert_called_once()
+def _make_zone_updater(mock_zone_updater):
+    zone_updater = MagicMock()
+    mock_zone_updater.return_value = zone_updater
+    return zone_updater
 
 
-@patch("indisoluble.a_healthy_dns.main.logging")
-@patch("indisoluble.a_healthy_dns.main.make_config")
-@patch("indisoluble.a_healthy_dns.main.DnsServerZoneUpdaterThreaded")
-@patch("indisoluble.a_healthy_dns.main.socketserver.UDPServer")
-def test_main_stops_zone_updater_when_server_setup_fails(
-    mock_udp_server,
-    mock_zone_updater,
-    mock_make_config,
-    mock_logging,
-    default_args,
-    mock_config,
-):
-    mock_make_config.return_value = mock_config
-
-    mock_zone_updater_instance = MagicMock()
-    mock_zone_updater.return_value = mock_zone_updater_instance
-    mock_udp_server.side_effect = OSError("port already in use")
-
-    with pytest.raises(OSError, match="port already in use"):
-        _main(default_args)
-
-    mock_logging.basicConfig.assert_called_once()
-    mock_zone_updater_instance.start.assert_called_once()
-    mock_zone_updater_instance.stop.assert_called_once()
+def _make_udp_server(mock_udp_server):
+    server = MagicMock()
+    mock_udp_server.return_value.__enter__.return_value = server
+    return server
 
 
-@patch("indisoluble.a_healthy_dns.main.logging")
-@patch("indisoluble.a_healthy_dns.main.make_config")
-@patch("indisoluble.a_healthy_dns.main.DnsServerZoneUpdaterThreaded")
-@patch("indisoluble.a_healthy_dns.main.socketserver.UDPServer")
-def test_main_with_failed_config(
-    mock_udp_server, mock_zone_updater, mock_make_config, mock_logging, default_args
-):
-    # Setup mocks
-    mock_make_config.return_value = None
+class TestMainServerLifecycle:
+    @patch("indisoluble.a_healthy_dns.main.logging")
+    @patch("indisoluble.a_healthy_dns.main.make_config")
+    @patch("indisoluble.a_healthy_dns.main.DnsServerZoneUpdaterThreaded")
+    @patch("indisoluble.a_healthy_dns.main.socketserver.UDPServer")
+    def test_returns_zero_and_serves_udp_when_config_is_valid(
+        self,
+        mock_udp_server,
+        mock_zone_updater,
+        mock_make_config,
+        mock_logging,
+        default_args,
+        mock_config,
+    ):
+        mock_make_config.return_value = mock_config
+        zone_updater = _make_zone_updater(mock_zone_updater)
+        server = _make_udp_server(mock_udp_server)
 
-    # Call function
-    exit_code = _main(default_args)
+        exit_code = _main(default_args)
 
-    # Assert
-    assert exit_code == 1
-    mock_logging.basicConfig.assert_called_once()
+        assert exit_code == 0
+        mock_logging.basicConfig.assert_called_once()
+        mock_make_config.assert_called_once_with(default_args)
 
-    mock_make_config.assert_called_once()
+        mock_zone_updater.assert_called_once_with(1, 2, mock_config)
+        zone_updater.start.assert_called_once()
 
-    mock_zone_updater.assert_not_called()
-    mock_udp_server.assert_not_called()
+        mock_udp_server.assert_called_once_with(
+            ("", default_args[_ARG_PORT]), DnsServerUdpHandler
+        )
+        assert server.zone == zone_updater.zone
+        assert server.zone_origins == mock_config.zone_origins
+        server.serve_forever.assert_called_once()
+
+        zone_updater.stop.assert_called_once()
+
+    @patch("indisoluble.a_healthy_dns.main.logging")
+    @patch("indisoluble.a_healthy_dns.main.make_config")
+    @patch("indisoluble.a_healthy_dns.main.DnsServerZoneUpdaterThreaded")
+    @patch("indisoluble.a_healthy_dns.main.socketserver.UDPServer")
+    def test_stops_zone_updater_when_udp_server_setup_fails(
+        self,
+        mock_udp_server,
+        mock_zone_updater,
+        mock_make_config,
+        mock_logging,
+        default_args,
+        mock_config,
+    ):
+        mock_make_config.return_value = mock_config
+        zone_updater = _make_zone_updater(mock_zone_updater)
+        mock_udp_server.side_effect = OSError("port already in use")
+
+        with pytest.raises(OSError, match="port already in use"):
+            _main(default_args)
+
+        mock_logging.basicConfig.assert_called_once()
+        mock_make_config.assert_called_once_with(default_args)
+        zone_updater.start.assert_called_once()
+        zone_updater.stop.assert_called_once()
+
+
+class TestMainConfigurationFailure:
+    @patch("indisoluble.a_healthy_dns.main.logging")
+    @patch("indisoluble.a_healthy_dns.main.make_config")
+    @patch("indisoluble.a_healthy_dns.main.DnsServerZoneUpdaterThreaded")
+    @patch("indisoluble.a_healthy_dns.main.socketserver.UDPServer")
+    def test_returns_one_and_skips_server_when_config_is_invalid(
+        self,
+        mock_udp_server,
+        mock_zone_updater,
+        mock_make_config,
+        mock_logging,
+        default_args,
+    ):
+        mock_make_config.return_value = None
+
+        exit_code = _main(default_args)
+
+        assert exit_code == 1
+        mock_logging.basicConfig.assert_called_once()
+        mock_make_config.assert_called_once_with(default_args)
+        mock_zone_updater.assert_not_called()
+        mock_udp_server.assert_not_called()

@@ -10,9 +10,8 @@ import dns.opcode
 import dns.rcode
 import dns.rdataclass
 import dns.rdatatype
+import dns.rdataset
 import dns.update
-import dns.zone
-
 import pytest
 
 from unittest.mock import MagicMock, patch
@@ -39,6 +38,65 @@ _real_from_wire = dns.message.from_wire
 _TEST_QUERY_ID = 13551
 _TEST_SOURCE_HOST = "127.0.0.1"
 _TEST_SOURCE_PORT = 12345
+_SOA_MNAME = "ns1.example.com."
+_SOA_RNAME = "hostmaster.example.com."
+_SOA_SERIAL = 1
+_SOA_REFRESH = 7200
+_SOA_RETRY = 3600
+_SOA_EXPIRE = 1209600
+
+
+class _FakeNode:
+    def __init__(self, *rdatasets):
+        self._rdatasets = {
+            (rdataset.rdclass, rdataset.rdtype): rdataset for rdataset in rdatasets
+        }
+
+    def get_rdataset(self, rdclass, rdtype):
+        return self._rdatasets.get((rdclass, rdtype))
+
+
+class _FakeReaderContext:
+    def __init__(self, transaction):
+        self._transaction = transaction
+
+    def __enter__(self):
+        return self._transaction
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        return False
+
+
+class _FakeTransaction:
+    def __init__(self, *, nodes=None, soa_rdataset=None, names=None):
+        self._nodes = nodes or {}
+        self._soa_rdataset = soa_rdataset
+        self._names = list(self._nodes) if names is None else list(names)
+
+    def get_node(self, name):
+        return self._nodes.get(name)
+
+    def get(self, name, rdtype):
+        if name == dns.name.empty and rdtype == dns.rdatatype.SOA:
+            return self._soa_rdataset
+
+        return None
+
+    def iterate_names(self):
+        return iter(self._names)
+
+
+class _FakeZone:
+    rdclass = dns.rdataclass.IN
+
+    def __init__(self, origin, transaction):
+        self.origin = origin
+        self.reader_calls = 0
+        self._transaction = transaction
+
+    def reader(self):
+        self.reader_calls += 1
+        return _FakeReaderContext(self._transaction)
 
 
 def _make_multi_question_wire(*question_names):
@@ -56,6 +114,82 @@ def _make_multi_question_wire(*question_names):
     return bytes(wire)
 
 
+def _make_query_with_opcode(opcode):
+    query = dns.message.make_query("test.example.com.", dns.rdatatype.A)
+    query.set_opcode(opcode)
+    return query
+
+
+def _make_update_query():
+    query = dns.update.Update("example.com.")
+    query.add("www", 300, "A", "192.0.2.1")
+    return query
+
+
+def _make_a_rdataset(*ip_addresses, ttl=300):
+    return dns.rdataset.from_text(
+        dns.rdataclass.IN, dns.rdatatype.A, ttl, *ip_addresses
+    )
+
+
+def _make_soa_rdataset(*, ttl=300, minimum=60):
+    return dns.rdataset.from_text(
+        dns.rdataclass.IN,
+        dns.rdatatype.SOA,
+        ttl,
+        (
+            f"{_SOA_MNAME} {_SOA_RNAME} {_SOA_SERIAL} {_SOA_REFRESH} "
+            f"{_SOA_RETRY} {_SOA_EXPIRE} {minimum}"
+        ),
+    )
+
+
+def _make_zone(zone_origins, transaction):
+    return _FakeZone(zone_origins.primary, transaction)
+
+
+def _make_server(zone, zone_origins):
+    server = MagicMock()
+    server.zone = zone
+    server.zone_origins = zone_origins
+    return server
+
+
+def _make_request(wire_data):
+    mock_sock = MagicMock()
+    return (wire_data, mock_sock), mock_sock
+
+
+def _handle_wire(wire_data, client_address, server):
+    request, mock_sock = _make_request(wire_data)
+    DnsServerUdpHandler(request, client_address, server)
+    return mock_sock
+
+
+def _sent_wire(mock_sock, client_address):
+    mock_sock.sendto.assert_called_once()
+    sent_wire, destination = mock_sock.sendto.call_args[0]
+    assert destination == client_address
+    return sent_wire
+
+
+def _sent_response(mock_sock, client_address, from_wire=dns.message.from_wire):
+    return from_wire(_sent_wire(mock_sock, client_address))
+
+
+def _update_test_response(response, query_name, query_type, zone, zone_origins):
+    _update_response(
+        response,
+        query_name,
+        query_type,
+        zone,
+        zone_origins,
+        _TEST_QUERY_ID,
+        _TEST_SOURCE_HOST,
+        _TEST_SOURCE_PORT,
+    )
+
+
 def _assert_log_record(caplog, level, message_fragment, traffic_marker=None):
     assert any(
         record.levelno == level
@@ -65,963 +199,742 @@ def _assert_log_record(caplog, level, message_fragment, traffic_marker=None):
     )
 
 
-@pytest.fixture
-def mock_reader():
-    reader = MagicMock(spec=dns.zone.Transaction)
-    return reader
+def _assert_log_context(caplog, *, query_id=_TEST_QUERY_ID):
+    assert f"source={_TEST_SOURCE_HOST}:{_TEST_SOURCE_PORT}" in caplog.text
+    assert f"id={query_id}" in caplog.text
+
+
+def _assert_section_counts(response, *, additional=0, authority=0, answer=0):
+    assert len(response.additional) == additional
+    assert len(response.authority) == authority
+    assert len(response.answer) == answer
+
+
+def _assert_response_header(
+    response,
+    *,
+    query_id,
+    rcode,
+    aa,
+    tc=False,
+    opcode=None,
+    rd=None,
+):
+    assert response.id == query_id
+    assert response.rcode() == rcode
+    assert bool(response.flags & dns.flags.QR)
+    assert bool(response.flags & dns.flags.AA) == aa
+    assert bool(response.flags & dns.flags.TC) == tc
+    assert not bool(response.flags & dns.flags.RA)
+
+    if opcode is not None:
+        assert response.opcode() == opcode
+
+    if rd is not None:
+        assert bool(response.flags & dns.flags.RD) == rd
+
+
+def _assert_answer_rrset(response, *, name, rdtype, rdataset):
+    _assert_section_counts(response, answer=1)
+    assert response.answer[0].name == name
+    assert response.answer[0].rdclass == rdataset.rdclass
+    assert response.answer[0].rdtype == rdtype
+    assert response.answer[0].ttl == rdataset.ttl
+    assert set(response.answer[0]) == set(rdataset)
+
+
+def _assert_soa_authority(response, *, name, expected_ttl):
+    assert len(response.authority) == 1
+    assert response.authority[0].name == name
+    assert response.authority[0].rdclass == dns.rdataclass.IN
+    assert response.authority[0].rdtype == dns.rdatatype.SOA
+    assert response.authority[0].ttl == expected_ttl
+
+
+def _assert_no_authority_or_additional(response):
+    assert len(response.additional) == 0
+    assert len(response.authority) == 0
 
 
 @pytest.fixture
-def mock_zone_origins():
+def zone_origins():
     return ZoneOrigins("example.com", [])
 
 
 @pytest.fixture
-def mock_zone(mock_reader, mock_zone_origins):
-    zone = MagicMock()
-    zone.origin = mock_zone_origins.primary
-    zone.rdclass = dns.rdataclass.IN
-    zone.reader.return_value = mock_reader
-    return zone
-
-
-@pytest.fixture
-def mock_rdata():
-    mock_rdata = MagicMock()
-    mock_rdata.rdclass = dns.rdataclass.IN
-    mock_rdata.rdtype = dns.rdatatype.A
-    return mock_rdata
-
-
-@pytest.fixture
-def mock_rdataset():
-    mock_rdataset = MagicMock()
-    mock_rdataset.rdclass = dns.rdataclass.IN
-    mock_rdataset.rdtype = dns.rdatatype.A
-    mock_rdataset.ttl = 300
-    return mock_rdataset
-
-
-@pytest.fixture
-def mock_soa_rdata():
-    mock_soa_rdata = MagicMock()
-    mock_soa_rdata.rdclass = dns.rdataclass.IN
-    mock_soa_rdata.rdtype = dns.rdatatype.SOA
-    mock_soa_rdata.minimum = 60
-    return mock_soa_rdata
-
-
-@pytest.fixture
-def mock_soa_rdataset(mock_soa_rdata):
-    mock_soa_rdataset = MagicMock()
-    mock_soa_rdataset.rdclass = dns.rdataclass.IN
-    mock_soa_rdataset.rdtype = dns.rdatatype.SOA
-    mock_soa_rdataset.ttl = 300
-    mock_soa_rdataset.__iter__ = MagicMock(return_value=iter([mock_soa_rdata]))
-    return mock_soa_rdataset
-
-
-@pytest.fixture
-def mock_server(mock_zone, mock_zone_origins):
-    server = MagicMock()
-    server.zone = mock_zone
-    server.zone_origins = mock_zone_origins
-    return server
-
-
-@pytest.fixture
-def mock_dns_response():
+def dns_response():
     return dns.message.make_response(dns.message.make_query("dummy", dns.rdatatype.A))
 
 
 @pytest.fixture
-def mock_dns_request():
-    query = dns.message.make_query("test.example.com.", dns.rdatatype.A)
-    return (query.to_wire(), MagicMock())
+def dns_client_address():
+    return (_TEST_SOURCE_HOST, _TEST_SOURCE_PORT)
 
 
 @pytest.fixture
-def mock_dns_client_address():
-    return ("127.0.0.1", 12345)
+def dns_request():
+    query = dns.message.make_query("test.example.com.", dns.rdatatype.A)
+    return _make_request(query.to_wire())[0]
 
 
-def test_update_response_with_relative_name_found(
-    mock_zone,
-    mock_reader,
-    mock_rdata,
-    mock_rdataset,
-    mock_dns_response,
-    mock_zone_origins,
-    caplog,
-):
-    # Setup
-    query_name = dns.name.from_text("test", origin=None)
-    query_type = dns.rdatatype.A
+@pytest.fixture
+def soa_rdataset():
+    return _make_soa_rdataset()
 
-    # Mock zone.reader.get_node for relative name
-    mock_rdataset.__iter__.return_value = [mock_rdata]
 
-    mock_node = MagicMock()
-    mock_node.get_rdataset.return_value = mock_rdataset
+class TestUpdateResponse:
+    def test_relative_name_found_returns_authoritative_answer(
+        self, dns_response, zone_origins, caplog
+    ):
+        query_name = dns.name.from_text("test", origin=None)
+        rdataset = _make_a_rdataset("192.0.2.1")
+        transaction = _FakeTransaction(
+            nodes={dns.name.from_text("test", origin=None): _FakeNode(rdataset)}
+        )
+        zone = _make_zone(zone_origins, transaction)
 
-    mock_reader.get_node.return_value = mock_node
+        with caplog.at_level(logging.INFO):
+            _update_test_response(
+                dns_response, query_name, dns.rdatatype.A, zone, zone_origins
+            )
 
-    mock_zone.reader.return_value.__enter__.return_value = mock_reader
-
-    # Call function
-    with caplog.at_level(logging.INFO):
-        _update_response(
-            mock_dns_response,
-            query_name,
-            query_type,
-            mock_zone,
-            mock_zone_origins,
-            _TEST_QUERY_ID,
-            _TEST_SOURCE_HOST,
-            _TEST_SOURCE_PORT,
+        assert zone.reader_calls == 1
+        assert dns_response.rcode() == dns.rcode.NOERROR
+        assert bool(dns_response.flags & dns.flags.AA)
+        _assert_no_authority_or_additional(dns_response)
+        _assert_answer_rrset(
+            dns_response,
+            name=query_name,
+            rdtype=dns.rdatatype.A,
+            rdataset=rdataset,
         )
 
-    # Assertions
-    mock_zone.reader.assert_called_once()
-    mock_reader.get_node.assert_called_once_with(query_name)
-    mock_node.get_rdataset.assert_called_once_with(mock_zone.rdclass, query_type)
-    mock_reader.get.assert_not_called()  # SOA lookup should not be needed when node is found
+        _assert_log_record(
+            caplog,
+            logging.INFO,
+            "Answered DNS query from hosted zone",
+            _DNS_TRAFFIC_NORMAL,
+        )
+        _assert_log_context(caplog)
+        assert "qname=test" in caplog.text
+        assert "qtype=A" in caplog.text
 
-    assert mock_dns_response.rcode() == dns.rcode.NOERROR
-    assert bool(mock_dns_response.flags & dns.flags.AA)
+    def test_absolute_name_found_relativizes_lookup_and_preserves_answer_name(
+        self, dns_response, zone_origins
+    ):
+        query_name = dns.name.from_text("test", origin=zone_origins.primary)
+        rdataset = _make_a_rdataset("192.0.2.1")
+        transaction = _FakeTransaction(
+            nodes={dns.name.from_text("test", origin=None): _FakeNode(rdataset)}
+        )
+        zone = _make_zone(zone_origins, transaction)
 
-    assert len(mock_dns_response.additional) == 0
-    assert len(mock_dns_response.authority) == 0
-
-    assert len(mock_dns_response.answer) == 1
-    assert mock_dns_response.answer[0].name == query_name
-    assert mock_dns_response.answer[0].rdclass == mock_rdataset.rdclass
-    assert mock_dns_response.answer[0].rdtype == query_type
-    assert mock_dns_response.answer[0].ttl == mock_rdataset.ttl
-    assert list(mock_dns_response.answer[0]) == [mock_rdata]
-
-    _assert_log_record(
-        caplog,
-        logging.INFO,
-        "Answered DNS query from hosted zone",
-        _DNS_TRAFFIC_NORMAL,
-    )
-    assert f"source={_TEST_SOURCE_HOST}:{_TEST_SOURCE_PORT}" in caplog.text
-    assert f"id={_TEST_QUERY_ID}" in caplog.text
-    assert "qname=test" in caplog.text
-    assert "qtype=A" in caplog.text
-
-
-def test_update_response_with_absolute_name_found(
-    mock_zone,
-    mock_reader,
-    mock_rdata,
-    mock_rdataset,
-    mock_dns_response,
-    mock_zone_origins,
-):
-    # Setup
-    query_name = dns.name.from_text("test", origin=mock_zone_origins.primary)
-    query_type = dns.rdatatype.A
-
-    # Mock zone.reader.get_node for relative name
-    mock_rdataset.__iter__.return_value = [mock_rdata]
-
-    mock_node = MagicMock()
-    mock_node.get_rdataset.return_value = mock_rdataset
-
-    mock_reader.get_node.return_value = mock_node
-
-    mock_zone.reader.return_value.__enter__.return_value = mock_reader
-
-    # Call function
-    _update_response(
-        mock_dns_response,
-        query_name,
-        query_type,
-        mock_zone,
-        mock_zone_origins,
-        _TEST_QUERY_ID,
-        _TEST_SOURCE_HOST,
-        _TEST_SOURCE_PORT,
-    )
-
-    # Assertions
-    mock_zone.reader.assert_called_once()
-    mock_reader.get_node.assert_called_once_with(
-        query_name.relativize(mock_zone_origins.primary)
-    )
-    mock_node.get_rdataset.assert_called_once_with(mock_zone.rdclass, query_type)
-    mock_reader.get.assert_not_called()  # SOA lookup should not be needed when node is found
-
-    assert mock_dns_response.rcode() == dns.rcode.NOERROR
-    assert bool(mock_dns_response.flags & dns.flags.AA)
-
-    assert len(mock_dns_response.additional) == 0
-    assert len(mock_dns_response.authority) == 0
-
-    assert len(mock_dns_response.answer) == 1
-    assert mock_dns_response.answer[0].name == query_name
-    assert mock_dns_response.answer[0].rdclass == mock_rdataset.rdclass
-    assert mock_dns_response.answer[0].rdtype == query_type
-    assert mock_dns_response.answer[0].ttl == mock_rdataset.ttl
-    assert list(mock_dns_response.answer[0]) == [mock_rdata]
-
-
-def test_update_response_with_absolute_name_outside_zone_origins(
-    mock_zone, mock_dns_response, mock_zone_origins, caplog
-):
-    # Setup
-    query_name = dns.name.from_text("test", origin=dns.name.from_text("other.com"))
-    query_type = dns.rdatatype.A
-
-    # Call function
-    with caplog.at_level(logging.INFO):
-        _update_response(
-            mock_dns_response,
-            query_name,
-            query_type,
-            mock_zone,
-            mock_zone_origins,
-            _TEST_QUERY_ID,
-            _TEST_SOURCE_HOST,
-            _TEST_SOURCE_PORT,
+        _update_test_response(
+            dns_response, query_name, dns.rdatatype.A, zone, zone_origins
         )
 
-    # Assertions
-    mock_zone.reader.assert_not_called()
-
-    assert mock_dns_response.rcode() == dns.rcode.REFUSED
-    assert not bool(mock_dns_response.flags & dns.flags.AA)
-
-    assert len(mock_dns_response.additional) == 0
-    assert len(mock_dns_response.authority) == 0
-
-    assert len(mock_dns_response.answer) == 0
-
-    _assert_log_record(
-        caplog,
-        logging.INFO,
-        "Refused DNS query outside hosted or alias zones",
-        _DNS_TRAFFIC_NOISE,
-    )
-    assert f"source={_TEST_SOURCE_HOST}:{_TEST_SOURCE_PORT}" in caplog.text
-    assert f"id={_TEST_QUERY_ID}" in caplog.text
-
-
-def test_update_response_domain_not_found(
-    mock_zone,
-    mock_reader,
-    mock_dns_response,
-    mock_zone_origins,
-    mock_soa_rdata,
-    mock_soa_rdataset,
-    caplog,
-):
-    # Setup
-    query_name = dns.name.from_text("nonexistent", origin=mock_zone_origins.primary)
-    query_type = dns.rdatatype.A
-
-    # Mock zone.reader.get_node to return None
-    mock_reader.get_node.return_value = None
-    mock_reader.iterate_names.return_value = iter([])
-    mock_reader.get.return_value = mock_soa_rdataset
-
-    mock_zone.reader.return_value.__enter__.return_value = mock_reader
-
-    # Call function
-    with caplog.at_level(logging.INFO):
-        _update_response(
-            mock_dns_response,
-            query_name,
-            query_type,
-            mock_zone,
-            mock_zone_origins,
-            _TEST_QUERY_ID,
-            _TEST_SOURCE_HOST,
-            _TEST_SOURCE_PORT,
+        assert dns_response.rcode() == dns.rcode.NOERROR
+        assert bool(dns_response.flags & dns.flags.AA)
+        _assert_no_authority_or_additional(dns_response)
+        _assert_answer_rrset(
+            dns_response,
+            name=query_name,
+            rdtype=dns.rdatatype.A,
+            rdataset=rdataset,
         )
 
-    # Assertions
-    mock_zone.reader.assert_called_once()
-    mock_reader.get_node.assert_called_once_with(
-        query_name.relativize(mock_zone_origins.primary)
-    )
-    mock_reader.iterate_names.assert_called_once_with()
-    mock_reader.get.assert_called_once_with(dns.name.empty, dns.rdatatype.SOA)
+    def test_multiple_rdata_values_are_preserved_in_answer(
+        self, dns_response, zone_origins
+    ):
+        query_name = dns.name.from_text("many", origin=zone_origins.primary)
+        rdataset = _make_a_rdataset("192.0.2.1", "192.0.2.2", "192.0.2.3")
+        transaction = _FakeTransaction(
+            nodes={dns.name.from_text("many", origin=None): _FakeNode(rdataset)}
+        )
+        zone = _make_zone(zone_origins, transaction)
 
-    assert mock_dns_response.rcode() == dns.rcode.NXDOMAIN
-    assert bool(mock_dns_response.flags & dns.flags.AA)
-
-    assert len(mock_dns_response.additional) == 0
-    assert len(mock_dns_response.authority) == 1
-    assert mock_dns_response.authority[0].rdtype == dns.rdatatype.SOA
-    assert mock_dns_response.authority[0].name == mock_zone_origins.primary
-    assert mock_dns_response.authority[0].ttl == mock_soa_rdata.minimum
-
-    assert len(mock_dns_response.answer) == 0
-
-    _assert_log_record(
-        caplog, logging.INFO, "returning NXDOMAIN", _DNS_TRAFFIC_NORMAL
-    )
-    assert f"source={_TEST_SOURCE_HOST}:{_TEST_SOURCE_PORT}" in caplog.text
-    assert f"id={_TEST_QUERY_ID}" in caplog.text
-
-
-def test_update_response_empty_non_terminal_returns_nodata(
-    mock_zone,
-    mock_reader,
-    mock_dns_response,
-    mock_zone_origins,
-    mock_soa_rdata,
-    mock_soa_rdataset,
-    caplog,
-):
-    query_name = dns.name.from_text("empty", origin=mock_zone_origins.primary)
-    query_type = dns.rdatatype.A
-
-    mock_reader.get_node.return_value = None
-    mock_reader.iterate_names.return_value = iter(
-        [dns.name.from_text("leaf.empty", origin=None)]
-    )
-    mock_reader.get.return_value = mock_soa_rdataset
-    mock_zone.reader.return_value.__enter__.return_value = mock_reader
-
-    with caplog.at_level(logging.INFO):
-        _update_response(
-            mock_dns_response,
-            query_name,
-            query_type,
-            mock_zone,
-            mock_zone_origins,
-            _TEST_QUERY_ID,
-            _TEST_SOURCE_HOST,
-            _TEST_SOURCE_PORT,
+        _update_test_response(
+            dns_response, query_name, dns.rdatatype.A, zone, zone_origins
         )
 
-    mock_zone.reader.assert_called_once()
-    mock_reader.get_node.assert_called_once_with(
-        query_name.relativize(mock_zone_origins.primary)
-    )
-    mock_reader.iterate_names.assert_called_once_with()
-    mock_reader.get.assert_called_once_with(dns.name.empty, dns.rdatatype.SOA)
+        assert dns_response.rcode() == dns.rcode.NOERROR
+        assert bool(dns_response.flags & dns.flags.AA)
+        _assert_answer_rrset(
+            dns_response,
+            name=query_name,
+            rdtype=dns.rdatatype.A,
+            rdataset=rdataset,
+        )
 
-    assert mock_dns_response.rcode() == dns.rcode.NOERROR
-    assert bool(mock_dns_response.flags & dns.flags.AA)
-    assert len(mock_dns_response.answer) == 0
+    def test_absolute_name_outside_zone_origins_returns_refused_without_zone_lookup(
+        self, dns_response, zone_origins, caplog
+    ):
+        query_name = dns.name.from_text("test", origin=dns.name.from_text("other.com"))
+        transaction = _FakeTransaction()
+        zone = _make_zone(zone_origins, transaction)
 
-    assert len(mock_dns_response.authority) == 1
-    assert mock_dns_response.authority[0].rdtype == dns.rdatatype.SOA
-    assert mock_dns_response.authority[0].name == mock_zone_origins.primary
-    assert mock_dns_response.authority[0].ttl == mock_soa_rdata.minimum
+        with caplog.at_level(logging.INFO):
+            _update_test_response(
+                dns_response, query_name, dns.rdatatype.A, zone, zone_origins
+            )
 
-    _assert_log_record(
-        caplog, logging.INFO, "returning NODATA", _DNS_TRAFFIC_NORMAL
-    )
+        assert zone.reader_calls == 0
+        assert dns_response.rcode() == dns.rcode.REFUSED
+        assert not bool(dns_response.flags & dns.flags.AA)
+        _assert_section_counts(dns_response)
 
+        _assert_log_record(
+            caplog,
+            logging.INFO,
+            "Refused DNS query outside hosted or alias zones",
+            _DNS_TRAFFIC_NOISE,
+        )
+        _assert_log_context(caplog)
 
-@pytest.mark.parametrize(
-    "soa_rdataset",
-    [
-        None,
-        pytest.param(
-            MagicMock(
-                rdclass=dns.rdataclass.IN,
-                rdtype=dns.rdatatype.SOA,
-                ttl=300,
-                **{"__iter__.return_value": iter([])},
+    def test_domain_not_found_returns_nxdomain_with_soa_authority(
+        self, dns_response, zone_origins, soa_rdataset, caplog
+    ):
+        query_name = dns.name.from_text("nonexistent", origin=zone_origins.primary)
+        transaction = _FakeTransaction(soa_rdataset=soa_rdataset)
+        zone = _make_zone(zone_origins, transaction)
+
+        with caplog.at_level(logging.INFO):
+            _update_test_response(
+                dns_response, query_name, dns.rdatatype.A, zone, zone_origins
+            )
+
+        assert dns_response.rcode() == dns.rcode.NXDOMAIN
+        assert bool(dns_response.flags & dns.flags.AA)
+        assert len(dns_response.answer) == 0
+        assert len(dns_response.additional) == 0
+        _assert_soa_authority(
+            dns_response,
+            name=zone_origins.primary,
+            expected_ttl=next(iter(soa_rdataset)).minimum,
+        )
+
+        _assert_log_record(
+            caplog, logging.INFO, "returning NXDOMAIN", _DNS_TRAFFIC_NORMAL
+        )
+        _assert_log_context(caplog)
+
+    def test_negative_response_uses_lower_of_soa_ttl_and_minimum(
+        self, dns_response, zone_origins
+    ):
+        query_name = dns.name.from_text("nonexistent", origin=zone_origins.primary)
+        soa_rdataset = _make_soa_rdataset(ttl=30, minimum=60)
+        transaction = _FakeTransaction(soa_rdataset=soa_rdataset)
+        zone = _make_zone(zone_origins, transaction)
+
+        _update_test_response(
+            dns_response, query_name, dns.rdatatype.A, zone, zone_origins
+        )
+
+        assert dns_response.rcode() == dns.rcode.NXDOMAIN
+        _assert_soa_authority(
+            dns_response,
+            name=zone_origins.primary,
+            expected_ttl=30,
+        )
+
+    def test_empty_non_terminal_returns_nodata_with_soa_authority(
+        self, dns_response, zone_origins, soa_rdataset, caplog
+    ):
+        query_name = dns.name.from_text("empty", origin=zone_origins.primary)
+        transaction = _FakeTransaction(
+            soa_rdataset=soa_rdataset,
+            names=[dns.name.from_text("leaf.empty", origin=None)],
+        )
+        zone = _make_zone(zone_origins, transaction)
+
+        with caplog.at_level(logging.INFO):
+            _update_test_response(
+                dns_response, query_name, dns.rdatatype.A, zone, zone_origins
+            )
+
+        assert dns_response.rcode() == dns.rcode.NOERROR
+        assert bool(dns_response.flags & dns.flags.AA)
+        assert len(dns_response.answer) == 0
+        _assert_soa_authority(
+            dns_response,
+            name=zone_origins.primary,
+            expected_ttl=next(iter(soa_rdataset)).minimum,
+        )
+
+        _assert_log_record(
+            caplog, logging.INFO, "returning NODATA", _DNS_TRAFFIC_NORMAL
+        )
+
+    @pytest.mark.parametrize(
+        "soa_rdataset",
+        [
+            None,
+            dns.rdataset.from_text(
+                dns.rdataclass.IN,
+                dns.rdatatype.SOA,
+                300,
             ),
-            id="empty-soa-rdataset",
-        ),
-    ],
-    ids=["missing-soa-rdataset", "empty-soa-rdataset"],
-)
-def test_update_response_domain_not_found_without_soa_authority(
-    mock_zone,
-    mock_reader,
-    mock_dns_response,
-    mock_zone_origins,
-    soa_rdataset,
-):
-    query_name = dns.name.from_text("nonexistent", origin=mock_zone_origins.primary)
-    query_type = dns.rdatatype.A
-
-    mock_reader.get_node.return_value = None
-    mock_reader.iterate_names.return_value = iter([])
-    mock_reader.get.return_value = soa_rdataset
-    mock_zone.reader.return_value.__enter__.return_value = mock_reader
-
-    _update_response(
-        mock_dns_response,
-        query_name,
-        query_type,
-        mock_zone,
-        mock_zone_origins,
-        _TEST_QUERY_ID,
-        _TEST_SOURCE_HOST,
-        _TEST_SOURCE_PORT,
+        ],
+        ids=["missing-soa-rdataset", "empty-soa-rdataset"],
     )
+    def test_domain_not_found_without_usable_soa_omits_authority(
+        self, dns_response, zone_origins, soa_rdataset
+    ):
+        query_name = dns.name.from_text("nonexistent", origin=zone_origins.primary)
+        transaction = _FakeTransaction(soa_rdataset=soa_rdataset)
+        zone = _make_zone(zone_origins, transaction)
 
-    assert mock_dns_response.rcode() == dns.rcode.NXDOMAIN
-    assert bool(mock_dns_response.flags & dns.flags.AA)
-    assert len(mock_dns_response.authority) == 0
-    assert len(mock_dns_response.answer) == 0
-
-
-def test_update_response_record_type_not_found(
-    mock_zone,
-    mock_reader,
-    mock_dns_response,
-    mock_zone_origins,
-    mock_soa_rdata,
-    mock_soa_rdataset,
-    caplog,
-):
-    # Setup
-    query_name = dns.name.from_text("test", origin=mock_zone_origins.primary)
-    query_type = dns.rdatatype.A
-
-    # Mock zone.get_node to return a node but get_rdataset returns None
-    mock_node = MagicMock()
-    mock_node.get_rdataset.return_value = None
-
-    mock_reader.get_node.return_value = mock_node
-    mock_reader.get.return_value = mock_soa_rdataset
-
-    mock_zone.reader.return_value.__enter__.return_value = mock_reader
-
-    # Call function
-    with caplog.at_level(logging.INFO):
-        _update_response(
-            mock_dns_response,
-            query_name,
-            query_type,
-            mock_zone,
-            mock_zone_origins,
-            _TEST_QUERY_ID,
-            _TEST_SOURCE_HOST,
-            _TEST_SOURCE_PORT,
+        _update_test_response(
+            dns_response, query_name, dns.rdatatype.A, zone, zone_origins
         )
 
-    # Assertions
-    mock_zone.reader.assert_called_once()
-    mock_reader.get_node.assert_called_once_with(
-        query_name.relativize(mock_zone_origins.primary)
-    )
-    mock_node.get_rdataset.assert_called_once_with(mock_zone.rdclass, query_type)
-    mock_reader.get.assert_called_once_with(dns.name.empty, dns.rdatatype.SOA)
+        assert dns_response.rcode() == dns.rcode.NXDOMAIN
+        assert bool(dns_response.flags & dns.flags.AA)
+        _assert_section_counts(dns_response)
 
-    assert mock_dns_response.rcode() == dns.rcode.NOERROR
-    assert bool(mock_dns_response.flags & dns.flags.AA)
+    def test_record_type_not_found_returns_nodata_with_soa_authority(
+        self, dns_response, zone_origins, soa_rdataset, caplog
+    ):
+        query_name = dns.name.from_text("test", origin=zone_origins.primary)
+        transaction = _FakeTransaction(
+            nodes={dns.name.from_text("test", origin=None): _FakeNode()},
+            soa_rdataset=soa_rdataset,
+        )
+        zone = _make_zone(zone_origins, transaction)
 
-    assert len(mock_dns_response.additional) == 0
-    assert len(mock_dns_response.authority) == 1
-    assert mock_dns_response.authority[0].rdtype == dns.rdatatype.SOA
-    assert mock_dns_response.authority[0].name == mock_zone_origins.primary
-    assert mock_dns_response.authority[0].ttl == mock_soa_rdata.minimum
+        with caplog.at_level(logging.INFO):
+            _update_test_response(
+                dns_response, query_name, dns.rdatatype.A, zone, zone_origins
+            )
 
-    assert len(mock_dns_response.answer) == 0
+        assert dns_response.rcode() == dns.rcode.NOERROR
+        assert bool(dns_response.flags & dns.flags.AA)
+        assert len(dns_response.answer) == 0
+        assert len(dns_response.additional) == 0
+        _assert_soa_authority(
+            dns_response,
+            name=zone_origins.primary,
+            expected_ttl=next(iter(soa_rdataset)).minimum,
+        )
 
-    _assert_log_record(
-        caplog, logging.INFO, "returning NODATA", _DNS_TRAFFIC_NORMAL
-    )
-    assert f"source={_TEST_SOURCE_HOST}:{_TEST_SOURCE_PORT}" in caplog.text
-    assert f"id={_TEST_QUERY_ID}" in caplog.text
-
-
-@patch("indisoluble.a_healthy_dns.dns_server_udp_handler._update_response")
-def test_handle_valid_query(
-    mock_update_response, mock_dns_request, mock_dns_client_address, mock_server
-):
-    mock_update_response.side_effect = lambda response, *args: setattr(
-        response, "flags", response.flags | dns.flags.AA
-    )
-
-    # No need to call handle() as it's called automatically by the constructor
-    _ = DnsServerUdpHandler(mock_dns_request, mock_dns_client_address, mock_server)
-
-    # Get the original query for comparison
-    query_data = mock_dns_request[0]
-    query = dns.message.from_wire(query_data)
-    question = query.question[0]
-
-    # Assertions
-    mock_update_response.assert_called_once()
-    assert mock_update_response.call_args[0][1] == question.name
-    assert mock_update_response.call_args[0][2] == question.rdtype
-    assert mock_update_response.call_args[0][3] == mock_server.zone
-    assert mock_update_response.call_args[0][4] == mock_server.zone_origins
-    assert mock_update_response.call_args[0][5] == query.id
-    assert mock_update_response.call_args[0][6] == mock_dns_client_address[0]
-    assert mock_update_response.call_args[0][7] == mock_dns_client_address[1]
-
-    # Check response was sent
-    mock_sock = mock_dns_request[1]
-    mock_sock.sendto.assert_called_once()
-
-    # Verify response header fields (RFC 1035 §4.1.1)
-    sent_data = mock_sock.sendto.call_args[0][0]
-    response = dns.message.from_wire(sent_data)
-    assert response.id == query.id
-    assert bool(response.flags & dns.flags.AA)
-    assert bool(response.flags & dns.flags.QR)
-    assert not bool(response.flags & dns.flags.RA)
-    assert not bool(response.flags & dns.flags.TC)
+        _assert_log_record(
+            caplog, logging.INFO, "returning NODATA", _DNS_TRAFFIC_NORMAL
+        )
+        _assert_log_context(caplog)
 
 
-def test_handle_oversized_udp_answer_sets_tc_and_respects_classic_udp_limit(
-    mock_dns_client_address,
-):
-    zone_origins = ZoneOrigins("example.com", [])
-    ip_addresses = [f"192.0.2.{octet}" for octet in range(1, 101)]
-    a_record = AHealthyRecord(
-        subdomain=dns.name.from_text("many", origin=zone_origins.primary),
-        healthy_ips=[
-            AHealthyIp(ip=ip, health_port=None, is_healthy=True)
-            for ip in ip_addresses
+class TestHandlerValidQuery:
+    @patch("indisoluble.a_healthy_dns.dns_server_udp_handler._update_response")
+    def test_valid_query_calls_update_response_and_sends_response_to_client(
+        self, mock_update_response, dns_request, dns_client_address, zone_origins
+    ):
+        zone = _make_zone(zone_origins, _FakeTransaction())
+        server = _make_server(zone, zone_origins)
+        mock_update_response.side_effect = lambda response, *args: setattr(
+            response, "flags", response.flags | dns.flags.AA
+        )
+
+        DnsServerUdpHandler(dns_request, dns_client_address, server)
+
+        query_data, mock_sock = dns_request
+        query = dns.message.from_wire(query_data)
+        question = query.question[0]
+        call_args = mock_update_response.call_args[0]
+
+        mock_update_response.assert_called_once()
+        assert call_args[1] == question.name
+        assert call_args[2] == question.rdtype
+        assert call_args[3] == server.zone
+        assert call_args[4] == server.zone_origins
+        assert call_args[5] == query.id
+        assert call_args[6] == dns_client_address[0]
+        assert call_args[7] == dns_client_address[1]
+
+        response = _sent_response(mock_sock, dns_client_address)
+        _assert_response_header(
+            response,
+            query_id=query.id,
+            rcode=dns.rcode.NOERROR,
+            aa=True,
+        )
+
+
+class TestHandlerUdpWireEncoding:
+    def test_oversized_udp_answer_sets_tc_and_respects_classic_udp_limit(
+        self, dns_client_address
+    ):
+        zone_origins = ZoneOrigins("example.com", [])
+        ip_addresses = [f"192.0.2.{octet}" for octet in range(1, 101)]
+        a_record = AHealthyRecord(
+            subdomain=dns.name.from_text("many", origin=zone_origins.primary),
+            healthy_ips=[
+                AHealthyIp(ip=ip, health_port=None, is_healthy=True)
+                for ip in ip_addresses
+            ],
+        )
+        config = DnsServerConfig(
+            zone_origins=zone_origins,
+            primary_name_server="ns1.example.net.",
+            name_servers=frozenset(["ns1.example.net."]),
+            a_records=frozenset([a_record]),
+            ext_private_key=None,
+        )
+        updater = DnsServerZoneUpdater(
+            min_interval=30, connection_timeout=2, config=config
+        )
+        updater.initialize_zone()
+
+        server = _make_server(updater.zone, zone_origins)
+        query = dns.message.make_query("many.example.com.", dns.rdatatype.A)
+        mock_sock = _handle_wire(query.to_wire(), dns_client_address, server)
+
+        sent_wire = _sent_wire(mock_sock, dns_client_address)
+        response = dns.message.from_wire(sent_wire)
+
+        assert len(sent_wire) <= _CLASSIC_UDP_PAYLOAD_SIZE
+        _assert_response_header(
+            response,
+            query_id=query.id,
+            rcode=dns.rcode.NOERROR,
+            aa=True,
+            tc=True,
+        )
+
+
+class TestMalformedWireInput:
+    @patch("dns.message.from_wire")
+    @patch("indisoluble.a_healthy_dns.dns_server_udp_handler._update_response")
+    def test_recoverable_parse_exception_returns_formerr_and_preserves_id(
+        self,
+        mock_update_response,
+        mock_from_wire,
+        dns_request,
+        dns_client_address,
+        zone_origins,
+    ):
+        zone = _make_zone(zone_origins, _FakeTransaction())
+        server = _make_server(zone, zone_origins)
+        mock_from_wire.side_effect = dns.exception.DNSException("Test exception")
+
+        DnsServerUdpHandler(dns_request, dns_client_address, server)
+
+        query_data, mock_sock = dns_request
+        mock_from_wire.assert_called_once_with(query_data)
+
+        response = _sent_response(mock_sock, dns_client_address, _real_from_wire)
+        _assert_response_header(
+            response,
+            query_id=int.from_bytes(query_data[:2], "big"),
+            rcode=dns.rcode.FORMERR,
+            aa=False,
+        )
+        mock_update_response.assert_not_called()
+
+    @pytest.mark.parametrize("wire_data", [b"", b"\x00\x01\x00\x00"])
+    @patch("indisoluble.a_healthy_dns.dns_server_udp_handler._update_response")
+    def test_short_packet_drops_without_response(
+        self,
+        mock_update_response,
+        wire_data,
+        dns_client_address,
+        zone_origins,
+        caplog,
+    ):
+        zone = _make_zone(zone_origins, _FakeTransaction())
+        server = _make_server(zone, zone_origins)
+
+        with caplog.at_level(logging.DEBUG):
+            mock_sock = _handle_wire(wire_data, dns_client_address, server)
+
+        mock_sock.sendto.assert_not_called()
+        mock_update_response.assert_not_called()
+
+        _assert_log_record(
+            caplog, logging.INFO, "Ignoring malformed DNS packet", _DNS_TRAFFIC_JUNK
+        )
+        assert f"source={_TEST_SOURCE_HOST}:{_TEST_SOURCE_PORT}" in caplog.text
+        assert "packet is shorter than the 12-byte DNS header" in caplog.text
+        assert "Stack trace for malformed DNS packet" in caplog.text
+
+    @pytest.mark.parametrize(
+        "wire_data,expected_problem",
+        [
+            (
+                b"\x12\x34\x01\x00\x00\x01\x00\x00\x00\x00\x00\x00",
+                "packet does not match the DNS message wire format",
+            ),
+            (
+                b"\x12\x34\x01\x00\x00\x01\x00\x00\x00\x00\x00\x00"
+                b"\xc0\x0c\x00\x01\x00\x01",
+                "packet contains an invalid DNS compression pointer",
+            ),
+            (
+                b"\x12\x34\x01\x00\x00\x01\x00\x00\x00\x00\x00\x00"
+                b"\x40\x00\x00\x01\x00\x01",
+                "packet uses an unsupported DNS label encoding",
+            ),
+            (
+                b"\x12\x34\x01\x00\x00\x01\x00\x00\x00\x00\x00\x00"
+                b"\x03www\x00\x00\x01\x00\x01junk",
+                "packet has trailing bytes after a complete DNS message",
+            ),
+            (
+                bytes(range(32)),
+                "packet does not match the DNS message wire format",
+            ),
         ],
     )
-    config = DnsServerConfig(
-        zone_origins=zone_origins,
-        primary_name_server="ns1.example.net.",
-        name_servers=frozenset(["ns1.example.net."]),
-        a_records=frozenset([a_record]),
-        ext_private_key=None,
-    )
-    updater = DnsServerZoneUpdater(min_interval=30, connection_timeout=2, config=config)
-    updater.initialize_zone()
-
-    server = MagicMock()
-    server.zone = updater.zone
-    server.zone_origins = zone_origins
-    query = dns.message.make_query("many.example.com.", dns.rdatatype.A)
-    mock_sock = MagicMock()
-    request = (query.to_wire(), mock_sock)
-
-    _ = DnsServerUdpHandler(request, mock_dns_client_address, server)
-
-    mock_sock.sendto.assert_called_once()
-    sent_wire = mock_sock.sendto.call_args[0][0]
-    response = dns.message.from_wire(sent_wire)
-
-    assert len(sent_wire) <= _CLASSIC_UDP_PAYLOAD_SIZE
-    assert response.id == query.id
-    assert response.rcode() == dns.rcode.NOERROR
-    assert bool(response.flags & dns.flags.QR)
-    assert bool(response.flags & dns.flags.AA)
-    assert bool(response.flags & dns.flags.TC)
-    assert not bool(response.flags & dns.flags.RA)
-
-
-@patch("dns.message.from_wire")
-@patch("indisoluble.a_healthy_dns.dns_server_udp_handler._update_response")
-def test_handle_exception_parsing_query(
-    mock_update_response,
-    mock_from_wire,
-    mock_dns_request,
-    mock_dns_client_address,
-    mock_server,
-):
-    # Simulate a malformed message that passes the 12-byte ShortHeader check
-    # but fails full parsing (DNSException).
-    mock_from_wire.side_effect = dns.exception.DNSException("Test exception")
-
-    _ = DnsServerUdpHandler(mock_dns_request, mock_dns_client_address, mock_server)
-
-    query_data = mock_dns_request[0]
-    mock_from_wire.assert_called_once_with(query_data)
-
-    # The handler must respond with FORMERR (RFC 1035 §4.1.1),
-    # preserving the original transaction ID.
-    mock_sock = mock_dns_request[1]
-    mock_sock.sendto.assert_called_once()
-
-    sent_wire = mock_sock.sendto.call_args[0][0]
-    response = _real_from_wire(sent_wire)
-    assert response.id == int.from_bytes(query_data[:2], "big")
-    assert response.rcode() == dns.rcode.FORMERR
-    assert not bool(response.flags & dns.flags.AA)
-    assert bool(response.flags & dns.flags.QR)
-    assert not bool(response.flags & dns.flags.RA)
-    assert not bool(response.flags & dns.flags.TC)
-
-    mock_update_response.assert_not_called()
-
-
-@pytest.mark.parametrize("wire_data", [b"", b"\x00\x01\x00\x00"])
-@patch("indisoluble.a_healthy_dns.dns_server_udp_handler._update_response")
-def test_handle_malformed_wire_input_drops_without_response(
-    mock_update_response, wire_data, mock_dns_client_address, mock_server, caplog
-):
-    mock_sock = MagicMock()
-    request = (wire_data, mock_sock)
-
-    with caplog.at_level(logging.DEBUG):
-        _ = DnsServerUdpHandler(request, mock_dns_client_address, mock_server)
-
-    # Payload too short to recover a DNS header: drop without a DNS response.
-    mock_sock.sendto.assert_not_called()
-    mock_update_response.assert_not_called()
-
-    _assert_log_record(
-        caplog, logging.INFO, "Ignoring malformed DNS packet", _DNS_TRAFFIC_JUNK
-    )
-    assert f"source={_TEST_SOURCE_HOST}:{_TEST_SOURCE_PORT}" in caplog.text
-    assert "packet is shorter than the 12-byte DNS header" in caplog.text
-    assert "Stack trace for malformed DNS packet" in caplog.text
-
-
-# Wire bytes that fail dns.message.from_wire() but are ≥ 12 bytes so the DNS
-# header (and transaction ID) can still be recovered.  The handler must respond
-# with FORMERR, preserving the original transaction ID (RFC 1035 §4.1.1).
-@pytest.mark.parametrize(
-    "wire_data,expected_problem",
-    [
-        (
-            # Valid 12-byte header claiming QDCOUNT=1 but question section missing
-            b"\x12\x34\x01\x00\x00\x01\x00\x00\x00\x00\x00\x00",
-            "packet does not match the DNS message wire format",
-        ),
-        (
-            # Self-referential compression pointer (offset 12 points to itself)
-            b"\x12\x34\x01\x00\x00\x01\x00\x00\x00\x00\x00\x00"
-            b"\xc0\x0c\x00\x01\x00\x01",
-            "packet contains an invalid DNS compression pointer",
-        ),
-        (
-            # Label length byte with unsupported label-type bits set.
-            b"\x12\x34\x01\x00\x00\x01\x00\x00\x00\x00\x00\x00"
-            b"\x40\x00\x00\x01\x00\x01",
-            "packet uses an unsupported DNS label encoding",
-        ),
-        (
-            # Valid query followed by extra bytes after the DNS message ends.
-            b"\x12\x34\x01\x00\x00\x01\x00\x00\x00\x00\x00\x00"
-            b"\x03www\x00\x00\x01\x00\x01junk",
-            "packet has trailing bytes after a complete DNS message",
-        ),
-        (
-            # Garbage bytes that do not form a valid DNS message
-            bytes(range(32)),
-            "packet does not match the DNS message wire format",
-        ),
-    ],
-)
-@patch("indisoluble.a_healthy_dns.dns_server_udp_handler._update_response")
-def test_handle_malformed_wire_with_recoverable_header_returns_formerr(
-    mock_update_response,
-    wire_data,
-    expected_problem,
-    mock_dns_client_address,
-    mock_server,
-    caplog,
-):
-    mock_sock = MagicMock()
-    request = (wire_data, mock_sock)
-
-    with caplog.at_level(logging.DEBUG):
-        _ = DnsServerUdpHandler(request, mock_dns_client_address, mock_server)
-
-    mock_sock.sendto.assert_called_once()
-    sent_wire = mock_sock.sendto.call_args[0][0]
-
-    # Minimal 12-byte FORMERR response: transaction ID preserved, QR=1.
-    assert len(sent_wire) == 12
-    assert sent_wire[0] == wire_data[0]
-    assert sent_wire[1] == wire_data[1]
-    assert sent_wire[2] & 0x80  # QR=1
-    assert (sent_wire[3] & 0x0F) == dns.rcode.FORMERR
-
-    mock_update_response.assert_not_called()
-
-    _assert_log_record(
+    @patch("indisoluble.a_healthy_dns.dns_server_udp_handler._update_response")
+    def test_malformed_wire_with_recoverable_header_returns_formerr(
+        self,
+        mock_update_response,
+        wire_data,
+        expected_problem,
+        dns_client_address,
+        zone_origins,
         caplog,
-        logging.INFO,
-        "Malformed DNS query; replying FORMERR",
-        _DNS_TRAFFIC_JUNK,
+    ):
+        zone = _make_zone(zone_origins, _FakeTransaction())
+        server = _make_server(zone, zone_origins)
+
+        with caplog.at_level(logging.DEBUG):
+            mock_sock = _handle_wire(wire_data, dns_client_address, server)
+
+        sent_wire = _sent_wire(mock_sock, dns_client_address)
+        assert len(sent_wire) == 12
+        assert sent_wire[0] == wire_data[0]
+        assert sent_wire[1] == wire_data[1]
+        assert sent_wire[2] & 0x80  # QR=1
+        assert (sent_wire[3] & 0x0F) == dns.rcode.FORMERR
+
+        mock_update_response.assert_not_called()
+
+        _assert_log_record(
+            caplog,
+            logging.INFO,
+            "Malformed DNS query; replying FORMERR",
+            _DNS_TRAFFIC_JUNK,
+        )
+        assert f"source={_TEST_SOURCE_HOST}:{_TEST_SOURCE_PORT}" in caplog.text
+        assert f"problem={expected_problem}" in caplog.text
+        assert "Stack trace for malformed DNS query" in caplog.text
+
+    @patch("indisoluble.a_healthy_dns.dns_server_udp_handler._update_response")
+    def test_malformed_wire_formerr_preserves_header_opcode_and_rd(
+        self, mock_update_response, dns_client_address, zone_origins
+    ):
+        request_flags = dns.opcode.to_flags(dns.opcode.STATUS) | dns.flags.RD
+        wire_data = (
+            b"\x12\x34"
+            + request_flags.to_bytes(2, "big")
+            + b"\x00\x01\x00\x00\x00\x00\x00\x00"
+        )
+        zone = _make_zone(zone_origins, _FakeTransaction())
+        server = _make_server(zone, zone_origins)
+        mock_sock = _handle_wire(wire_data, dns_client_address, server)
+
+        response = _sent_response(mock_sock, dns_client_address, _real_from_wire)
+        _assert_response_header(
+            response,
+            query_id=int.from_bytes(wire_data[:2], "big"),
+            rcode=dns.rcode.FORMERR,
+            aa=False,
+            opcode=dns.opcode.STATUS,
+            rd=True,
+        )
+        mock_update_response.assert_not_called()
+
+
+class TestInboundResponsePackets:
+    @pytest.mark.parametrize(
+        "wire_data",
+        [
+            dns.message.make_response(
+                dns.message.make_query("test.example.com.", dns.rdatatype.A)
+            ).to_wire(),
+            b"\x12\x34\x81\x00\x00\x01\x00\x00\x00\x00\x00\x00",
+        ],
+        ids=["well-formed-response", "malformed-response"],
     )
-    assert f"source={_TEST_SOURCE_HOST}:{_TEST_SOURCE_PORT}" in caplog.text
-    assert f"problem={expected_problem}" in caplog.text
-    assert "Stack trace for malformed DNS query" in caplog.text
-
-
-@patch("indisoluble.a_healthy_dns.dns_server_udp_handler._update_response")
-def test_handle_malformed_wire_formerr_preserves_header_opcode_and_rd(
-    mock_update_response, mock_dns_client_address, mock_server
-):
-    request_flags = dns.opcode.to_flags(dns.opcode.STATUS) | dns.flags.RD
-    wire_data = (
-        b"\x12\x34"
-        + request_flags.to_bytes(2, "big")
-        + b"\x00\x01\x00\x00\x00\x00\x00\x00"
-    )
-    mock_sock = MagicMock()
-    request = (wire_data, mock_sock)
-
-    _ = DnsServerUdpHandler(request, mock_dns_client_address, mock_server)
-
-    mock_sock.sendto.assert_called_once()
-    sent_wire = mock_sock.sendto.call_args[0][0]
-    response = _real_from_wire(sent_wire)
-
-    assert response.id == int.from_bytes(wire_data[:2], "big")
-    assert response.opcode() == dns.opcode.STATUS
-    assert bool(response.flags & dns.flags.RD)
-    assert response.rcode() == dns.rcode.FORMERR
-    assert not bool(response.flags & dns.flags.AA)
-    assert bool(response.flags & dns.flags.QR)
-
-    mock_update_response.assert_not_called()
-
-
-@patch("indisoluble.a_healthy_dns.dns_server_udp_handler._update_response")
-def test_handle_dns_response_packet_logs_warning_and_drops(
-    mock_update_response, mock_dns_client_address, mock_server, caplog
-):
-    query = dns.message.make_query("test.example.com.", dns.rdatatype.A)
-    response_packet = dns.message.make_response(query)
-    mock_sock = MagicMock()
-    request = (response_packet.to_wire(), mock_sock)
-
-    with caplog.at_level(logging.DEBUG):
-        _ = DnsServerUdpHandler(request, mock_dns_client_address, mock_server)
-
-    mock_update_response.assert_not_called()
-    mock_sock.sendto.assert_not_called()
-
-    _assert_log_record(
+    @patch("indisoluble.a_healthy_dns.dns_server_udp_handler._update_response")
+    def test_dns_response_packet_logs_warning_and_drops(
+        self,
+        mock_update_response,
+        wire_data,
+        dns_client_address,
+        zone_origins,
         caplog,
-        logging.WARNING,
-        "Ignoring DNS response packet received on query socket",
-        _DNS_TRAFFIC_SUSPICIOUS,
-    )
-    assert f"source={_TEST_SOURCE_HOST}:{_TEST_SOURCE_PORT}" in caplog.text
-    assert "problem=response flag is set" in caplog.text
+    ):
+        zone = _make_zone(zone_origins, _FakeTransaction())
+        server = _make_server(zone, zone_origins)
+
+        with caplog.at_level(logging.WARNING):
+            mock_sock = _handle_wire(wire_data, dns_client_address, server)
+
+        mock_update_response.assert_not_called()
+        mock_sock.sendto.assert_not_called()
+
+        _assert_log_record(
+            caplog,
+            logging.WARNING,
+            "Ignoring DNS response packet received on query socket",
+            _DNS_TRAFFIC_SUSPICIOUS,
+        )
+        assert f"source={_TEST_SOURCE_HOST}:{_TEST_SOURCE_PORT}" in caplog.text
+        assert "problem=response flag is set" in caplog.text
 
 
-@patch("dns.message.make_response")
-@patch("indisoluble.a_healthy_dns.dns_server_udp_handler._update_response")
-def test_handle_make_response_failure_logs_info_and_drops(
-    mock_update_response,
-    mock_make_response,
-    mock_dns_request,
-    mock_dns_client_address,
-    mock_server,
-    caplog,
-):
-    mock_make_response.side_effect = dns.exception.FormError("cannot build response")
-
-    with caplog.at_level(logging.DEBUG):
-        _ = DnsServerUdpHandler(mock_dns_request, mock_dns_client_address, mock_server)
-
-    mock_update_response.assert_not_called()
-    mock_dns_request[1].sendto.assert_not_called()
-
-    _assert_log_record(
+class TestResponseConstructionFailure:
+    @patch("dns.message.make_response")
+    @patch("indisoluble.a_healthy_dns.dns_server_udp_handler._update_response")
+    def test_make_response_failure_logs_info_and_drops(
+        self,
+        mock_update_response,
+        mock_make_response,
+        dns_request,
+        dns_client_address,
+        zone_origins,
         caplog,
-        logging.INFO,
-        "Unable to build DNS response; dropping packet",
-        _DNS_TRAFFIC_JUNK,
+    ):
+        zone = _make_zone(zone_origins, _FakeTransaction())
+        server = _make_server(zone, zone_origins)
+        mock_make_response.side_effect = dns.exception.FormError(
+            "cannot build response"
+        )
+
+        with caplog.at_level(logging.DEBUG):
+            DnsServerUdpHandler(dns_request, dns_client_address, server)
+
+        mock_update_response.assert_not_called()
+        dns_request[1].sendto.assert_not_called()
+
+        _assert_log_record(
+            caplog,
+            logging.INFO,
+            "Unable to build DNS response; dropping packet",
+            _DNS_TRAFFIC_JUNK,
+        )
+        assert f"source={_TEST_SOURCE_HOST}:{_TEST_SOURCE_PORT}" in caplog.text
+        assert "problem=cannot build response" in caplog.text
+        assert "Stack trace for DNS response construction failure" in caplog.text
+
+
+class TestRejectedQueries:
+    @pytest.mark.parametrize(
+        "query_factory",
+        [
+            lambda: _make_query_with_opcode(dns.opcode.IQUERY),
+            lambda: _make_query_with_opcode(dns.opcode.STATUS),
+            lambda: _make_query_with_opcode(dns.opcode.NOTIFY),
+            lambda: _make_query_with_opcode(15),
+            _make_update_query,
+        ],
+        ids=["iquery", "status", "notify", "unassigned-opcode", "update"],
     )
-    assert f"source={_TEST_SOURCE_HOST}:{_TEST_SOURCE_PORT}" in caplog.text
-    assert "problem=cannot build response" in caplog.text
-    assert "Stack trace for DNS response construction failure" in caplog.text
-
-
-@patch("indisoluble.a_healthy_dns.dns_server_udp_handler._update_response")
-def test_handle_malformed_dns_response_packet_logs_warning_and_drops(
-    mock_update_response, mock_dns_client_address, mock_server, caplog
-):
-    response_wire = bytearray(
-        b"\x12\x34\x81\x00\x00\x01\x00\x00\x00\x00\x00\x00"
-    )
-    mock_sock = MagicMock()
-    request = (bytes(response_wire), mock_sock)
-
-    with caplog.at_level(logging.WARNING):
-        _ = DnsServerUdpHandler(request, mock_dns_client_address, mock_server)
-
-    mock_update_response.assert_not_called()
-    mock_sock.sendto.assert_not_called()
-
-    _assert_log_record(
+    @patch("indisoluble.a_healthy_dns.dns_server_udp_handler._update_response")
+    def test_query_with_unsupported_opcode_returns_notimp(
+        self,
+        mock_update_response,
+        query_factory,
+        dns_client_address,
+        zone_origins,
         caplog,
-        logging.WARNING,
-        "Ignoring DNS response packet received on query socket",
-        _DNS_TRAFFIC_SUSPICIOUS,
+    ):
+        zone = _make_zone(zone_origins, _FakeTransaction())
+        server = _make_server(zone, zone_origins)
+        query = query_factory()
+
+        with caplog.at_level(logging.WARNING):
+            mock_sock = _handle_wire(query.to_wire(), dns_client_address, server)
+
+        response = _sent_response(mock_sock, dns_client_address)
+        _assert_response_header(
+            response,
+            query_id=query.id,
+            rcode=dns.rcode.NOTIMP,
+            aa=False,
+            opcode=query.opcode(),
+        )
+        _assert_section_counts(response)
+        mock_update_response.assert_not_called()
+
+        _assert_log_record(
+            caplog,
+            logging.WARNING,
+            "DNS query uses unsupported opcode",
+            _DNS_TRAFFIC_SUSPICIOUS,
+        )
+        _assert_log_context(caplog, query_id=query.id)
+        assert f"opcode={dns.opcode.to_text(query.opcode())}" in caplog.text
+
+    @pytest.mark.parametrize(
+        "query_data",
+        [
+            dns.message.Message().to_wire(),
+            _make_multi_question_wire("example.com.", "test.com."),
+        ],
+        ids=["zero-question", "multi-question"],
     )
-    assert f"source={_TEST_SOURCE_HOST}:{_TEST_SOURCE_PORT}" in caplog.text
-    assert "problem=response flag is set" in caplog.text
-
-
-@pytest.mark.parametrize(
-    "opcode",
-    [
-        dns.opcode.IQUERY,
-        dns.opcode.STATUS,
-        dns.opcode.NOTIFY,
-        15,  # Unassigned opcode value; should also receive NOTIMP without AA.
-    ],
-)
-@patch("indisoluble.a_healthy_dns.dns_server_udp_handler._update_response")
-def test_handle_query_with_unsupported_opcode_returns_notimp(
-    mock_update_response, opcode, mock_dns_client_address, mock_server, caplog
-):
-    query = dns.message.make_query("test.example.com.", dns.rdatatype.A)
-    query.set_opcode(opcode)
-    mock_sock = MagicMock()
-    request = (query.to_wire(), mock_sock)
-
-    with caplog.at_level(logging.WARNING):
-        _ = DnsServerUdpHandler(request, mock_dns_client_address, mock_server)
-
-    mock_update_response.assert_not_called()
-    mock_sock.sendto.assert_called_once()
-
-    sent_data = mock_sock.sendto.call_args[0][0]
-    response = dns.message.from_wire(sent_data)
-    assert response.rcode() == dns.rcode.NOTIMP
-    assert len(response.answer) == 0
-    assert len(response.authority) == 0
-    assert len(response.additional) == 0
-
-    # Header field assertions (RFC 1035 §4.1.1)
-    assert response.id == query.id
-    assert not bool(response.flags & dns.flags.AA)
-    assert bool(response.flags & dns.flags.QR)
-    assert not bool(response.flags & dns.flags.RA)
-    assert not bool(response.flags & dns.flags.TC)
-
-    _assert_log_record(
+    @patch("indisoluble.a_healthy_dns.dns_server_udp_handler._update_response")
+    def test_query_with_invalid_question_count_returns_formerr(
+        self,
+        mock_update_response,
+        query_data,
+        dns_client_address,
+        zone_origins,
         caplog,
-        logging.WARNING,
-        "DNS query uses unsupported opcode",
-        _DNS_TRAFFIC_SUSPICIOUS,
-    )
-    assert f"source={_TEST_SOURCE_HOST}:{_TEST_SOURCE_PORT}" in caplog.text
-    assert f"id={query.id}" in caplog.text
+    ):
+        zone = _make_zone(zone_origins, _FakeTransaction())
+        server = _make_server(zone, zone_origins)
 
+        with caplog.at_level(logging.INFO):
+            mock_sock = _handle_wire(query_data, dns_client_address, server)
 
-@patch("indisoluble.a_healthy_dns.dns_server_udp_handler._update_response")
-def test_handle_update_opcode_returns_notimp(
-    mock_update_response, mock_dns_client_address, mock_server, caplog
-):
-    query = dns.update.Update("example.com.")
-    query.add("www", 300, "A", "192.0.2.1")
-    mock_sock = MagicMock()
-    request = (query.to_wire(), mock_sock)
+        response = _sent_response(mock_sock, dns_client_address)
+        _assert_response_header(
+            response,
+            query_id=dns.message.from_wire(query_data).id,
+            rcode=dns.rcode.FORMERR,
+            aa=False,
+        )
+        _assert_section_counts(response)
+        mock_update_response.assert_not_called()
 
-    with caplog.at_level(logging.WARNING):
-        _ = DnsServerUdpHandler(request, mock_dns_client_address, mock_server)
+        _assert_log_record(
+            caplog,
+            logging.INFO,
+            "DNS query has invalid question count",
+            _DNS_TRAFFIC_JUNK,
+        )
+        _assert_log_context(caplog, query_id=response.id)
 
-    mock_update_response.assert_not_called()
-    mock_sock.sendto.assert_called_once()
+    @patch("indisoluble.a_healthy_dns.dns_server_udp_handler._update_response")
+    def test_query_with_non_in_class_returns_refused(
+        self, mock_update_response, dns_client_address, zone_origins, caplog
+    ):
+        zone = _make_zone(zone_origins, _FakeTransaction())
+        server = _make_server(zone, zone_origins)
+        query = dns.message.make_query(
+            "test.example.com.", dns.rdatatype.A, rdclass=dns.rdataclass.CH
+        )
 
-    sent_data = mock_sock.sendto.call_args[0][0]
-    response = dns.message.from_wire(sent_data)
-    assert response.rcode() == dns.rcode.NOTIMP
-    assert response.opcode() == dns.opcode.UPDATE
-    assert len(response.answer) == 0
-    assert len(response.authority) == 0
-    assert len(response.additional) == 0
+        with caplog.at_level(logging.INFO):
+            mock_sock = _handle_wire(query.to_wire(), dns_client_address, server)
 
-    # Header field assertions (RFC 1035 §4.1.1)
-    assert response.id == query.id
-    assert not bool(response.flags & dns.flags.AA)
-    assert bool(response.flags & dns.flags.QR)
-    assert not bool(response.flags & dns.flags.RA)
-    assert not bool(response.flags & dns.flags.TC)
+        response = _sent_response(mock_sock, dns_client_address)
+        _assert_response_header(
+            response,
+            query_id=query.id,
+            rcode=dns.rcode.REFUSED,
+            aa=False,
+        )
+        _assert_section_counts(response)
+        mock_update_response.assert_not_called()
 
-    _assert_log_record(
-        caplog,
-        logging.WARNING,
-        "DNS query uses unsupported opcode",
-        _DNS_TRAFFIC_SUSPICIOUS,
-    )
-    assert "opcode=UPDATE" in caplog.text
-    assert f"source={_TEST_SOURCE_HOST}:{_TEST_SOURCE_PORT}" in caplog.text
-    assert f"id={query.id}" in caplog.text
-
-
-@pytest.mark.parametrize(
-    "query_data",
-    [
-        dns.message.Message().to_wire(),
-        _make_multi_question_wire("example.com.", "test.com."),
-    ],
-)
-@patch("indisoluble.a_healthy_dns.dns_server_udp_handler._update_response")
-def test_handle_query_with_invalid_question_count_returns_formerr(
-    mock_update_response, query_data, mock_dns_client_address, mock_server, caplog
-):
-    mock_sock = MagicMock()
-    request = (query_data, mock_sock)
-
-    with caplog.at_level(logging.INFO):
-        _ = DnsServerUdpHandler(request, mock_dns_client_address, mock_server)
-
-    mock_update_response.assert_not_called()
-    mock_sock.sendto.assert_called_once()
-
-    sent_data = mock_sock.sendto.call_args[0][0]
-    response = dns.message.from_wire(sent_data)
-    assert response.rcode() == dns.rcode.FORMERR
-    assert len(response.answer) == 0
-    assert len(response.authority) == 0
-    assert len(response.additional) == 0
-
-    # Header field assertions (RFC 1035 §4.1.1)
-    assert response.id == dns.message.from_wire(query_data).id
-    assert not bool(response.flags & dns.flags.AA)
-    assert bool(response.flags & dns.flags.QR)
-    assert not bool(response.flags & dns.flags.RA)
-    assert not bool(response.flags & dns.flags.TC)
-
-    _assert_log_record(
-        caplog,
-        logging.INFO,
-        "DNS query has invalid question count",
-        _DNS_TRAFFIC_JUNK,
-    )
-    assert f"source={_TEST_SOURCE_HOST}:{_TEST_SOURCE_PORT}" in caplog.text
-    assert f"id={response.id}" in caplog.text
-
-
-@patch("indisoluble.a_healthy_dns.dns_server_udp_handler._update_response")
-def test_handle_query_with_non_in_class_returns_refused(
-    mock_update_response, mock_dns_client_address, mock_server, caplog
-):
-    query = dns.message.make_query(
-        "test.example.com.", dns.rdatatype.A, rdclass=dns.rdataclass.CH
-    )
-    mock_sock = MagicMock()
-    request = (query.to_wire(), mock_sock)
-
-    with caplog.at_level(logging.INFO):
-        _ = DnsServerUdpHandler(request, mock_dns_client_address, mock_server)
-
-    mock_update_response.assert_not_called()
-    mock_sock.sendto.assert_called_once()
-
-    sent_data = mock_sock.sendto.call_args[0][0]
-    response = dns.message.from_wire(sent_data)
-    assert response.rcode() == dns.rcode.REFUSED
-    assert len(response.answer) == 0
-    assert len(response.authority) == 0
-    assert len(response.additional) == 0
-
-    # Header field assertions (RFC 1035 §4.1.1)
-    assert response.id == query.id
-    assert not bool(response.flags & dns.flags.AA)
-    assert bool(response.flags & dns.flags.QR)
-    assert not bool(response.flags & dns.flags.RA)
-    assert not bool(response.flags & dns.flags.TC)
-
-    _assert_log_record(
-        caplog,
-        logging.INFO,
-        "Refused DNS query with unsupported class",
-        _DNS_TRAFFIC_NOISE,
-    )
-    assert f"source={_TEST_SOURCE_HOST}:{_TEST_SOURCE_PORT}" in caplog.text
-    assert f"id={query.id}" in caplog.text
+        _assert_log_record(
+            caplog,
+            logging.INFO,
+            "Refused DNS query with unsupported class",
+            _DNS_TRAFFIC_NOISE,
+        )
+        _assert_log_context(caplog, query_id=query.id)

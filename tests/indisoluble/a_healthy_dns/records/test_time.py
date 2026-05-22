@@ -1,65 +1,69 @@
 #!/usr/bin/env python3
 
+import pytest
+
 from indisoluble.a_healthy_dns.records.time import (
     _RFC8767_MAX_TTL as RFC8767_MAX_TTL,
+    calculate_a_ttl,
+    calculate_dnskey_ttl,
+    calculate_ns_ttl,
+    calculate_rrsig_lifetime,
+    calculate_soa_expire,
+    calculate_soa_min_ttl,
+    calculate_soa_refresh,
+    calculate_soa_retry,
+    calculate_soa_ttl,
 )
-from indisoluble.a_healthy_dns.records.time import calculate_a_ttl
-from indisoluble.a_healthy_dns.records.time import calculate_dnskey_ttl
-from indisoluble.a_healthy_dns.records.time import calculate_ns_ttl
-from indisoluble.a_healthy_dns.records.time import calculate_rrsig_lifetime
-from indisoluble.a_healthy_dns.records.time import calculate_soa_expire
-from indisoluble.a_healthy_dns.records.time import calculate_soa_min_ttl
-from indisoluble.a_healthy_dns.records.time import calculate_soa_refresh
-from indisoluble.a_healthy_dns.records.time import calculate_soa_retry
-from indisoluble.a_healthy_dns.records.time import calculate_soa_ttl
+
+_MAX_INTERVAL = 60
+_OVERSIZED_INTERVAL = 1_500_000_000
+_NON_POSITIVE_INTERVALS = [0, -60]
+
+_TTL_CASES = [
+    ("a-ttl", calculate_a_ttl, 120),
+    ("ns-ttl", calculate_ns_ttl, 3600),
+    ("soa-ttl", calculate_soa_ttl, 3600),
+    ("soa-refresh", calculate_soa_refresh, 1200),
+    ("soa-retry", calculate_soa_retry, 120),
+    ("soa-expire", calculate_soa_expire, 600),
+    ("soa-min-ttl", calculate_soa_min_ttl, 120),
+    ("dnskey-ttl", calculate_dnskey_ttl, 1200),
+]
+
+_TTL_EXPECTATION_PARAMS = [
+    (calculator, expected) for case_id, calculator, expected in _TTL_CASES
+]
+_TTL_CALCULATOR_PARAMS = [calculator for case_id, calculator, expected in _TTL_CASES]
+_TTL_IDS = [case_id for case_id, calculator, expected in _TTL_CASES]
 
 
-def test_ttl_formulas_derive_from_max_interval():
-    max_interval = 60
+class TestTtlCalculations:
+    @pytest.mark.parametrize(
+        "calculator,expected", _TTL_EXPECTATION_PARAMS, ids=_TTL_IDS
+    )
+    def test_derive_from_max_interval(self, calculator, expected):
+        assert calculator(_MAX_INTERVAL) == expected
 
-    assert calculate_a_ttl(max_interval) == 120
-    assert calculate_ns_ttl(max_interval) == 3600
-    assert calculate_soa_ttl(max_interval) == 3600
-    assert calculate_soa_refresh(max_interval) == 1200
-    assert calculate_soa_retry(max_interval) == 120
-    assert calculate_soa_expire(max_interval) == 600
-    assert calculate_soa_min_ttl(max_interval) == 120
-    assert calculate_dnskey_ttl(max_interval) == 1200
+    @pytest.mark.parametrize("calculator", _TTL_CALCULATOR_PARAMS, ids=_TTL_IDS)
+    def test_clamp_to_rfc8767_max(self, calculator):
+        assert calculator(_OVERSIZED_INTERVAL) == RFC8767_MAX_TTL
 
-
-def test_rrsig_lifetime_derives_from_soa_timing():
-    lifetime = calculate_rrsig_lifetime(60)
-
-    assert lifetime.resign == 1200
-    assert lifetime.expiration == 3120
+    @pytest.mark.parametrize("max_interval", _NON_POSITIVE_INTERVALS)
+    @pytest.mark.parametrize("calculator", _TTL_CALCULATOR_PARAMS, ids=_TTL_IDS)
+    def test_clamp_non_positive_outputs_to_zero(self, calculator, max_interval):
+        assert calculator(max_interval) == 0
 
 
-def test_ttl_calculators_clamp_to_rfc8767_max():
-    max_interval = 1_500_000_000
+class TestRRSigLifetimeCalculation:
+    def test_derives_from_soa_timing(self):
+        lifetime = calculate_rrsig_lifetime(_MAX_INTERVAL)
 
-    assert calculate_a_ttl(max_interval) == RFC8767_MAX_TTL
-    assert calculate_ns_ttl(max_interval) == RFC8767_MAX_TTL
-    assert calculate_soa_ttl(max_interval) == RFC8767_MAX_TTL
-    assert calculate_soa_refresh(max_interval) == RFC8767_MAX_TTL
-    assert calculate_soa_retry(max_interval) == RFC8767_MAX_TTL
-    assert calculate_soa_expire(max_interval) == RFC8767_MAX_TTL
-    assert calculate_soa_min_ttl(max_interval) == RFC8767_MAX_TTL
-    assert calculate_dnskey_ttl(max_interval) == RFC8767_MAX_TTL
+        assert lifetime.resign == 1200
+        assert lifetime.expiration == 3120
 
+    @pytest.mark.parametrize("max_interval", _NON_POSITIVE_INTERVALS)
+    def test_non_positive_interval_returns_zero_timing(self, max_interval):
+        lifetime = calculate_rrsig_lifetime(max_interval)
 
-def test_ttl_calculators_clamp_non_positive_outputs_to_zero():
-    assert calculate_a_ttl(0) == 0
-    assert calculate_ns_ttl(0) == 0
-    assert calculate_soa_ttl(0) == 0
-    assert calculate_soa_refresh(0) == 0
-    assert calculate_soa_retry(0) == 0
-    assert calculate_soa_expire(0) == 0
-    assert calculate_soa_min_ttl(0) == 0
-    assert calculate_dnskey_ttl(0) == 0
-
-
-def test_rrsig_lifetime_with_zero_interval_returns_zero_timing():
-    lifetime = calculate_rrsig_lifetime(0)
-
-    assert lifetime.resign == 0
-    assert lifetime.expiration == 0
+        assert lifetime.resign == 0
+        assert lifetime.expiration == 0

@@ -21,7 +21,6 @@ from indisoluble.a_healthy_dns.records.a_healthy_ip import AHealthyIp
 from indisoluble.a_healthy_dns.records.a_healthy_record import AHealthyRecord
 from indisoluble.a_healthy_dns.records.zone_origins import ZoneOrigins
 
-
 # ---------------------------------------------------------------------------
 # Zone constants used throughout all test classes
 # ---------------------------------------------------------------------------
@@ -74,6 +73,20 @@ _SERVER_READY_WAIT = 0.05
 # ---------------------------------------------------------------------------
 
 
+def _udp_exchange_wire(
+    host: str,
+    port: int,
+    wire: bytes,
+    timeout: float = 2.0,
+) -> bytes:
+    """Send raw *wire* bytes over UDP and return raw response wire bytes."""
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+        sock.settimeout(timeout)
+        sock.sendto(wire, (host, port))
+        data, _ = sock.recvfrom(4096)
+        return data
+
+
 def _udp_query(
     host: str,
     port: int,
@@ -81,14 +94,9 @@ def _udp_query(
     timeout: float = 2.0,
 ) -> dns.message.Message:
     """Send *query* over UDP and return the parsed response."""
-    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    sock.settimeout(timeout)
-    try:
-        sock.sendto(query.to_wire(), (host, port))
-        data, _ = sock.recvfrom(4096)
-        return dns.message.from_wire(data)
-    finally:
-        sock.close()
+    return dns.message.from_wire(
+        _udp_exchange_wire(host, port, query.to_wire(), timeout)
+    )
 
 
 def _udp_raw_query(
@@ -98,14 +106,7 @@ def _udp_raw_query(
     timeout: float = 2.0,
 ) -> dns.message.Message:
     """Send raw *wire* bytes over UDP and return the parsed response."""
-    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    sock.settimeout(timeout)
-    try:
-        sock.sendto(wire, (host, port))
-        data, _ = sock.recvfrom(4096)
-        return dns.message.from_wire(data)
-    finally:
-        sock.close()
+    return dns.message.from_wire(_udp_exchange_wire(host, port, wire, timeout))
 
 
 def _udp_query_wire(
@@ -115,14 +116,7 @@ def _udp_query_wire(
     timeout: float = 2.0,
 ) -> bytes:
     """Send *query* over UDP and return raw response wire bytes."""
-    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    sock.settimeout(timeout)
-    try:
-        sock.sendto(query.to_wire(), (host, port))
-        data, _ = sock.recvfrom(4096)
-        return data
-    finally:
-        sock.close()
+    return _udp_exchange_wire(host, port, query.to_wire(), timeout)
 
 
 def _make_two_question_wire(name1: str, name2: str) -> bytes:
@@ -142,8 +136,12 @@ def _make_two_question_wire(name1: str, name2: str) -> bytes:
 
 
 def _make_status_query() -> dns.message.Message:
+    return _make_opcode_query(dns.opcode.STATUS)
+
+
+def _make_opcode_query(opcode: int) -> dns.message.Message:
     query = dns.message.make_query(_SUBDOMAIN_FQDN, dns.rdatatype.A)
-    query.set_opcode(dns.opcode.STATUS)
+    query.set_opcode(opcode)
     return query
 
 
@@ -288,8 +286,7 @@ def live_server():
     server.zone = updater.zone
     server.zone_origins = zone_origins
 
-    thread = threading.Thread(target=server.serve_forever)
-    thread.daemon = True
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
 
     # Pause long enough for serve_forever() to enter its select loop.
@@ -300,6 +297,7 @@ def live_server():
 
     server.shutdown()
     thread.join(timeout=5)
+    server.server_close()
 
 
 # ---------------------------------------------------------------------------
@@ -331,7 +329,6 @@ class TestPositiveResponses:
             _MIXED_CASE_SUBDOMAIN_FQDN,
             _MIXED_CASE_ALIAS_SUBDOMAIN_FQDN,
         ],
-        ids=["mixed-case-primary", "mixed-case-alias"],
     )
     def test_mixed_case_a_query_returns_noerror_expected_ip(self, live_server, qname):
         host, port = live_server
@@ -578,7 +575,8 @@ class TestRejectedQueries:
                 ),
                 dns.rcode.REFUSED,
             ),
-            # dns.message.Message() with no questions produces QDCOUNT=0; handler returns FORMERR per Level 1 policy.
+            # dns.message.Message() with no questions produces QDCOUNT=0;
+            # handler returns FORMERR per Level 1 policy.
             (dns.message.Message(), dns.rcode.FORMERR),
         ],
         ids=["out-of-zone", "mixed-case-out-of-zone", "non-in-class", "zero-question"],
@@ -611,22 +609,16 @@ class TestRejectedQueries:
         _assert_section_counts(resp)
         _assert_response_flags(resp, aa=False)
 
-    def test_status_opcode_returns_notimp(self, live_server):
+    @pytest.mark.parametrize(
+        "opcode",
+        [
+            dns.opcode.STATUS,
+            15,
+        ],
+    )
+    def test_unsupported_opcode_returns_notimp(self, live_server, opcode):
         host, port = live_server
-        query = dns.message.make_query(_SUBDOMAIN_FQDN, dns.rdatatype.A)
-        query.set_opcode(dns.opcode.STATUS)
-        resp = _udp_query(host, port, query)
-
-        assert resp.rcode() == dns.rcode.NOTIMP
-        assert resp.id == query.id
-
-        _assert_section_counts(resp)
-        _assert_response_flags(resp, aa=False)
-
-    def test_unassigned_opcode_returns_notimp(self, live_server):
-        host, port = live_server
-        query = dns.message.make_query(_SUBDOMAIN_FQDN, dns.rdatatype.A)
-        query.set_opcode(15)
+        query = _make_opcode_query(opcode)
         resp = _udp_query(host, port, query)
 
         assert resp.rcode() == dns.rcode.NOTIMP

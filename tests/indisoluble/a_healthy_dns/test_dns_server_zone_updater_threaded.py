@@ -3,11 +3,11 @@
 import itertools
 import threading
 
+from unittest.mock import Mock, call, patch
+
 import dns.name
 import dns.versioned
 import pytest
-
-from unittest.mock import ANY, Mock, patch
 
 from indisoluble.a_healthy_dns.dns_server_config_factory import DnsServerConfig
 from indisoluble.a_healthy_dns.dns_server_zone_updater import (
@@ -21,20 +21,27 @@ from indisoluble.a_healthy_dns.records.a_healthy_ip import AHealthyIp
 from indisoluble.a_healthy_dns.records.a_healthy_record import AHealthyRecord
 from indisoluble.a_healthy_dns.records.zone_origins import ZoneOrigins
 
+_ZONE_UPDATER = (
+    "indisoluble.a_healthy_dns.dns_server_zone_updater_threaded." "DnsServerZoneUpdater"
+)
+_EVENT = "indisoluble.a_healthy_dns.dns_server_zone_updater_threaded.threading.Event"
+_THREAD = "indisoluble.a_healthy_dns.dns_server_zone_updater_threaded.threading.Thread"
+_TIME = "indisoluble.a_healthy_dns.dns_server_zone_updater_threaded.time.time"
+
 
 @pytest.fixture
-def mock_zone_origins():
+def zone_origins():
     return ZoneOrigins("example.com", [])
 
 
 @pytest.fixture
-def mock_config(mock_zone_origins):
-    subdomain = dns.name.from_text("www", origin=mock_zone_origins.primary)
+def config(zone_origins):
+    subdomain = dns.name.from_text("www", origin=zone_origins.primary)
     ip = AHealthyIp(ip="192.168.1.1", health_port=8080, is_healthy=True)
     a_record = AHealthyRecord(subdomain=subdomain, healthy_ips=[ip])
 
     return DnsServerConfig(
-        zone_origins=mock_zone_origins,
+        zone_origins=zone_origins,
         primary_name_server="ns1.dns.example.net",
         name_servers=frozenset(["ns1.dns.example.net", "ns2.dns.example.net"]),
         a_records=frozenset([a_record]),
@@ -43,260 +50,326 @@ def mock_config(mock_zone_origins):
 
 
 @pytest.fixture
-def mock_zone(mock_zone_origins):
+def zone(zone_origins):
     zone = Mock(spec=dns.versioned.Zone)
-    zone.origin = mock_zone_origins.primary
+    zone.origin = zone_origins.primary
 
     return zone
 
 
 @pytest.fixture
-def mock_updater(mock_zone):
+def zone_updater(zone):
     updater = Mock(spec=DnsServerZoneUpdater)
-    updater.zone = mock_zone
+    updater.zone = zone
 
     return updater
 
 
 @pytest.fixture
-def mock_event():
-    event = Mock(spec=threading.Event)
-
-    return event
+def stop_event():
+    return Mock(spec=threading.Event)
 
 
 @pytest.fixture
-def mock_thread():
-    thread = Mock(spec=threading.Thread)
-
-    return thread
+def updater_thread():
+    return Mock(spec=threading.Thread)
 
 
-@patch("threading.Event")
-@patch(
-    "indisoluble.a_healthy_dns.dns_server_zone_updater_threaded.DnsServerZoneUpdater"
-)
-def test_init_success(
-    mock_updater_class, mock_event_class, mock_updater, mock_event, mock_config
+def _make_threaded_updater(
+    mock_zone_updater_class,
+    mock_event_class,
+    zone_updater,
+    stop_event,
+    config,
+    *,
+    min_interval=5,
+    connection_timeout=10,
 ):
-    mock_updater_class.return_value = mock_updater
-    mock_event_class.return_value = mock_event
+    mock_zone_updater_class.return_value = zone_updater
+    mock_event_class.return_value = stop_event
 
-    min_interval = 5
-    connection_timeout = 10
-
-    assert (
-        DnsServerZoneUpdaterThreaded(min_interval, connection_timeout, mock_config)
-        is not None
-    )
-
-    mock_updater_class.assert_called_once_with(
-        min_interval, connection_timeout, mock_config
-    )
-    mock_event_class.assert_called_once()
+    return DnsServerZoneUpdaterThreaded(min_interval, connection_timeout, config)
 
 
-@patch("threading.Event")
-@patch(
-    "indisoluble.a_healthy_dns.dns_server_zone_updater_threaded.DnsServerZoneUpdater"
-)
-def test_init_failure_raises_value_error(
-    mock_updater_class, mock_event_class, mock_config
-):
-    mock_updater_class.side_effect = Exception("Initialization failed")
+def _assert_thread_created_for_update_loop(mock_thread_class, updater):
+    mock_thread_class.assert_called_once()
 
-    with pytest.raises(
-        ValueError, match="Failed to initialize updater: Initialization failed"
+    thread_kwargs = mock_thread_class.call_args.kwargs
+    thread_target = thread_kwargs["target"]
+    assert thread_target.__self__ is updater
+    assert thread_target.__name__ == "_update_zone_loop"
+    assert thread_kwargs["name"] == "ZoneUpdaterThread"
+    assert thread_kwargs["daemon"] is True
+
+
+class TestInitialization:
+    @patch(_EVENT)
+    @patch(_ZONE_UPDATER)
+    def test_creates_inner_updater_and_stop_event(
+        self,
+        mock_zone_updater_class,
+        mock_event_class,
+        zone_updater,
+        stop_event,
+        config,
     ):
-        DnsServerZoneUpdaterThreaded(5, 10, mock_config)
+        min_interval = 5
+        connection_timeout = 10
 
-    mock_event_class.assert_not_called()
-
-
-@patch("threading.Event")
-@patch(
-    "indisoluble.a_healthy_dns.dns_server_zone_updater_threaded.DnsServerZoneUpdater"
-)
-def test_zone_property(
-    mock_updater_class,
-    mock_event_class,
-    mock_updater,
-    mock_event,
-    mock_config,
-    mock_zone,
-):
-    mock_updater_class.return_value = mock_updater
-    mock_event_class.return_value = mock_event
-
-    assert DnsServerZoneUpdaterThreaded(5, 10, mock_config).zone == mock_zone
-
-
-@patch("threading.Thread")
-@patch("threading.Event")
-@patch(
-    "indisoluble.a_healthy_dns.dns_server_zone_updater_threaded.DnsServerZoneUpdater"
-)
-def test_start_success(
-    mock_updater_class,
-    mock_event_class,
-    mock_thread_class,
-    mock_updater,
-    mock_event,
-    mock_thread,
-    mock_config,
-):
-    mock_updater_class.return_value = mock_updater
-    mock_event_class.return_value = mock_event
-    updater = DnsServerZoneUpdaterThreaded(5, 10, mock_config)
-
-    mock_thread_class.return_value = mock_thread
-
-    updater.start()
-
-    mock_thread.is_alive.assert_not_called()
-    mock_updater.initialize_zone.assert_called_once_with()
-    mock_event.clear.assert_called_once()
-    mock_thread_class.assert_called_once_with(
-        target=updater._update_zone_loop, name=ANY, daemon=True
-    )
-    mock_thread.start.assert_called_once()
-
-
-@patch("threading.Thread")
-@patch("threading.Event")
-@patch(
-    "indisoluble.a_healthy_dns.dns_server_zone_updater_threaded.DnsServerZoneUpdater"
-)
-def test_start_already_running(
-    mock_updater_class,
-    mock_event_class,
-    mock_thread_class,
-    mock_updater,
-    mock_event,
-    mock_thread,
-    mock_config,
-):
-    mock_updater_class.return_value = mock_updater
-    mock_event_class.return_value = mock_event
-    updater = DnsServerZoneUpdaterThreaded(5, 10, mock_config)
-
-    mock_thread_class.return_value = mock_thread
-    mock_thread.is_alive.return_value = True
-
-    updater.start()
-
-    mock_thread_class.reset_mock()
-    mock_thread.reset_mock()
-    mock_event.reset_mock()
-    mock_updater.reset_mock()
-
-    updater.start()
-
-    mock_thread.is_alive.assert_called_once()
-    mock_updater.update.assert_not_called()
-    mock_event.clear.assert_not_called()
-    mock_thread_class.assert_not_called()
-    mock_thread.start.assert_not_called()
-
-
-@patch("threading.Event")
-@patch(
-    "indisoluble.a_healthy_dns.dns_server_zone_updater_threaded.DnsServerZoneUpdater"
-)
-def test_stop_not_running(
-    mock_updater_class, mock_event_class, mock_updater, mock_event, mock_config
-):
-    mock_updater_class.return_value = mock_updater
-    mock_event_class.return_value = mock_event
-    updater = DnsServerZoneUpdaterThreaded(5, 10, mock_config)
-
-    assert updater.stop() is True
-
-    mock_event.set.assert_not_called()
-
-
-@pytest.mark.parametrize("is_alive_after_join", [True, False])
-@patch("threading.Thread")
-@patch("threading.Event")
-@patch(
-    "indisoluble.a_healthy_dns.dns_server_zone_updater_threaded.DnsServerZoneUpdater"
-)
-def test_stop_with_different_join_result(
-    mock_updater_class,
-    mock_event_class,
-    mock_thread_class,
-    is_alive_after_join,
-    mock_updater,
-    mock_event,
-    mock_thread,
-    mock_config,
-):
-    mock_updater_class.return_value = mock_updater
-    mock_event_class.return_value = mock_event
-
-    connection_timeout = 10
-    updater = DnsServerZoneUpdaterThreaded(5, connection_timeout, mock_config)
-
-    mock_thread_class.return_value = mock_thread
-
-    updater.start()
-
-    mock_thread.is_alive.side_effect = [True, is_alive_after_join]
-
-    mock_thread.reset_mock()
-    mock_event.reset_mock()
-
-    assert updater.stop() is not is_alive_after_join
-
-    assert mock_thread.is_alive.call_count == 2
-    mock_event.set.assert_called_once()
-    mock_thread.join.assert_called_once_with(
-        timeout=connection_timeout + DELTA_PER_RECORD_MANAGEMENT
-    )
-
-
-@pytest.mark.parametrize("min_interval,update_duration", [(5, 1), (2, 5)])
-@patch("time.time")
-@patch("threading.Event")
-@patch(
-    "indisoluble.a_healthy_dns.dns_server_zone_updater_threaded.DnsServerZoneUpdater"
-)
-def test_update_zone(
-    mock_updater_class,
-    mock_event_class,
-    mock_time,
-    min_interval,
-    update_duration,
-    mock_updater,
-    mock_event,
-    mock_config,
-):
-    mock_updater_class.return_value = mock_updater
-    mock_event_class.return_value = mock_event
-
-    updater = DnsServerZoneUpdaterThreaded(min_interval, 10, mock_config)
-
-    update_count = 3
-    is_set_results = [False] * update_count + [True]
-    mock_event.is_set.side_effect = is_set_results
-
-    mock_time.side_effect = list(
-        itertools.chain.from_iterable(
-            (i * min_interval, i * min_interval + update_duration)
-            for i in range(len(is_set_results))
+        updater = _make_threaded_updater(
+            mock_zone_updater_class,
+            mock_event_class,
+            zone_updater,
+            stop_event,
+            config,
+            min_interval=min_interval,
+            connection_timeout=connection_timeout,
         )
-    )
 
-    mock_event.wait.return_value = False
-
-    updater._update_zone_loop()
-
-    assert mock_updater.update.call_count == update_count
-    if update_duration > min_interval:
-        assert mock_event.wait.call_count == 0
-    else:
-        assert mock_event.wait.call_count == update_count
-        assert all(
-            call[0][0] == (min_interval - update_duration)
-            for call in mock_event.wait.call_args_list
+        assert updater is not None
+        mock_zone_updater_class.assert_called_once_with(
+            min_interval, connection_timeout, config
         )
+        mock_event_class.assert_called_once_with()
+
+    @patch(_EVENT)
+    @patch(_ZONE_UPDATER)
+    def test_wraps_inner_updater_initialization_failure(
+        self, mock_zone_updater_class, mock_event_class, config
+    ):
+        mock_zone_updater_class.side_effect = Exception("Initialization failed")
+
+        with pytest.raises(
+            ValueError, match="Failed to initialize updater: Initialization failed"
+        ):
+            DnsServerZoneUpdaterThreaded(5, 10, config)
+
+        mock_event_class.assert_not_called()
+
+
+class TestZoneProperty:
+    @patch(_EVENT)
+    @patch(_ZONE_UPDATER)
+    def test_returns_inner_updater_zone(
+        self,
+        mock_zone_updater_class,
+        mock_event_class,
+        zone_updater,
+        stop_event,
+        config,
+        zone,
+    ):
+        updater = _make_threaded_updater(
+            mock_zone_updater_class,
+            mock_event_class,
+            zone_updater,
+            stop_event,
+            config,
+        )
+
+        assert updater.zone == zone
+
+
+class TestStart:
+    @patch(_THREAD)
+    @patch(_EVENT)
+    @patch(_ZONE_UPDATER)
+    def test_initializes_zone_and_starts_daemon_thread(
+        self,
+        mock_zone_updater_class,
+        mock_event_class,
+        mock_thread_class,
+        zone_updater,
+        stop_event,
+        updater_thread,
+        config,
+    ):
+        updater = _make_threaded_updater(
+            mock_zone_updater_class,
+            mock_event_class,
+            zone_updater,
+            stop_event,
+            config,
+        )
+        mock_thread_class.return_value = updater_thread
+
+        updater.start()
+
+        updater_thread.is_alive.assert_not_called()
+        zone_updater.initialize_zone.assert_called_once_with()
+        stop_event.clear.assert_called_once_with()
+        _assert_thread_created_for_update_loop(mock_thread_class, updater)
+        updater_thread.start.assert_called_once_with()
+
+    @patch(_THREAD)
+    @patch(_EVENT)
+    @patch(_ZONE_UPDATER)
+    def test_does_nothing_when_thread_is_already_running(
+        self,
+        mock_zone_updater_class,
+        mock_event_class,
+        mock_thread_class,
+        zone_updater,
+        stop_event,
+        updater_thread,
+        config,
+    ):
+        updater = _make_threaded_updater(
+            mock_zone_updater_class,
+            mock_event_class,
+            zone_updater,
+            stop_event,
+            config,
+        )
+        mock_thread_class.return_value = updater_thread
+        updater_thread.is_alive.return_value = True
+
+        updater.start()
+
+        mock_thread_class.reset_mock()
+        updater_thread.reset_mock()
+        stop_event.reset_mock()
+        zone_updater.reset_mock()
+
+        updater.start()
+
+        updater_thread.is_alive.assert_called_once_with()
+        zone_updater.initialize_zone.assert_not_called()
+        zone_updater.update.assert_not_called()
+        stop_event.clear.assert_not_called()
+        mock_thread_class.assert_not_called()
+        updater_thread.start.assert_not_called()
+
+
+class TestStop:
+    @patch(_EVENT)
+    @patch(_ZONE_UPDATER)
+    def test_returns_true_without_signaling_when_thread_is_not_running(
+        self,
+        mock_zone_updater_class,
+        mock_event_class,
+        zone_updater,
+        stop_event,
+        config,
+    ):
+        updater = _make_threaded_updater(
+            mock_zone_updater_class,
+            mock_event_class,
+            zone_updater,
+            stop_event,
+            config,
+        )
+
+        assert updater.stop() is True
+        stop_event.set.assert_not_called()
+
+    @pytest.mark.parametrize(
+        "is_alive_after_join,expected_result",
+        [
+            (True, False),
+            (False, True),
+        ],
+        ids=["still-running", "stopped"],
+    )
+    @patch(_THREAD)
+    @patch(_EVENT)
+    @patch(_ZONE_UPDATER)
+    def test_signals_thread_and_returns_whether_it_stopped(
+        self,
+        mock_zone_updater_class,
+        mock_event_class,
+        mock_thread_class,
+        is_alive_after_join,
+        expected_result,
+        zone_updater,
+        stop_event,
+        updater_thread,
+        config,
+    ):
+        connection_timeout = 10
+        updater = _make_threaded_updater(
+            mock_zone_updater_class,
+            mock_event_class,
+            zone_updater,
+            stop_event,
+            config,
+            connection_timeout=connection_timeout,
+        )
+        mock_thread_class.return_value = updater_thread
+        updater.start()
+
+        updater_thread.is_alive.side_effect = [True, is_alive_after_join]
+        updater_thread.reset_mock()
+        stop_event.reset_mock()
+
+        assert updater.stop() is expected_result
+        assert updater_thread.is_alive.call_count == 2
+        stop_event.set.assert_called_once_with()
+        updater_thread.join.assert_called_once_with(
+            timeout=connection_timeout + DELTA_PER_RECORD_MANAGEMENT
+        )
+
+
+class TestUpdateLoop:
+    @pytest.mark.parametrize(
+        "min_interval,update_duration,expected_sleep",
+        [
+            (5, 1, 4.0),
+            (2, 5, None),
+        ],
+        ids=[
+            "waits-for-remaining-interval",
+            "does-not-wait-when-update-exceeds-interval",
+        ],
+    )
+    @patch(_TIME)
+    @patch(_EVENT)
+    @patch(_ZONE_UPDATER)
+    def test_updates_until_stop_event_is_set(
+        self,
+        mock_zone_updater_class,
+        mock_event_class,
+        mock_time,
+        min_interval,
+        update_duration,
+        expected_sleep,
+        zone_updater,
+        stop_event,
+        config,
+    ):
+        updater = _make_threaded_updater(
+            mock_zone_updater_class,
+            mock_event_class,
+            zone_updater,
+            stop_event,
+            config,
+            min_interval=min_interval,
+        )
+        update_count = 3
+        stop_event.is_set.side_effect = [False] * update_count + [True]
+        stop_event.wait.return_value = False
+        mock_time.side_effect = list(
+            itertools.chain.from_iterable(
+                (i * min_interval, i * min_interval + update_duration)
+                for i in range(update_count)
+            )
+        )
+
+        updater._update_zone_loop()
+
+        assert zone_updater.update.call_count == update_count
+        for update_call in zone_updater.update.call_args_list:
+            should_abort = update_call.kwargs["should_abort"]
+            assert callable(should_abort)
+
+        stop_event.is_set.side_effect = None
+        stop_event.is_set.return_value = True
+        should_abort = zone_updater.update.call_args.kwargs["should_abort"]
+        assert should_abort() is True
+
+        if expected_sleep is None:
+            stop_event.wait.assert_not_called()
+        else:
+            assert stop_event.wait.call_args_list == [
+                call(expected_sleep) for _ in range(update_count)
+            ]
