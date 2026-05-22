@@ -51,6 +51,42 @@ Other local helpers:
 
 Cross-cutting behavior tests that do not map to a single source module may live at `tests/indisoluble/a_healthy_dns/`. Small, justified exceptions are allowed when a dedicated mirrored test would add noise without improving coverage.
 
+## Test Maintainability
+
+Test code is production code for the repository quality gate. Keep it organized, explicit, and reviewable with the same discipline as runtime code.
+
+- Group tests by behavior or responsibility using pytest-compatible classes when a module has several distinct concerns.
+- Prefer class names that describe the purpose under test, such as `TestInitializationValidation`, `TestUpdateRefresh`, or `TestRejectedQueries`.
+- Prefer test names that state the behavior being protected, not the implementation step being exercised.
+- Keep shared setup in fixtures or small helper functions when it removes meaningful repetition.
+- Keep helper functions local to the test module unless several modules need the same behavior.
+- Avoid adding edge cases as an unstructured list of top-level tests. Put the new case in the behavior group it belongs to, or create a new group when the behavior is distinct.
+- Do not introduce broad abstractions in tests just to reduce a few lines of setup. Readability at the assertion site matters more than minimizing line count.
+
+## Parametrized Tests
+
+Use parametrization when the same behavior should hold for several inputs. Do not use parametrization when separate test names would make materially different behavior easier to understand.
+
+Default rules:
+
+- Use plain parameter values by default.
+- Treat `ids` as reporting-only labels. They must not carry behavior, expectations, or hidden test meaning.
+- Omit `ids` when pytest's generated case name is already clear from the raw parameter values.
+- Use `ids=[...]` only when failure output would otherwise be noisy, opaque, unstable, or less meaningful than the scenario name.
+- Do not use `pytest.param(...)` just to attach IDs to ordinary cases.
+- Use `pytest.param(...)` only when an individual case needs per-case metadata, such as `marks=pytest.mark.xfail`, `marks=pytest.mark.skip`, or another case-specific pytest option.
+
+Good reasons to use `ids` include:
+
+- long JSON strings or DNS wire payloads
+- lambdas, function objects, or generated objects whose `repr` does not explain the case
+- dense multi-field matrices where the business scenario is clearer than the raw tuple
+- booleans or integers whose domain meaning is not obvious from the test name
+
+Do not add `ids` only to restate simple values such as `None`, `False`, `0`, short strings, IP address strings, or small tuples that pytest already renders clearly.
+
+When every case needs a readable scenario name, prefer `ids=[...]` on `@pytest.mark.parametrize` instead of wrapping every case in `pytest.param(..., id=...)`.
+
 ## Component Integration Tests
 
 Component integration tests exercise a production component end-to-end over real I/O, such as real UDP sockets, but with pre-populated in-memory state rather than the live health-check lifecycle.
