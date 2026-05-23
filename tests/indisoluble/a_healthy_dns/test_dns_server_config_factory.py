@@ -2,12 +2,12 @@
 
 import json
 
-from typing import Any, Dict
-from unittest.mock import patch
-
 import dns.dnssectypes
 import dns.name
 import pytest
+
+from typing import Any, Dict
+from unittest.mock import patch
 
 from dns.dnssecalgs.rsa import PrivateRSASHA256
 
@@ -115,16 +115,16 @@ class TestMakeConfigSuccess:
             ),
         }
 
-    def test_builds_always_on_a_records_without_health_ports(self, valid_args):
+    def test_builds_standard_static_a_records_without_health_ports(self, valid_args):
         valid_args[dscf.ARG_ZONE_RESOLUTIONS] = json.dumps(
-            {"always-on": ["10.0.0.1", "10.0.0.2"]}
+            {"standard-static": ["10.0.0.1", "10.0.0.2"]}
         )
 
         config = dscf.make_config(valid_args)
 
         assert config is not None
         assert _a_records_by_subdomain(config) == {
-            _subdomain_name(config, "always-on"): frozenset(
+            _subdomain_name(config, "standard-static"): frozenset(
                 [
                     AHealthyIp("10.0.0.1", None, False),
                     AHealthyIp("10.0.0.2", None, False),
@@ -360,14 +360,14 @@ class TestMakeConfigInputValidation:
             "empty-dict",
             "empty-subdomain",
             "invalid-subdomain",
-            "always-on-invalid-ip-type",
+            "standard-static-invalid-ip-type",
             "empty-subconfig",
             "missing-ip-list",
             "null-ip-list",
             "ip-list-not-list",
             "empty-ip-list",
             "null-health-port",
-            "always-on-empty-ip-list",
+            "standard-static-empty-ip-list",
             "missing-health-port",
             "ip-not-string",
             "ip-octet-too-large",

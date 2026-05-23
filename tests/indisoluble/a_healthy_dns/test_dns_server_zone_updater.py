@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 
-from typing import List
-from unittest.mock import Mock, call, patch
-
 import dns.dnssec
 import dns.name
 import dns.node
 import dns.rdataset
 import dns.rdatatype
 import pytest
+
+from typing import List
+from unittest.mock import Mock, call, patch
 
 from dns.dnssecalgs.rsa import PrivateRSASHA256
 

@@ -35,8 +35,9 @@ class TestNsRecordGeneration:
                 2700,
             ),
         ],
+        ids=["multiple-name-servers", "single-name-server"],
     )
-    def test_make_ns_record_returns_expected_rdataset(
+    def test_make_ns_record_uses_calculated_ttl_and_name_server_targets(
         self, max_interval, name_servers, expected_ttl
     ):
         result = make_ns_record(max_interval, name_servers)

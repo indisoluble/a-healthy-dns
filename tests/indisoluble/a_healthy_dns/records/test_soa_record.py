@@ -41,7 +41,7 @@ def _assert_soa_rdataset(rdataset, *, ttl):
 
 
 class TestSoaRecordGeneration:
-    def test_first_iteration_returns_expected_soa_rdataset(self):
+    def test_first_iteration_builds_soa_with_calculated_timing_and_serial(self):
         result = _next_soa_rdataset()
         soa_rdata = _soa_rdata(result)
 

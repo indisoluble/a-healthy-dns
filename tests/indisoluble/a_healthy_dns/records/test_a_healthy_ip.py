@@ -27,8 +27,11 @@ class TestAHealthyIpInitialization:
             (_HEALTH_PORT, True),
             (None, False),
         ],
+        ids=["health-checked-ip", "static-ip-without-health-port"],
     )
-    def test_valid_initialization(self, health_port, is_healthy):
+    def test_initialization_stores_valid_port_and_health_state(
+        self, health_port, is_healthy
+    ):
         healthy_ip = _make_ip(health_port=health_port, is_healthy=is_healthy)
 
         _assert_ip_state(

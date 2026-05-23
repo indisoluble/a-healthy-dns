@@ -44,7 +44,7 @@ def _assert_rrsig_key(result, *, ext_private_key, inception):
 
 class TestRRSigKeyGeneration:
     @unittest.mock.patch("indisoluble.a_healthy_dns.records.dnssec.datetime")
-    def test_first_iteration_returns_expected_rrsig_key(self, mock_datetime):
+    def test_first_iteration_sets_key_ttl_and_signature_lifetime(self, mock_datetime):
         ext_private_key = _make_extended_private_key()
         _configure_datetime_mock(mock_datetime, [_FIXED_NOW])
 

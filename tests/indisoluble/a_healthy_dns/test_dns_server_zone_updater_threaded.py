@@ -1,13 +1,12 @@
 #!/usr/bin/env python3
 
-import itertools
 import threading
-
-from unittest.mock import Mock, call, patch
 
 import dns.name
 import dns.versioned
 import pytest
+
+from unittest.mock import Mock, call, patch
 
 from indisoluble.a_healthy_dns.dns_server_config_factory import DnsServerConfig
 from indisoluble.a_healthy_dns.dns_server_zone_updater import (
@@ -100,6 +99,17 @@ def _assert_thread_created_for_update_loop(mock_thread_class, updater):
     assert thread_target.__name__ == "_update_zone_loop"
     assert thread_kwargs["name"] == "ZoneUpdaterThread"
     assert thread_kwargs["daemon"] is True
+
+
+def _time_values_for_update_loop(update_count, min_interval, update_duration):
+    return [
+        timestamp
+        for update_index in range(update_count)
+        for timestamp in (
+            update_index * min_interval,
+            update_index * min_interval + update_duration,
+        )
+    ]
 
 
 class TestInitialization:
@@ -311,32 +321,21 @@ class TestStop:
 
 
 class TestUpdateLoop:
-    @pytest.mark.parametrize(
-        "min_interval,update_duration,expected_sleep",
-        [
-            (5, 1, 4.0),
-            (2, 5, None),
-        ],
-        ids=[
-            "waits-for-remaining-interval",
-            "does-not-wait-when-update-exceeds-interval",
-        ],
-    )
     @patch(_TIME)
     @patch(_EVENT)
     @patch(_ZONE_UPDATER)
-    def test_updates_until_stop_event_is_set(
+    def test_update_loop_runs_updates_until_stop_event_is_set(
         self,
         mock_zone_updater_class,
         mock_event_class,
         mock_time,
-        min_interval,
-        update_duration,
-        expected_sleep,
         zone_updater,
         stop_event,
         config,
     ):
+        min_interval = 5
+        update_duration = 1
+        update_count = 3
         updater = _make_threaded_updater(
             mock_zone_updater_class,
             mock_event_class,
@@ -345,19 +344,46 @@ class TestUpdateLoop:
             config,
             min_interval=min_interval,
         )
-        update_count = 3
         stop_event.is_set.side_effect = [False] * update_count + [True]
         stop_event.wait.return_value = False
-        mock_time.side_effect = list(
-            itertools.chain.from_iterable(
-                (i * min_interval, i * min_interval + update_duration)
-                for i in range(update_count)
-            )
+        mock_time.side_effect = _time_values_for_update_loop(
+            update_count, min_interval, update_duration
         )
 
         updater._update_zone_loop()
 
         assert zone_updater.update.call_count == update_count
+
+    @patch(_TIME)
+    @patch(_EVENT)
+    @patch(_ZONE_UPDATER)
+    def test_update_loop_passes_stop_event_abort_callback_to_each_update(
+        self,
+        mock_zone_updater_class,
+        mock_event_class,
+        mock_time,
+        zone_updater,
+        stop_event,
+        config,
+    ):
+        min_interval = 2
+        update_duration = 5
+        update_count = 2
+        updater = _make_threaded_updater(
+            mock_zone_updater_class,
+            mock_event_class,
+            zone_updater,
+            stop_event,
+            config,
+            min_interval=min_interval,
+        )
+        stop_event.is_set.side_effect = [False] * update_count + [True]
+        mock_time.side_effect = _time_values_for_update_loop(
+            update_count, min_interval, update_duration
+        )
+
+        updater._update_zone_loop()
+
         for update_call in zone_updater.update.call_args_list:
             should_abort = update_call.kwargs["should_abort"]
             assert callable(should_abort)
@@ -367,9 +393,69 @@ class TestUpdateLoop:
         should_abort = zone_updater.update.call_args.kwargs["should_abort"]
         assert should_abort() is True
 
-        if expected_sleep is None:
-            stop_event.wait.assert_not_called()
-        else:
-            assert stop_event.wait.call_args_list == [
-                call(expected_sleep) for _ in range(update_count)
-            ]
+    @patch(_TIME)
+    @patch(_EVENT)
+    @patch(_ZONE_UPDATER)
+    def test_update_loop_waits_remaining_interval_after_fast_updates(
+        self,
+        mock_zone_updater_class,
+        mock_event_class,
+        mock_time,
+        zone_updater,
+        stop_event,
+        config,
+    ):
+        min_interval = 5
+        update_duration = 1
+        update_count = 3
+        updater = _make_threaded_updater(
+            mock_zone_updater_class,
+            mock_event_class,
+            zone_updater,
+            stop_event,
+            config,
+            min_interval=min_interval,
+        )
+        stop_event.is_set.side_effect = [False] * update_count + [True]
+        stop_event.wait.return_value = False
+        mock_time.side_effect = _time_values_for_update_loop(
+            update_count, min_interval, update_duration
+        )
+
+        updater._update_zone_loop()
+
+        assert stop_event.wait.call_args_list == [
+            call(4.0) for _ in range(update_count)
+        ]
+
+    @patch(_TIME)
+    @patch(_EVENT)
+    @patch(_ZONE_UPDATER)
+    def test_update_loop_skips_wait_when_update_exceeds_interval(
+        self,
+        mock_zone_updater_class,
+        mock_event_class,
+        mock_time,
+        zone_updater,
+        stop_event,
+        config,
+    ):
+        min_interval = 2
+        update_duration = 5
+        update_count = 3
+        updater = _make_threaded_updater(
+            mock_zone_updater_class,
+            mock_event_class,
+            zone_updater,
+            stop_event,
+            config,
+            min_interval=min_interval,
+        )
+        stop_event.is_set.side_effect = [False] * update_count + [True]
+        mock_time.side_effect = _time_values_for_update_loop(
+            update_count, min_interval, update_duration
+        )
+
+        updater._update_zone_loop()
+
+        stop_event.wait.assert_not_called()

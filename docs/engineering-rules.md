@@ -45,6 +45,7 @@ When a change alters one of these surfaces, update the implementation and the ca
 ## Testing Expectations
 
 - Behavior changes require focused automated tests at the lowest useful level.
+- Tests should document the expected contract through behavior-focused names, explicit setup/action/assertion shape, and observable outcomes.
 - Unit tests must not make real network calls; mock `can_create_connection` or `socket.create_connection` when exercising health logic.
 - Unit tests must avoid real time dependencies; mock `time.time`, `datetime.datetime.now`, or `uint32_current_time` as needed.
 - Component integration tests may use real UDP sockets with pre-populated in-memory zone state.

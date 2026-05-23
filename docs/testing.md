@@ -46,10 +46,20 @@ Other local helpers:
 - Test file naming: `test_<module_name>.py`.
 - No real network calls in unit tests.
 - No real time dependencies in unit tests.
-- Prefer one assert per test when practical.
+- Prefer one behavior per test. Multiple assertions are acceptable when together they document one observable outcome or contract.
 - Coverage exclusions (`.coveragerc`) include: `__repr__`, `raise NotImplementedError`, `raise ImportError`, `if __name__ == '__main__'`, `pass`, and `pragma: no cover` markers.
 
 Cross-cutting behavior tests that do not map to a single source module may live at `tests/indisoluble/a_healthy_dns/`. Small, justified exceptions are allowed when a dedicated mirrored test would add noise without improving coverage.
+
+## Tests As Documentation
+
+Automated tests are part of the repository's executable documentation. They must verify behavior and make the expected contract clear through their name, setup, action, and assertions.
+
+- Prefer test names that state the behavior or contract being protected, not the implementation step being exercised.
+- Structure unit tests around a clear Given/When/Then flow: set up the relevant state, execute one public behavior, and assert observable results. Literal Given/When/Then comments are optional; use them only when they improve readability.
+- Assert public behavior and boundary effects: return values, raised exceptions, DNS response codes, DNS response sections and flags, log messages, or calls to injected dependencies when that dependency is the boundary under test.
+- Keep fixtures and helper functions descriptive enough that the test body can be read as the behavior contract.
+- For regression coverage, name the contract being preserved rather than the bug mechanism or internal implementation detail.
 
 ## Test Maintainability
 
@@ -57,7 +67,6 @@ Test code is production code for the repository quality gate. Keep it organized,
 
 - Group tests by behavior or responsibility using pytest-compatible classes when a module has several distinct concerns.
 - Prefer class names that describe the purpose under test, such as `TestInitializationValidation`, `TestUpdateRefresh`, or `TestRejectedQueries`.
-- Prefer test names that state the behavior being protected, not the implementation step being exercised.
 - Keep shared setup in fixtures or small helper functions when it removes meaningful repetition.
 - Keep helper functions local to the test module unless several modules need the same behavior.
 - Avoid adding edge cases as an unstructured list of top-level tests. Put the new case in the behavior group it belongs to, or create a new group when the behavior is distinct.
