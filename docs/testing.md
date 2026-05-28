@@ -22,7 +22,7 @@ Use the coverage command as the CI-equivalent local check before merge.
 pytest
 ```
 
-This is useful for a fast local pass when coverage output is not needed.
+This runs the configured test suite and default coverage reports from `pyproject.toml`.
 
 ### Run Tests With Coverage
 
