@@ -190,7 +190,6 @@ a-healthy-dns/
 ├── docs/                 # all long-form documentation
 ├── indisoluble/          # source package tree (regular Python package)
 ├── tests/                # test tree — mirrors indisoluble/ by default
-├── .coveragerc           # coverage measurement exclusions
 ├── .dockerignore         # Docker build-context exclusions
 ├── .gitignore            # local/generated file exclusions
 ├── AGENTS.md             # AI agent contract
@@ -198,7 +197,7 @@ a-healthy-dns/
 ├── LICENSE               # project license
 ├── README.md             # quick-start entrypoint
 ├── docker-compose.example.yml  # example Compose configuration
-└── setup.py              # packaging, versioning, and dependency declarations
+└── pyproject.toml        # packaging, versioning, dependency declarations, and test/coverage tool config
 ```
 
 This tree lists tracked, project-owned files and directories. Local generated artifacts such as virtual environments, caches, coverage output, and IDE state are ignored and are not part of the repository layout.

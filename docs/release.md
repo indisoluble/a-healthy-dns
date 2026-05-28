@@ -6,12 +6,12 @@ This document is the canonical home for version policy, release steps, and publi
 
 ## Versioning
 
-The single source of truth for the package version is the `version` field in `setup.py`.
+The single source of truth for the package version is the `version` field in `pyproject.toml`.
 
 Rules:
 
 - Every merge result on `master` must increase the version relative to its first parent.
-- Version checks are enforced by `.github/workflows/test-version.yml`, which compares the current `setup.py` version against `HEAD~1` using `packaging.version`.
+- Version checks are enforced by `.github/workflows/test-version.yml`, which compares the current `pyproject.toml` version against `HEAD~1` using `packaging.version`.
 - Use PEP 440 version strings, for example `0.1.39`.
 - Do not create git tags or GitHub releases manually; the `release version` CI workflow handles this automatically after all required checks pass on `master`.
 
@@ -21,7 +21,7 @@ Releases are fully automated. No manual tagging or Docker Hub pushes are require
 
 Steps triggered on every merge to `master`:
 
-1. Before merging, update `version` in `setup.py` to a new PEP 440 value higher than the current version on `master`.
+1. Before merging, update `version` in `pyproject.toml` to a new PEP 440 value higher than the current version on `master`.
 2. Merge to `master`.
 3. CI runs `test python code`, `test integration`, and `test version` in parallel.
 4. If all three pass, `validate tests` succeeds.
@@ -34,8 +34,8 @@ Each release produces two artifacts:
 
 | Artifact | Location | Tag convention |
 |---|---|---|
-| GitHub release | GitHub Releases page | `v<version>` from `setup.py` |
-| Docker image | `indisoluble/a-healthy-dns` on Docker Hub | version from `setup.py` |
+| GitHub release | GitHub Releases page | `v<version>` from `pyproject.toml` |
+| Docker image | `indisoluble/a-healthy-dns` on Docker Hub | version from `pyproject.toml` |
 
 Release notes are generated automatically from the commit and PR history by the `release version` workflow.
 

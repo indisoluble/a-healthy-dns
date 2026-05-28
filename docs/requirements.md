@@ -8,7 +8,7 @@ It is the canonical home for functional, operational, quality, compatibility, se
 
 | Constraint | Requirement |
 |---|---|
-| Runtime target | Python 3.10+ |
+| Runtime target | Python 3.11+ |
 | Network role | Authoritative DNS server for one hosted zone plus optional alias zones |
 | Transport | UDP only |
 | Record modes | Standard static IP entries and health-checked IP entries, both configurable within the same zone |

@@ -12,9 +12,9 @@ All workflows target the `master` branch.
 |---|---|---|---|
 | `test python code` | `test-py-code.yml` | push/PR -> master | Runs pytest with coverage, uploads to Codecov |
 | `test integration` | `test-integration.yml` | push/PR -> master | Builds Docker image; runs end-to-end tests including health-check-driven DNS state transitions |
-| `test version` | `test-version.yml` | push/PR -> master | Verifies version in `setup.py` was increased |
+| `test version` | `test-version.yml` | push/PR -> master | Verifies version in `pyproject.toml` was increased |
 | `validate tests` | `validate-tests.yml` | `workflow_run` on any of the three above | Gate: all three must pass for the same commit |
-| `release version` | `release-version.yml` | after `validate tests` succeeds | Creates git tag and GitHub release from `setup.py` version |
+| `release version` | `release-version.yml` | after `validate tests` succeeds | Creates git tag and GitHub release from `pyproject.toml` version |
 | `release docker` | `release-docker.yml` | after `release version` succeeds | Pushes Docker image to Docker Hub |
 | `security scan` | `security-scan.yml` | push -> master | Trivy vulnerability scan on Docker image, uploads SARIF to GitHub Security tab |
 

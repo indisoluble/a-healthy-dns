@@ -12,7 +12,7 @@ WORKDIR /app
 RUN python -m venv /app/venv && \
     mkdir -p /app/keys
 
-COPY setup.py .
+COPY pyproject.toml README.md ./
 COPY indisoluble/ ./indisoluble/
 
 RUN pip install --no-cache-dir .

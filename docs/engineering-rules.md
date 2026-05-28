@@ -20,8 +20,8 @@ This document is the canonical home for implementation-independent engineering p
 
 | Concern | Source of truth |
 |---|---|
-| Package version | `setup.py:version` |
-| Runtime dependencies | `setup.py:install_requires` |
+| Package version | `pyproject.toml:project.version` |
+| Runtime dependencies | `pyproject.toml:project.dependencies` |
 | CLI argument names and defaults | `indisoluble/a_healthy_dns/main.py` |
 | Docker entrypoint | `Dockerfile` |
 | Configuration validation and assembly | `indisoluble/a_healthy_dns/dns_server_config_factory.py` |
