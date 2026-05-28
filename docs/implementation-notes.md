@@ -8,21 +8,21 @@ This document is the canonical home for language-specific, runtime-specific, and
 
 | Item | Rule |
 |---|---|
-| Python version | **3.10 minimum** (`setup.py:python_requires=">=3.10"`) |
-| Entry point | `a-healthy-dns` CLI -> `indisoluble.a_healthy_dns.main:main` (`setup.py:entry_points`) |
+| Python version | **3.11 minimum** (`pyproject.toml:project.requires-python=">=3.11"`) |
+| Entry point | `a-healthy-dns` CLI -> `indisoluble.a_healthy_dns.main:main` (`pyproject.toml:[project.scripts]`) |
 | Package root | `indisoluble/a_healthy_dns/` |
 | Test root | `tests/indisoluble/a_healthy_dns/` mirrors the source tree by default |
 
 ## Dependencies
 
-Dependencies are managed in `setup.py`. Do not introduce a `requirements.txt` or `pyproject.toml` in parallel unless the packaging model is intentionally changed and the documentation is updated in the same change.
+Dependencies are managed in `pyproject.toml`. Keep runtime dependencies in `[project.dependencies]` and test-only dependencies in `[project.optional-dependencies].test`.
 
 | Package | Constraint | Purpose |
 |---|---|---|
 | `dnspython` | `>=2.8.0,<3.0.0` | DNS protocol, zones, records, and DNSSEC signing |
 | `cryptography` | `>=46.0.5,<47.0.0` | DNSSEC key loading and crypto operations |
 
-Dev/test packages (`pytest`, `pytest-cov`) are installed directly in CI and are not declared in `setup.py`.
+Test/development packages are declared in `pyproject.toml` under `[project.optional-dependencies].test` and installed in CI via project extras.
 
 Keep upper-bound pins at the next major version so minor and patch updates are allowed automatically.
 

@@ -9,8 +9,7 @@ This document is the canonical home for test taxonomy, local validation commands
 ```bash
 python3 -m venv venv
 source venv/bin/activate
-pip install -e .
-pip install pytest pytest-cov
+pip install -e ".[test]"
 ```
 
 ## QA Commands
@@ -23,7 +22,7 @@ Use the coverage command as the CI-equivalent local check before merge.
 pytest
 ```
 
-This is useful for a fast local pass when coverage output is not needed.
+This runs the configured test suite and default coverage reports from `pyproject.toml`.
 
 ### Run Tests With Coverage
 
@@ -31,7 +30,7 @@ This is useful for a fast local pass when coverage output is not needed.
 pytest --cov=indisoluble.a_healthy_dns --cov-report=term --cov-report=xml
 ```
 
-Coverage is measured over `indisoluble.a_healthy_dns` only. `setup.py` and `tests/` are excluded. See `.coveragerc` for the full exclusion list.
+Coverage is measured over `indisoluble.a_healthy_dns` only. `tests/` is excluded. Coverage and pytest settings are centralized in `pyproject.toml`.
 
 Other local helpers:
 
@@ -47,7 +46,7 @@ Other local helpers:
 - No real network calls in unit tests.
 - No real time dependencies in unit tests.
 - Prefer one behavior per test. Multiple assertions are acceptable when together they document one observable outcome or contract.
-- Coverage exclusions (`.coveragerc`) include: `__repr__`, `raise NotImplementedError`, `raise ImportError`, `if __name__ == '__main__'`, `pass`, and `pragma: no cover` markers.
+- Coverage excludes `tests/` at run time and extends report exclusions with `__repr__`, `raise NotImplementedError`, `raise ImportError`, `if __name__ == '__main__'`, and `pass` via `pyproject.toml`.
 
 Cross-cutting behavior tests that do not map to a single source module may live at `tests/indisoluble/a_healthy_dns/`. Small, justified exceptions are allowed when a dedicated mirrored test would add noise without improving coverage.
 

@@ -49,7 +49,7 @@ a-healthy-dns \
   --ns '["ns1.dns.example.net"]'
 ```
 
-Requires Python 3.10+.
+Requires Python 3.11+.
 
 ## Behavior at a glance
 
