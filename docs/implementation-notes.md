@@ -22,7 +22,7 @@ Dependencies are managed in `pyproject.toml`. Keep runtime dependencies in `[pro
 | `dnspython` | `>=2.8.0,<3.0.0` | DNS protocol, zones, records, and DNSSEC signing |
 | `cryptography` | `>=46.0.5,<47.0.0` | DNSSEC key loading and crypto operations |
 
-Dev/test packages are declared in `pyproject.toml` under `[project.optional-dependencies].test` and installed in CI via project extras.
+Test/development packages are declared in `pyproject.toml` under `[project.optional-dependencies].test` and installed in CI via project extras.
 
 Keep upper-bound pins at the next major version so minor and patch updates are allowed automatically.
 
