@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "a_healthy_dns"
-version = "0.1.48"
+version = "0.1.49"
 description = "A healthy DNS project"
 readme = "README.md"
 requires-python = ">=3.11"

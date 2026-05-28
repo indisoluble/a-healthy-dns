@@ -33,11 +33,7 @@ jobs:
         CURRENT_VERSION=$(python -c "import tomllib; from pathlib import Path; print(tomllib.loads(Path('pyproject.toml').read_text())['project']['version'])")
         
         # Get previous version from the parent commit
-        if git show HEAD~1:pyproject.toml >/dev/null 2>&1; then
-          PREVIOUS_VERSION=$(git show HEAD~1:pyproject.toml | python -c "import tomllib, sys; print(tomllib.loads(sys.stdin.read())['project']['version'])")
-        else
-          PREVIOUS_VERSION=$(git show HEAD~1:setup.py | python -c "import re, sys; content=sys.stdin.read(); print(re.search(r'version=\"([^\"]+)\"', content).group(1))")
-        fi
+        PREVIOUS_VERSION=$(git show HEAD~1:pyproject.toml | python -c "import tomllib, sys; print(tomllib.loads(sys.stdin.read())['project']['version'])")
         
         echo "Previous version: $PREVIOUS_VERSION"
         echo "Current version: $CURRENT_VERSION"
