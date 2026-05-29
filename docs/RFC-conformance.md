@@ -354,10 +354,12 @@ RFC 8482 — https://www.rfc-editor.org/rfc/rfc8482: allows authoritative respon
 | Existing owner name queried with `QTYPE=ANY` receives synthesized HINFO | **Implemented** | `_update_response()` detects `dns.rdatatype.ANY` after zone matching and returns one HINFO RRset whose CPU field is `RFC8482` and whose OS field is empty. The answer owner name is the queried hosted-zone or alias-zone name, and no SOA authority is added because this is a positive RFC 8482 minimization response. |
 | Empty non-terminal queried with `QTYPE=ANY` receives synthesized HINFO | **Implemented** | Empty non-terminals are existing QNAMEs under RFC 4592. The `ANY` path therefore returns synthesized HINFO for them, while non-ANY queries at empty non-terminals continue to return NODATA with SOA authority under RFC 8020 and RFC 2308. |
 | Absent owner name queried with `QTYPE=ANY` remains NXDOMAIN | **Implemented** | RFC 8482 handling is limited to existing QNAMEs. Absent in-zone owner names continue through the normal NXDOMAIN branch with SOA authority. |
-| HINFO TTL reuses the apex SOA TTL calculation | **Implemented** | `_build_rfc8482_hinfo_answer()` reads the same apex SOA data and uses the shared `_build_apex_soa()` helper, so synthesized HINFO uses `min(SOA TTL, SOA.MINIMUM)` without building an authority RRset, adding separate updater state, or adding operator configuration. |
+| HINFO TTL reuses the apex SOA TTL calculation | **Implemented** | `_build_rfc8482_hinfo_answer()` reads the same apex SOA data and uses the shared `_build_apex_soa()` helper, so synthesized HINFO uses `min(SOA TTL, SOA.MINIMUM)` without building an authority RRset or adding a second TTL source of truth. Operators influence this value through the existing SOA timing inputs described in [`docs/architecture.md`](architecture.md#6-interval-calculation-pattern). |
 | DNSSEC-specific `ANY` response behavior | **Out of Level 1 scope** | Signed-zone RRSIG inclusion, EDNS(0), and DO-bit processing remain part of the broader DNSSEC scope that this document does not claim. |
 
-No remaining Level 1 gaps in RFC 8482 synthesized-HINFO coverage.
+Future scope note: if CNAME publication is added later, RFC 8482 synthesized HINFO handling must be revisited because Section 4.2 only applies when there is no CNAME present at the owner name matching the QNAME.
+
+No remaining Level 1 gaps in RFC 8482 minimized-response coverage.
 
 ---
 
