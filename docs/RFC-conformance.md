@@ -66,6 +66,7 @@ Level 1 covers the minimum behaviour required to be a correct authoritative UDP 
 | Query uses an unsupported opcode, including obsolete **IQUERY** | Return **NOTIMP** without the **AA** flag |
 | Query is not for the **IN** (Internet) class | Return **REFUSED** without the **AA** flag |
 | Query is for an unsupported or unknown non-meta RR type at an existing owner name | Treat the type as absent data and return **NOERROR** with an empty answer section and the **AA** flag |
+| Query is for `QTYPE=ANY` at an existing owner name or empty non-terminal | Return **NOERROR** with the **AA** flag and one synthesized **HINFO** RRset whose CPU field is `RFC8482` and whose OS field is empty; the HINFO TTL is the same value this server would use for the matched apex SOA in a negative response: `min(SOA TTL, SOA.MINIMUM)` |
 | Query has more or fewer than exactly one question | Return **FORMERR** without the **AA** flag |
 | Query contains supported, reserved, or unknown DNS request flags | Do not drop the query solely because those flags are present; apply the Level 1 response flag policy |
 | UDP response would exceed the classic DNS UDP payload limit | Return a response no larger than **512 bytes** with the **TC** (truncated) flag set |
@@ -81,7 +82,6 @@ Level 1 covers the minimum behaviour required to be a correct authoritative UDP 
 - EDNS(0) extension processing, including RFC 6891 OPT processing
 - TCP transport, including RFC 7766 DNS-over-TCP requirements
 - IPv6 (AAAA records)
-- QTYPE=ANY response policy (RFC 8482)
 - CNAME, DNAME, or other xNAME redirection-chain processing
 - DNS Stateful Operations (DSO), including RFC 8490 session semantics
 - Delegation referral and glue response construction, including RFC 9471 referral-glue behavior
@@ -95,7 +95,7 @@ Level 1 covers the minimum behaviour required to be a correct authoritative UDP 
 | **NXDOMAIN** | "Non-Existent Domain" — the queried name does not exist in the zone at all |
 | **NODATA / NOERROR empty answer** | The queried name exists but has no records of the requested type; the response code is NOERROR (not an error) and the answer section is empty |
 | **SOA in authority** | For negative responses (NXDOMAIN and NODATA) the server includes the matched hosted or alias zone's Start of Authority record in the authority section so that negative caching behaviour is well-defined. The authority SOA RRset TTL is the negative-cache TTL, not necessarily the stored apex SOA TTL |
-| **Non-meta RR type** | An ordinary resource-record type query handled as data lookup when unsupported, such as `AAAA` or an unknown `TYPE####` data type under RFC 3597 and current DNS registry terminology. This excludes special operation or extension query types outside Level 1, including `AXFR`, `IXFR`, `ANY`, and `OPT`/EDNS(0). |
+| **Non-meta RR type** | An ordinary resource-record type query handled as data lookup when unsupported, such as `AAAA` or an unknown `TYPE####` data type under RFC 3597 and current DNS registry terminology. This excludes special operation or extension query types such as `ANY`, which has its own RFC 8482 policy in Level 1, and out-of-scope query types such as `AXFR`, `IXFR`, and `OPT`/EDNS(0). |
 | **Level 1 response flag policy** | Responses set `QR`; preserve request `RD`; set `AA` only for authoritative in-zone responses; set `TC` only when UDP truncation occurs; and leave `RA`, `AD`, `CD`, and still-reserved header bits clear because recursion, DNSSEC signalling, and EDNS(0) are outside Level 1. |
 | **REFUSED** | The server refuses to answer because the query is for a zone it does not serve |
 | **FORMERR** | "Format Error" — the server cannot interpret the query because it is malformed |
@@ -106,7 +106,7 @@ Level 1 covers the minimum behaviour required to be a correct authoritative UDP 
 
 The table below identifies the smallest complete RFC set needed to judge the Level 1 protocol target. The project does not claim unqualified full-document compliance with these broad RFCs; it claims full coverage only when the status column says so.
 
-Completeness is based on the declared behaviour in [Level 1 protocol target](#3-level-1-protocol-target) and the current RFC Editor update chains for the DNS base specifications and Level 1-dependent updates, especially RFC 1034, RFC 1035, RFC 2181, and RFC 2308. If an RFC defines behavior inside the Level 1 target, it must appear in this table with an implemented or gap status. RFCs that update the core DNS specifications only for lower-layer UDP/IP transport, TCP transport, EDNS(0), DNSSEC, QTYPE=ANY policy, zone transfer/update/notify, TSIG/TKEY/SIG(0), DSO/sessionful DNS, xNAME redirection, referral glue, resolver/cache behavior, terminology, IANA registry allocation procedures, experimental record types, or record families outside A/SOA/NS are not listed in the main table because those behaviours are outside Level 1.
+Completeness is based on the declared behaviour in [Level 1 protocol target](#3-level-1-protocol-target) and the current RFC Editor update chains for the DNS base specifications and Level 1-dependent updates, especially RFC 1034, RFC 1035, RFC 2181, and RFC 2308. If an RFC defines behavior inside the Level 1 target, it must appear in this table with an implemented or gap status. RFCs that update the core DNS specifications only for lower-layer UDP/IP transport, TCP transport, EDNS(0), DNSSEC, zone transfer/update/notify, TSIG/TKEY/SIG(0), DSO/sessionful DNS, xNAME redirection, referral glue, resolver/cache behavior, terminology, IANA registry allocation procedures, experimental record types, or record families outside A/SOA/NS are not listed in the main table because those behaviours are outside Level 1.
 
 | RFC | Applies to Level 1 because it defines | Current Level 1 status | Broader material not claimed |
 |---|---|---|---|
@@ -120,6 +120,7 @@ Completeness is based on the declared behaviour in [Level 1 protocol target](#3-
 | [RFC 3597](https://www.rfc-editor.org/rfc/rfc3597) | Unknown DNS RR type handling for ordinary non-meta `TYPE####` queries | **Fully covered for Level 1** | Loading, storing, transferring, and serving arbitrary unknown RR data; unknown-RR RDATA preservation; master-file generic RDATA syntax; and DNSSEC canonical-form details |
 | [RFC 4343](https://www.rfc-editor.org/rfc/rfc4343) | Case-insensitive DNS name matching for authoritative lookup and zone matching | **Fully covered for Level 1** | Internationalized Domain Name handling and output-case preservation choices outside the lookup-result correctness requirement |
 | [RFC 4592](https://www.rfc-editor.org/rfc/rfc4592) | DNS owner-name existence rules, including empty non-terminals | **Fully covered for Level 1** | Wildcard synthesis and wildcard-specific RRset behavior |
+| [RFC 8482](https://www.rfc-editor.org/rfc/rfc8482) | Minimal-sized responses for `QTYPE=ANY` queries at existing IN-class names | **Fully covered for Level 1** | DNSSEC-specific RRSIG inclusion for signed synthesized or selected answers; EDNS(0)/DO signaling remains outside Level 1 |
 | [RFC 8020](https://www.rfc-editor.org/rfc/rfc8020) | NXDOMAIN semantics and the required NODATA response for empty non-terminals | **Fully covered for Level 1** | Recursive resolver NXDOMAIN-cut caching behavior and DNSSEC proof reuse |
 | [RFC 8767](https://www.rfc-editor.org/rfc/rfc8767) | Updated DNS TTL definition for TTL-bearing authoritative responses | **Fully covered for Level 1** | Recursive resolver serve-stale behavior, stale-answer timers, and cache-refresh semantics |
 | [RFC 8906](https://www.rfc-editor.org/rfc/rfc8906) | Best Current Practice for responding to basic DNS queries, unknown or unsupported RR types, DNS request flags, and unknown opcodes | **Fully covered for Level 1** | TCP, EDNS, firewalls, packet scrubbers, whole-answer caches, remediation procedures, and operator testing guidance |
@@ -130,7 +131,7 @@ Completeness is based on the declared behaviour in [Level 1 protocol target](#3-
 The current main table covers every RFC that defines behavior in the Level 1 target:
 
 - core DNS authority and wire behavior: RFC 1034, RFC 1035, RFC 1123, RFC 2181, RFC 2308, and RFC 9619
-- Level 1-specific updates for serials, opcodes, unknown types, case, name existence, TTLs, and robustness: RFC 1982, RFC 3425, RFC 3597, RFC 4343, RFC 4592, RFC 8020, RFC 8767, and RFC 8906
+- Level 1-specific updates for serials, opcodes, unknown types, case, name existence, `QTYPE=ANY` minimization, TTLs, and robustness: RFC 1982, RFC 3425, RFC 3597, RFC 4343, RFC 4592, RFC 8020, RFC 8482, RFC 8767, and RFC 8906
 
 The following commonly adjacent RFC areas were reviewed but are not Level 1 conformance dependencies under the current target:
 
@@ -143,7 +144,6 @@ The following commonly adjacent RFC areas were reviewed but are not Level 1 conf
 | DNS Stateful Operations | RFC 8490 | Level 1 is UDP-only and does not establish stateful DNS sessions. The DSO opcode is outside the Level 1 product target; generic unsupported-opcode response robustness is assessed under RFC 8906. |
 | xNAME redirection and redirection-chain status | RFC 6604, RFC 6672 | Level 1 does not publish CNAME or DNAME data, synthesize CNAMEs, or follow redirection chains. RCODE and AA rules specific to xNAME chains therefore do not add a Level 1 requirement. |
 | Referral glue | RFC 9471 | Level 1 does not serve delegation referrals or referral glue. It serves authoritative answers for hosted and alias zones only. |
-| QTYPE=ANY response policy | RFC 8482 | `ANY` response minimization is explicitly outside Level 1. |
 | Resolver/cache-only behavior | RFC 5452, RFC 9520 | The server is authoritative-only and does not send resolver queries, cache upstream answers, or cache resolution failures. |
 | DNS terminology-only updates | RFC 9499 | Terminology helps describe DNS concepts but does not add an independent Level 1 implementation requirement. |
 | DNSSEC protocol behavior | RFC 4033, RFC 4034, RFC 4035, RFC 6840, RFC 9364, RFC 9904 | Optional signing can publish DNSSEC artifacts, but full DNSSEC authoritative-server behavior is outside Level 1. See [Out-of-scope but related RFCs](#7-out-of-scope-but-related-rfcs). |
@@ -345,7 +345,23 @@ No remaining Level 1 gaps in RFC 8906 basic DNS response robustness coverage.
 
 ---
 
-### 5.13 RFC 9619 — In the DNS, QDCOUNT Is (Usually) One
+### 5.13 RFC 8482 — Providing Minimal-Sized Responses to DNS Queries that have QTYPE=ANY
+
+RFC 8482 — https://www.rfc-editor.org/rfc/rfc8482: allows authoritative responders to avoid returning all RRsets for `QTYPE=ANY` queries and instead return a minimal response. For Level 1, the implemented policy is a synthesized HINFO answer for existing IN-class QNAMEs. DNSSEC-specific handling for signed responses is deliberately outside Level 1.
+
+| Behaviour | Status | Notes |
+|---|---|---|
+| Existing owner name queried with `QTYPE=ANY` receives synthesized HINFO | **Implemented** | `_update_response()` detects `dns.rdatatype.ANY` after zone matching and returns one HINFO RRset whose CPU field is `RFC8482` and whose OS field is empty. The answer owner name is the queried hosted-zone or alias-zone name, and no SOA authority is added because this is a positive RFC 8482 minimization response. |
+| Empty non-terminal queried with `QTYPE=ANY` receives synthesized HINFO | **Implemented** | Empty non-terminals are existing QNAMEs under RFC 4592. The `ANY` path therefore returns synthesized HINFO for them, while non-ANY queries at empty non-terminals continue to return NODATA with SOA authority under RFC 8020 and RFC 2308. |
+| Absent owner name queried with `QTYPE=ANY` remains NXDOMAIN | **Implemented** | RFC 8482 handling is limited to existing QNAMEs. Absent in-zone owner names continue through the normal NXDOMAIN branch with SOA authority. |
+| HINFO TTL reuses the apex SOA TTL calculation | **Implemented** | `_build_rfc8482_hinfo_answer()` reads the same apex SOA data and uses the shared `_build_apex_soa()` helper, so synthesized HINFO uses `min(SOA TTL, SOA.MINIMUM)` without building an authority RRset, adding separate updater state, or adding operator configuration. |
+| DNSSEC-specific `ANY` response behavior | **Out of Level 1 scope** | Signed-zone RRSIG inclusion, EDNS(0), and DO-bit processing remain part of the broader DNSSEC scope that this document does not claim. |
+
+No remaining Level 1 gaps in RFC 8482 synthesized-HINFO coverage.
+
+---
+
+### 5.14 RFC 9619 — In the DNS, QDCOUNT Is (Usually) One
 
 RFC 9619 — https://www.rfc-editor.org/rfc/rfc9619: updates RFC 1035 by forbidding standard-query (`OPCODE=0`) messages with `QDCOUNT > 1` and requiring `FORMERR` for those messages.
 
@@ -358,7 +374,7 @@ No remaining Level 1 gaps in RFC 9619 coverage.
 
 ---
 
-### 5.14 RFC 2308 — Negative Caching of DNS Queries
+### 5.15 RFC 2308 — Negative Caching of DNS Queries
 
 RFC 2308 — https://www.rfc-editor.org/rfc/rfc2308: NXDOMAIN (§3) and NODATA/NOERROR (§2.1) responses must include the matched zone apex SOA in the authority section for correct negative caching. §5 defines the negative-response TTL as the minimum of the SOA RR TTL and `SOA.MINIMUM`; `SOA.MINIMUM` is populated here via `calculate_soa_min_ttl()` in `records/time.py`, and the emitted authority SOA RRset TTL is trimmed in the UDP handler.
 
@@ -385,6 +401,7 @@ No remaining Level 1 gaps in RFC 2308 coverage.
 | Non-IN-class REFUSED | `tests/indisoluble/a_healthy_dns/test_dns_server_udp_integration.py` (component integration) |
 | Unsupported known RR type NODATA at existing owner names | `tests/indisoluble/a_healthy_dns/test_dns_server_udp_integration.py` (component integration) |
 | Unknown numeric non-meta RR type response robustness | `tests/indisoluble/a_healthy_dns/test_dns_server_udp_integration.py` (component integration) |
+| RFC 8482 `QTYPE=ANY` synthesized HINFO responses for existing owner names and empty non-terminals | `tests/indisoluble/a_healthy_dns/test_dns_server_udp_integration.py` (component integration) + `tests/indisoluble/a_healthy_dns/test_dns_server_udp_handler.py` (unit) |
 | SOA serial generation uses an unsigned 32-bit value and avoids duplicate consecutive values | `tests/indisoluble/a_healthy_dns/records/test_soa_record.py` (unit) + `tests/indisoluble/a_healthy_dns/tools/test_uint32_current_time.py` (unit) |
 | NOTIMP for unsupported opcodes | `tests/indisoluble/a_healthy_dns/test_dns_server_udp_integration.py` (component integration) + `tests/indisoluble/a_healthy_dns/test_dns_server_udp_handler.py` (unit) |
 | NOTIMP for obsolete IQUERY opcode | `tests/indisoluble/a_healthy_dns/test_dns_server_udp_handler.py` (unit) |

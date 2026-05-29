@@ -22,6 +22,8 @@ from indisoluble.a_healthy_dns.dns_server_udp_handler import (
     _DNS_TRAFFIC_NOISE,
     _DNS_TRAFFIC_NORMAL,
     _DNS_TRAFFIC_SUSPICIOUS,
+    _RFC8482_HINFO_CPU,
+    _RFC8482_HINFO_OS,
     _update_response,
     DnsServerUdpHandler,
 )
@@ -141,6 +143,19 @@ def _make_soa_rdataset(*, ttl=300, minimum=60):
             f"{_SOA_MNAME} {_SOA_RNAME} {_SOA_SERIAL} {_SOA_REFRESH} "
             f"{_SOA_RETRY} {_SOA_EXPIRE} {minimum}"
         ),
+    )
+
+
+def _soa_authority_ttl(soa_rdataset):
+    return min(soa_rdataset.ttl, next(iter(soa_rdataset)).minimum)
+
+
+def _make_hinfo_rdataset(ttl):
+    return dns.rdataset.from_text(
+        dns.rdataclass.IN,
+        dns.rdatatype.HINFO,
+        ttl,
+        f'"{_RFC8482_HINFO_CPU}" "{_RFC8482_HINFO_OS}"',
     )
 
 
@@ -364,6 +379,132 @@ class TestUpdateResponse:
             name=query_name,
             rdtype=dns.rdatatype.A,
             rdataset=rdataset,
+        )
+
+    def test_any_query_at_existing_owner_returns_synthesized_hinfo(
+        self, dns_response, zone_origins, caplog
+    ):
+        query_name = dns.name.from_text("test", origin=zone_origins.primary)
+        a_rdataset = _make_a_rdataset("192.0.2.1")
+        soa_rdataset = _make_soa_rdataset(ttl=30, minimum=60)
+        hinfo_rdataset = _make_hinfo_rdataset(_soa_authority_ttl(soa_rdataset))
+        transaction = _FakeTransaction(
+            nodes={dns.name.from_text("test", origin=None): _FakeNode(a_rdataset)},
+            soa_rdataset=soa_rdataset,
+        )
+        zone = _make_zone(zone_origins, transaction)
+
+        with caplog.at_level(logging.INFO):
+            _update_test_response(
+                dns_response,
+                query_name,
+                dns.rdatatype.ANY,
+                zone,
+                zone_origins,
+            )
+
+        assert dns_response.rcode() == dns.rcode.NOERROR
+        assert bool(dns_response.flags & dns.flags.AA)
+        _assert_no_authority_or_additional(dns_response)
+        _assert_answer_rrset(
+            dns_response,
+            name=query_name,
+            rdtype=dns.rdatatype.HINFO,
+            rdataset=hinfo_rdataset,
+        )
+
+        _assert_log_record(
+            caplog,
+            logging.INFO,
+            "Answered RFC 8482 ANY query with synthesized HINFO",
+            _DNS_TRAFFIC_NORMAL,
+        )
+
+    def test_any_query_at_empty_non_terminal_returns_synthesized_hinfo(
+        self, dns_response, zone_origins, soa_rdataset, caplog
+    ):
+        query_name = dns.name.from_text("empty", origin=zone_origins.primary)
+        hinfo_rdataset = _make_hinfo_rdataset(_soa_authority_ttl(soa_rdataset))
+        transaction = _FakeTransaction(
+            soa_rdataset=soa_rdataset,
+            names=[dns.name.from_text("leaf.empty", origin=None)],
+        )
+        zone = _make_zone(zone_origins, transaction)
+
+        with caplog.at_level(logging.INFO):
+            _update_test_response(
+                dns_response,
+                query_name,
+                dns.rdatatype.ANY,
+                zone,
+                zone_origins,
+            )
+
+        assert dns_response.rcode() == dns.rcode.NOERROR
+        assert bool(dns_response.flags & dns.flags.AA)
+        _assert_no_authority_or_additional(dns_response)
+        _assert_answer_rrset(
+            dns_response,
+            name=query_name,
+            rdtype=dns.rdatatype.HINFO,
+            rdataset=hinfo_rdataset,
+        )
+
+        _assert_log_record(
+            caplog,
+            logging.INFO,
+            "Answered RFC 8482 ANY query for empty non-terminal",
+            _DNS_TRAFFIC_NORMAL,
+        )
+
+    def test_any_query_at_absent_owner_returns_nxdomain_with_soa_authority(
+        self, dns_response, zone_origins, soa_rdataset
+    ):
+        query_name = dns.name.from_text("nonexistent", origin=zone_origins.primary)
+        transaction = _FakeTransaction(soa_rdataset=soa_rdataset)
+        zone = _make_zone(zone_origins, transaction)
+
+        _update_test_response(
+            dns_response, query_name, dns.rdatatype.ANY, zone, zone_origins
+        )
+
+        assert dns_response.rcode() == dns.rcode.NXDOMAIN
+        assert bool(dns_response.flags & dns.flags.AA)
+        assert len(dns_response.answer) == 0
+        _assert_soa_authority(
+            dns_response,
+            name=zone_origins.primary,
+            expected_ttl=next(iter(soa_rdataset)).minimum,
+        )
+
+    def test_any_query_at_alias_owner_preserves_alias_answer_name(
+        self, dns_response, soa_rdataset
+    ):
+        zone_origins = ZoneOrigins("example.com", ["alias.example.net"])
+        query_name = dns.name.from_text("test.alias.example.net.")
+        a_rdataset = _make_a_rdataset("192.0.2.1")
+        hinfo_rdataset = _make_hinfo_rdataset(_soa_authority_ttl(soa_rdataset))
+        transaction = _FakeTransaction(
+            nodes={dns.name.from_text("test", origin=None): _FakeNode(a_rdataset)},
+            soa_rdataset=soa_rdataset,
+        )
+        zone = _make_zone(zone_origins, transaction)
+
+        _update_test_response(
+            dns_response,
+            query_name,
+            dns.rdatatype.ANY,
+            zone,
+            zone_origins,
+        )
+
+        assert dns_response.rcode() == dns.rcode.NOERROR
+        assert bool(dns_response.flags & dns.flags.AA)
+        _assert_answer_rrset(
+            dns_response,
+            name=query_name,
+            rdtype=dns.rdatatype.HINFO,
+            rdataset=hinfo_rdataset,
         )
 
     def test_absolute_name_outside_zone_origins_returns_refused_without_zone_lookup(

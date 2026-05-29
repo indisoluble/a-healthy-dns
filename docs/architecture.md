@@ -172,7 +172,9 @@ All record TTLs are then calculated as multiples of `max_interval` by functions 
 | RRSIG resign | `= DNSKEY TTL` |
 | RRSIG expiration | `2 × SOA refresh + SOA expire + SOA retry` |
 
-**Convention:** do not hardcode TTL values. All timing must be derived via functions in `records/time.py`, taking `max_interval` as input.
+RFC 8482 synthesized HINFO answers are not stored zone records. Their response TTL is copied in the UDP handler from the same `min(SOA TTL, SOA.MINIMUM)` value used for matched-apex SOA authority in negative responses, so they inherit the SOA timing derived here without adding separate updater state.
+
+**Convention:** do not hardcode TTL values. All timing must be derived via functions in `records/time.py`, taking `max_interval` as input, or copied from another already-derived DNS timing value when a response is synthesized from that protocol context.
 
 ---
 

@@ -13,7 +13,7 @@ It is the canonical home for functional, operational, quality, compatibility, se
 | Transport | UDP only |
 | Record modes | Standard static IP entries and health-checked IP entries, both configurable within the same zone |
 | Health check protocol | TCP connectivity checks against configured health-checked backend IPs and ports; standard static entries skip probing |
-| Record scope | Base records: A, SOA, and NS; when DNSSEC is enabled, generated DNSKEY, NSEC, and RRSIG data are also published |
+| Record scope | Base records: A, SOA, and NS; synthesized HINFO is returned for RFC 8482 `QTYPE=ANY` minimization using the matched apex SOA negative-response TTL but is not configured zone data; when DNSSEC is enabled, generated DNSKEY, NSEC, and RRSIG data are also published |
 | Deployment modes | Direct CLI process and Docker container |
 | Configuration model | Startup-time configuration only; live reload is not currently supported |
 
@@ -42,6 +42,7 @@ It is the canonical home for functional, operational, quality, compatibility, se
 - **R15** Set the authoritative-answer flag on responses produced for supported authoritative queries.
 - **R16** Return `REFUSED` for queries outside all configured zones and for unsupported DNS classes.
 - **R17** Return `FORMERR` for malformed DNS messages when a response can be formed, and drop packets that are too short to recover a DNS transaction ID without a DNS response while logging the rejection for operator visibility.
+- **R17a** Return RFC 8482 minimized synthesized HINFO responses for `QTYPE=ANY` queries at existing in-zone owner names and empty non-terminals, while preserving standard NXDOMAIN behavior for absent owner names.
 
 ## Quality And Reliability Requirements
 
