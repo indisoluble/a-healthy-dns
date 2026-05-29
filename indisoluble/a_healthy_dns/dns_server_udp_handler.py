@@ -15,10 +15,10 @@ import dns.message
 import dns.name
 import dns.opcode
 import dns.rcode
-import dns.rdataclass
 import dns.rdata
-import dns.rdatatype
+import dns.rdataclass
 import dns.rdataset
+import dns.rdatatype
 import dns.rrset
 import dns.versioned
 import dns.zone
@@ -26,6 +26,11 @@ import dns.zone
 from typing import List, NamedTuple, Optional
 
 from indisoluble.a_healthy_dns.records.zone_origins import ZoneOrigins
+
+
+class _ApexSOA(NamedTuple):
+    rdata: dns.rdata.Rdata
+    ttl: int
 
 
 _DNS_HEADER_LENGTH = 12
@@ -52,11 +57,6 @@ def _describe_parse_error(ex: dns.exception.DNSException) -> str:
         return "packet does not match the DNS message wire format"
 
     return "packet could not be parsed as DNS wire format"
-
-
-class _ApexSOA(NamedTuple):
-    rdata: dns.rdata.Rdata
-    ttl: int
 
 
 def _build_apex_soa(
