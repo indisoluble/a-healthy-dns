@@ -22,6 +22,18 @@ The Docker image entrypoint is `a-healthy-dns`, so arguments after the image nam
 
 ---
 
+## DNS name input rules
+
+Domain-name inputs include `--hosted-zone`, `--alias-zones`, `--ns`, and `--zone-resolutions` object keys. They must use non-empty dot-separated labels containing only ASCII letters, digits, or hyphens. Unicode and emoji domain input is not supported.
+
+Each label must be 63 characters or fewer, the input name must be 253 characters or fewer, and a relative subdomain combined with the hosted zone must still fit DNS wire-format name limits.
+
+Each label must start and end with an ASCII letter or digit.
+
+Do not include a trailing root dot in configuration input. The server normalizes accepted zone and nameserver values to absolute DNS names internally.
+
+---
+
 ## Required parameters
 
 These three must always be provided. The server will not start and exits with a non-zero status without them.

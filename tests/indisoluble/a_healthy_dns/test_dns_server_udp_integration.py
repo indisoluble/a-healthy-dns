@@ -390,6 +390,41 @@ class TestPositiveResponses:
 
         _assert_response_flags(resp)
 
+    @pytest.mark.parametrize(
+        "qname",
+        [
+            _SUBDOMAIN_FQDN,
+            _ZONE_FQDN,
+            _EMPTY_NON_TERMINAL_FQDN,
+            _ALIAS_SUBDOMAIN_FQDN,
+            _ALIAS_EMPTY_NON_TERMINAL_FQDN,
+        ],
+        ids=[
+            "existing-owner",
+            "zone-apex",
+            "empty-non-terminal",
+            "alias-existing-owner",
+            "alias-empty-non-terminal",
+        ],
+    )
+    def test_any_query_returns_rfc8482_synthesized_hinfo(self, live_server, qname):
+        host, port = live_server
+        query = dns.message.make_query(qname, dns.rdatatype.ANY)
+        resp = _udp_query(host, port, query)
+
+        assert resp.rcode() == dns.rcode.NOERROR
+        assert resp.id == query.id
+
+        _assert_section_counts(resp, answer=1)
+        assert resp.answer[0].name == dns.name.from_text(qname)
+        assert resp.answer[0].rdtype == dns.rdatatype.HINFO
+        assert resp.answer[0].ttl == 60
+        rdata = next(iter(resp.answer[0]))
+        assert rdata.cpu == b"RFC8482"
+        assert rdata.os == b""
+
+        _assert_response_flags(resp)
+
 
 # ---------------------------------------------------------------------------
 # Negative responses — RFC 2308 §2.1 (NODATA) and §3 (NXDOMAIN)
@@ -428,6 +463,12 @@ class TestNegativeResponses:
                 _ZONE_FQDN,
             ),
             (
+                _ABSENT_FQDN,
+                dns.rdatatype.ANY,
+                dns.rcode.NXDOMAIN,
+                _ZONE_FQDN,
+            ),
+            (
                 _ALIAS_ABSENT_FQDN,
                 dns.rdatatype.A,
                 dns.rcode.NXDOMAIN,
@@ -452,6 +493,12 @@ class TestNegativeResponses:
                 _ALIAS_ZONE_FQDN,
             ),
             (
+                _ALIAS_ABSENT_FQDN,
+                dns.rdatatype.ANY,
+                dns.rcode.NXDOMAIN,
+                _ALIAS_ZONE_FQDN,
+            ),
+            (
                 _EMPTY_NON_TERMINAL_FQDN,
                 dns.rdatatype.A,
                 dns.rcode.NOERROR,
@@ -469,10 +516,12 @@ class TestNegativeResponses:
             "nodata-absent-type",
             "nodata-unknown-type",
             "nxdomain-absent-owner-unknown-type",
+            "nxdomain-absent-owner-any",
             "alias-nxdomain-absent-owner",
             "alias-nodata-absent-type",
             "alias-nodata-unknown-type",
             "alias-nxdomain-absent-owner-unknown-type",
+            "alias-nxdomain-absent-owner-any",
             "empty-non-terminal-nodata",
             "alias-empty-non-terminal-nodata",
         ],

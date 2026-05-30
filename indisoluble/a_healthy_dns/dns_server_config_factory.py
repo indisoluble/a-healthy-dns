@@ -70,7 +70,9 @@ def _make_zone_origins(args: Dict[str, Any]) -> Optional[ZoneOrigins]:
 def _make_healthy_a_record(
     origin_name: dns.name.Name, subdomain: Any, sub_config: Any
 ) -> Optional[AHealthyRecord]:
-    success, error = is_valid_subdomain(subdomain)
+    success, error = is_valid_subdomain(
+        subdomain, origin_name.to_text(omit_final_dot=True)
+    )
     if not success:
         logging.error(
             "Zone resolution subdomain '%s' is not valid: %s", subdomain, error
