@@ -182,6 +182,9 @@ class TestMakeConfigInputValidation:
         [
             "",
             "dev.example@.com",
+            f"{'a' * 64}.example.com",
+            "mañana.example.com",
+            "-dev.example.com",
         ],
     )
     def test_returns_none_when_hosted_zone_is_invalid(self, invalid_zone, valid_args):
@@ -196,8 +199,19 @@ class TestMakeConfigInputValidation:
             json.dumps({"alias": "dev.alias-one.com"}),
             json.dumps([""]),
             json.dumps(["dev.alias-one.com", "dev.alias-@.com"]),
+            json.dumps([f"{'a' * 64}.alias.com"]),
+            json.dumps(["mañana.alias.com"]),
+            json.dumps(["alias-.example.com"]),
         ],
-        ids=["not-json", "not-list", "empty-alias", "invalid-alias"],
+        ids=[
+            "not-json",
+            "not-list",
+            "empty-alias",
+            "invalid-alias",
+            "alias-label-too-long",
+            "unicode-alias",
+            "alias-label-ends-with-hyphen",
+        ],
     )
     def test_returns_none_when_alias_zones_are_invalid(
         self, invalid_alias_zones, valid_args
@@ -216,6 +230,9 @@ class TestMakeConfigInputValidation:
             json.dumps([""]),
             json.dumps(["ns1"]),
             json.dumps(["ns1.example@.com"]),
+            json.dumps([f"{'a' * 64}.dns.example.net"]),
+            json.dumps(["mañana.dns.example.net"]),
+            json.dumps(["-ns.dns.example.net"]),
         ],
         ids=[
             "not-json",
@@ -225,6 +242,9 @@ class TestMakeConfigInputValidation:
             "empty-name",
             "not-fqdn",
             "invalid-character",
+            "label-too-long",
+            "unicode-label",
+            "label-starts-with-hyphen",
         ],
     )
     def test_returns_none_when_name_servers_are_invalid(
@@ -353,6 +373,14 @@ class TestMakeConfigInputValidation:
                     }
                 }
             ),
+            json.dumps(
+                {
+                    ".".join(["a" * 63, "b" * 63, "c" * 63, "d" * 61]): {
+                        dscf.ARG_SUBDOMAIN_IP_LIST: ["192.168.1.1"],
+                        dscf.ARG_SUBDOMAIN_HEALTH_PORT: 8080,
+                    }
+                }
+            ),
         ],
         ids=[
             "not-json",
@@ -375,6 +403,7 @@ class TestMakeConfigInputValidation:
             "health-port-not-int",
             "negative-health-port",
             "health-port-too-large",
+            "subdomain-too-long-for-origin",
         ],
     )
     def test_returns_none_when_zone_resolution_is_invalid(
