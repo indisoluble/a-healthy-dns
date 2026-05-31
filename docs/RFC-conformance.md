@@ -162,12 +162,12 @@ RFC 1034 — https://www.rfc-editor.org/rfc/rfc1034 defines zones, authoritative
 
 | Behaviour | Status | Notes |
 |---|---|---|
-| Authoritative Answer (AA) flag set only for hosted-zone responses | **Implemented** | `_update_response()` in `indisoluble/a_healthy_dns/dns_server_udp_handler.py` sets `dns.flags.AA` only after `ZoneOrigins.relativize()` confirms the query name belongs to a hosted or alias zone. `DnsServerUdpHandler.handle()` rejects malformed packets, inbound response packets, unsupported opcodes, invalid question counts, and unsupported classes before `_update_response()` can set AA. |
-| REFUSED for queries outside all served zones | **Implemented** | `_update_response()` returns `dns.rcode.REFUSED` without AA when `ZoneOrigins.relativize()` returns `None` for a query name outside every hosted or alias zone. |
-| NXDOMAIN when owner name is absent from an in-zone query | **Implemented** | `_update_response()` sets AA after the zone match, reads `txn.get_node(relative_name)`, and sets `dns.rcode.NXDOMAIN` when that owner node is absent. |
-| NOERROR when owner name exists and matching records are found | **Implemented** | `_update_response()` keeps the default NOERROR for in-zone queries, reads the owner node and requested rdataset, then uses `_build_answer()` to populate the answer section. |
-| SOA in authority for NXDOMAIN responses (RFC 2308 §3) | **Implemented** | The NXDOMAIN branch in `_update_response()` builds authority with `_build_authority_with_apex_soa()` using the matched hosted or alias zone apex and appends the returned RRsets to `response.authority`. |
-| SOA in authority for NODATA responses (RFC 2308 §2.1) | **Implemented** | The NODATA branch in `_update_response()` builds authority with `_build_authority_with_apex_soa()` using the matched hosted or alias zone apex and appends the returned RRsets to `response.authority`. |
+| Authoritative Answer (AA) flag set only for hosted-zone responses | **Implemented** | `DnsServerUdpHandler._update_response()` sets `dns.flags.AA` only after `ZoneOrigins.relativize()` confirms the query name belongs to a hosted or alias zone. `DnsServerUdpHandler.handle()` rejects malformed packets, inbound response packets, unsupported opcodes, invalid question counts, and unsupported classes before `DnsServerUdpHandler._update_response()` can set AA. |
+| REFUSED for queries outside all served zones | **Implemented** | `DnsServerUdpHandler._update_response()` returns `dns.rcode.REFUSED` without AA when `ZoneOrigins.relativize()` returns `None` for a query name outside every hosted or alias zone. |
+| NXDOMAIN when owner name is absent from an in-zone query | **Implemented** | `DnsServerUdpHandler._update_response()` sets AA after the zone match, reads `txn.get_node(relative_name)`, and sets `dns.rcode.NXDOMAIN` when that owner node is absent. |
+| NOERROR when owner name exists and matching records are found | **Implemented** | `DnsServerUdpHandler._update_response()` keeps the default NOERROR for in-zone queries, reads the owner node and requested rdataset, then uses `_build_answer()` to populate the answer section. |
+| SOA in authority for NXDOMAIN responses (RFC 2308 §3) | **Implemented** | The NXDOMAIN branch in `DnsServerUdpHandler._update_response()` builds authority with `_build_authority_with_apex_soa()` using the matched hosted or alias zone apex and appends the returned RRsets to `response.authority`. |
+| SOA in authority for NODATA responses (RFC 2308 §2.1) | **Implemented** | The NODATA branch in `DnsServerUdpHandler._update_response()` builds authority with `_build_authority_with_apex_soa()` using the matched hosted or alias zone apex and appends the returned RRsets to `response.authority`. |
 
 ---
 
@@ -292,8 +292,8 @@ RFC 4592 — https://www.rfc-editor.org/rfc/rfc4592: updates RFC 1034 by refinin
 
 | Behaviour | Status | Notes |
 |---|---|---|
-| Exact owner names with RRsets exist | **Implemented** | `_update_response()` treats a zone node returned by `txn.get_node(relative_name)` as an existing owner name and returns either an answer or NODATA depending on whether the requested rdataset exists. |
-| Empty non-terminal owner names exist and return NODATA | **Implemented** | `_update_response()` treats a missing node as an empty non-terminal when `txn.iterate_names()` contains a descendant name, and returns NOERROR/empty-answer with SOA authority. Coverage: `tests/indisoluble/a_healthy_dns/test_dns_server_udp_integration.py` and `tests/indisoluble/a_healthy_dns/test_dns_server_udp_handler.py`. |
+| Exact owner names with RRsets exist | **Implemented** | `DnsServerUdpHandler._update_response()` treats a zone node returned by `txn.get_node(relative_name)` as an existing owner name and returns either an answer or NODATA depending on whether the requested rdataset exists. |
+| Empty non-terminal owner names exist and return NODATA | **Implemented** | `DnsServerUdpHandler._update_response()` treats a missing node as an empty non-terminal when `txn.iterate_names()` contains a descendant name, and returns NOERROR/empty-answer with SOA authority. Coverage: `tests/indisoluble/a_healthy_dns/test_dns_server_udp_integration.py` and `tests/indisoluble/a_healthy_dns/test_dns_server_udp_handler.py`. |
 | Wildcard synthesis | **Out of Level 1 scope** | The configuration validator does not support wildcard labels, and Level 1 does not claim wildcard behavior. |
 
 No remaining Level 1 gaps in RFC 4592 empty non-terminal coverage.
@@ -306,7 +306,7 @@ RFC 8020 — https://www.rfc-editor.org/rfc/rfc8020: updates RFC 1034 and RFC 23
 
 | Behaviour | Status | Notes |
 |---|---|---|
-| NXDOMAIN only when the queried owner name and its subtree do not exist | **Implemented** | `_update_response()` checks for an empty non-terminal (a missing owner node with existing descendants) before returning NXDOMAIN, so NXDOMAIN is reserved for names with no node and no descendant nodes in the served zone view. |
+| NXDOMAIN only when the queried owner name and its subtree do not exist | **Implemented** | `DnsServerUdpHandler._update_response()` checks for an empty non-terminal (a missing owner node with existing descendants) before returning NXDOMAIN, so NXDOMAIN is reserved for names with no node and no descendant nodes in the served zone view. |
 | Empty non-terminal receives NODATA | **Implemented** | Missing owner nodes with descendants receive NOERROR/empty-answer with the matched zone apex SOA in authority (RFC 2308). Coverage: `tests/indisoluble/a_healthy_dns/test_dns_server_udp_integration.py` and `tests/indisoluble/a_healthy_dns/test_dns_server_udp_handler.py`. |
 | Resolver NXDOMAIN-cut caching behavior | **Out of Level 1 scope** | The server is authoritative-only and does not implement recursive resolver caching. |
 
@@ -351,7 +351,7 @@ RFC 8482 — https://www.rfc-editor.org/rfc/rfc8482: allows authoritative respon
 
 | Behaviour | Status | Notes |
 |---|---|---|
-| Existing owner name queried with `QTYPE=ANY` receives synthesized HINFO | **Implemented** | `_update_response()` detects `dns.rdatatype.ANY` after zone matching and returns one HINFO RRset whose CPU field is `RFC8482` and whose OS field is empty. The answer owner name is the queried hosted-zone or alias-zone name, and no SOA authority is added because this is a positive RFC 8482 minimization response. |
+| Existing owner name queried with `QTYPE=ANY` receives synthesized HINFO | **Implemented** | `DnsServerUdpHandler._update_response()` detects `dns.rdatatype.ANY` after zone matching and returns one HINFO RRset whose CPU field is `RFC8482` and whose OS field is empty. The answer owner name is the queried hosted-zone or alias-zone name, and no SOA authority is added because this is a positive RFC 8482 minimization response. |
 | Empty non-terminal queried with `QTYPE=ANY` receives synthesized HINFO | **Implemented** | Empty non-terminals are existing QNAMEs under RFC 4592. The `ANY` path therefore returns synthesized HINFO for them, while non-ANY queries at empty non-terminals continue to return NODATA with SOA authority under RFC 8020 and RFC 2308. |
 | Absent owner name queried with `QTYPE=ANY` remains NXDOMAIN | **Implemented** | RFC 8482 handling is limited to existing QNAMEs. Absent in-zone owner names continue through the normal NXDOMAIN branch with SOA authority. |
 | HINFO TTL reuses the apex SOA TTL calculation | **Implemented** | `_build_rfc8482_hinfo_answer()` reads the same apex SOA data and uses the shared `_build_apex_soa()` helper, so synthesized HINFO uses `min(SOA TTL, SOA.MINIMUM)` without building an authority RRset or adding a second TTL source of truth. Operators influence this value through the existing SOA timing inputs described in [`docs/architecture.md`](architecture.md#6-interval-calculation-pattern). |
@@ -383,7 +383,7 @@ RFC 2308 — https://www.rfc-editor.org/rfc/rfc2308: NXDOMAIN (§3) and NODATA/N
 | Behaviour | Status | Notes |
 |---|---|---|
 | SOA record with correct `MINIMUM` field exists in zone | **Implemented** | `soa_record.py` populates the minimum TTL from `calculate_soa_min_ttl()` |
-| SOA in authority section for NXDOMAIN (RFC 2308 §3) | **Implemented** | `_build_authority_with_apex_soa()` in `indisoluble/a_healthy_dns/dns_server_udp_handler.py` retrieves the apex SOA data and returns an authority RRset named at the matched hosted or alias zone apex; `_update_response()` appends that list to `response.authority`. |
+| SOA in authority section for NXDOMAIN (RFC 2308 §3) | **Implemented** | `_build_authority_with_apex_soa()` in `indisoluble/a_healthy_dns/dns_server_udp_handler.py` retrieves the apex SOA data and returns an authority RRset named at the matched hosted or alias zone apex; `DnsServerUdpHandler._update_response()` appends that list to `response.authority`. |
 | Negative-response SOA RRset TTL uses `min(SOA TTL, SOA.MINIMUM)` (RFC 2308 §5) | **Implemented** | `_build_authority_with_apex_soa()` sets the emitted authority SOA RRset TTL to the lower of the stored SOA rdataset TTL and the SOA RDATA `minimum` value |
 | SOA in authority section for NODATA (RFC 2308 §2.1) | **Implemented** | Same helper populates the authority section for NOERROR/empty-answer responses using the matched hosted or alias zone apex |
 

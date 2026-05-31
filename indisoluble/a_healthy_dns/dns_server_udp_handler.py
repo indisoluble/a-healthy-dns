@@ -20,12 +20,9 @@ import dns.rdataclass
 import dns.rdataset
 import dns.rdatatype
 import dns.rrset
-import dns.versioned
 import dns.zone
 
 from typing import List, NamedTuple, Optional
-
-from indisoluble.a_healthy_dns.records.zone_origins import ZoneOrigins
 
 
 class _ApexSOA(NamedTuple):
@@ -148,120 +145,6 @@ def _make_formerr_response_from_header(data: bytes) -> dns.message.Message:
 
 def _response_to_udp_wire(response: dns.message.Message) -> bytes:
     return response.to_wire(max_size=_CLASSIC_UDP_PAYLOAD_SIZE, prefer_truncation=True)
-
-
-def _update_response(
-    response: dns.message.Message,
-    query_name: dns.name.Name,
-    query_type: dns.rdatatype.RdataType,
-    zone: dns.versioned.Zone,
-    zone_origins: ZoneOrigins,
-    query_id: int,
-    source_host: str,
-    source_port: int,
-) -> None:
-    origin_name = zone_origins.origin_for(query_name)
-    if origin_name is None:
-        logging.info(
-            "%s Refused DNS query outside hosted or alias zones: source=%s:%d id=%d qname=%s qtype=%s",
-            _DNS_TRAFFIC_NOISE,
-            source_host,
-            source_port,
-            query_id,
-            query_name,
-            dns.rdatatype.to_text(query_type),
-        )
-        response.set_rcode(dns.rcode.REFUSED)
-        return
-
-    relative_name = zone_origins.relativize(query_name)
-    response.flags |= dns.flags.AA  # Authoritative Answer
-
-    with zone.reader() as txn:
-        rcode = dns.rcode.NOERROR
-        authority = []
-        answer = []
-
-        node = txn.get_node(relative_name)
-        if node:
-            if query_type == dns.rdatatype.ANY:
-                answer = _build_rfc8482_hinfo_answer(query_name, txn)
-                logging.info(
-                    "%s Answered RFC 8482 ANY query with synthesized HINFO: source=%s:%d id=%d qname=%s qtype=%s answers=%d",
-                    _DNS_TRAFFIC_NORMAL,
-                    source_host,
-                    source_port,
-                    query_id,
-                    query_name,
-                    dns.rdatatype.to_text(query_type),
-                    len(answer),
-                )
-            else:
-                rdataset = node.get_rdataset(zone.rdclass, query_type)
-                if rdataset:
-                    answer = _build_answer(query_name, rdataset)
-                    logging.info(
-                        "%s Answered DNS query from hosted zone: source=%s:%d id=%d qname=%s qtype=%s answers=%d",
-                        _DNS_TRAFFIC_NORMAL,
-                        source_host,
-                        source_port,
-                        query_id,
-                        query_name,
-                        dns.rdatatype.to_text(query_type),
-                        len(answer),
-                    )
-                else:
-                    logging.info(
-                        "%s DNS owner name exists but has no requested records; returning NODATA: source=%s:%d id=%d qname=%s qtype=%s",
-                        _DNS_TRAFFIC_NORMAL,
-                        source_host,
-                        source_port,
-                        query_id,
-                        query_name,
-                        dns.rdatatype.to_text(query_type),
-                    )
-                    authority = _build_authority_with_apex_soa(origin_name, txn)
-        else:
-            if _is_empty_non_terminal(relative_name, txn):
-                if query_type == dns.rdatatype.ANY:
-                    answer = _build_rfc8482_hinfo_answer(query_name, txn)
-                    logging.info(
-                        "%s Answered RFC 8482 ANY query for empty non-terminal with synthesized HINFO: source=%s:%d id=%d qname=%s qtype=%s answers=%d",
-                        _DNS_TRAFFIC_NORMAL,
-                        source_host,
-                        source_port,
-                        query_id,
-                        query_name,
-                        dns.rdatatype.to_text(query_type),
-                        len(answer),
-                    )
-                else:
-                    logging.info(
-                        "%s DNS owner name is an empty non-terminal in the active zone; returning NODATA: source=%s:%d id=%d qname=%s qtype=%s",
-                        _DNS_TRAFFIC_NORMAL,
-                        source_host,
-                        source_port,
-                        query_id,
-                        query_name,
-                        dns.rdatatype.to_text(query_type),
-                    )
-                    authority = _build_authority_with_apex_soa(origin_name, txn)
-            else:
-                logging.info(
-                    "%s DNS owner name is not present in the active zone; returning NXDOMAIN: source=%s:%d id=%d qname=%s qtype=%s",
-                    _DNS_TRAFFIC_NORMAL,
-                    source_host,
-                    source_port,
-                    query_id,
-                    query_name,
-                    dns.rdatatype.to_text(query_type),
-                )
-                rcode = dns.rcode.NXDOMAIN
-                authority = _build_authority_with_apex_soa(origin_name, txn)
-
-    response.set_rcode(rcode)
-    response.authority.extend(authority)
-    response.answer.extend(answer)
 
 
 class DnsServerUdpHandler(socketserver.BaseRequestHandler):
@@ -404,6 +287,122 @@ class DnsServerUdpHandler(socketserver.BaseRequestHandler):
 
         return _QuestionValidationResult(question=question, rcode=None)
 
+    def _update_response(
+        self,
+        response: dns.message.Message,
+        question: dns.rrset.RRset,
+        query_id: int,
+    ) -> None:
+        query_name = question.name
+        query_type = question.rdtype
+        zone = self.server.zone
+        zone_origins = self.server.zone_origins
+        source_host = self.client_address[0]
+        source_port = self.client_address[1]
+
+        origin_name = zone_origins.origin_for(query_name)
+        if origin_name is None:
+            logging.info(
+                "%s Refused DNS query outside hosted or alias zones: source=%s:%d id=%d qname=%s qtype=%s",
+                _DNS_TRAFFIC_NOISE,
+                source_host,
+                source_port,
+                query_id,
+                query_name,
+                dns.rdatatype.to_text(query_type),
+            )
+            response.set_rcode(dns.rcode.REFUSED)
+            return
+
+        relative_name = zone_origins.relativize(query_name)
+        response.flags |= dns.flags.AA  # Authoritative Answer
+
+        with zone.reader() as txn:
+            rcode = dns.rcode.NOERROR
+            authority = []
+            answer = []
+
+            node = txn.get_node(relative_name)
+            if node:
+                if query_type == dns.rdatatype.ANY:
+                    answer = _build_rfc8482_hinfo_answer(query_name, txn)
+                    logging.info(
+                        "%s Answered RFC 8482 ANY query with synthesized HINFO: source=%s:%d id=%d qname=%s qtype=%s answers=%d",
+                        _DNS_TRAFFIC_NORMAL,
+                        source_host,
+                        source_port,
+                        query_id,
+                        query_name,
+                        dns.rdatatype.to_text(query_type),
+                        len(answer),
+                    )
+                else:
+                    rdataset = node.get_rdataset(zone.rdclass, query_type)
+                    if rdataset:
+                        answer = _build_answer(query_name, rdataset)
+                        logging.info(
+                            "%s Answered DNS query from hosted zone: source=%s:%d id=%d qname=%s qtype=%s answers=%d",
+                            _DNS_TRAFFIC_NORMAL,
+                            source_host,
+                            source_port,
+                            query_id,
+                            query_name,
+                            dns.rdatatype.to_text(query_type),
+                            len(answer),
+                        )
+                    else:
+                        logging.info(
+                            "%s DNS owner name exists but has no requested records; returning NODATA: source=%s:%d id=%d qname=%s qtype=%s",
+                            _DNS_TRAFFIC_NORMAL,
+                            source_host,
+                            source_port,
+                            query_id,
+                            query_name,
+                            dns.rdatatype.to_text(query_type),
+                        )
+                        authority = _build_authority_with_apex_soa(origin_name, txn)
+            else:
+                if _is_empty_non_terminal(relative_name, txn):
+                    if query_type == dns.rdatatype.ANY:
+                        answer = _build_rfc8482_hinfo_answer(query_name, txn)
+                        logging.info(
+                            "%s Answered RFC 8482 ANY query for empty non-terminal with synthesized HINFO: source=%s:%d id=%d qname=%s qtype=%s answers=%d",
+                            _DNS_TRAFFIC_NORMAL,
+                            source_host,
+                            source_port,
+                            query_id,
+                            query_name,
+                            dns.rdatatype.to_text(query_type),
+                            len(answer),
+                        )
+                    else:
+                        logging.info(
+                            "%s DNS owner name is an empty non-terminal in the active zone; returning NODATA: source=%s:%d id=%d qname=%s qtype=%s",
+                            _DNS_TRAFFIC_NORMAL,
+                            source_host,
+                            source_port,
+                            query_id,
+                            query_name,
+                            dns.rdatatype.to_text(query_type),
+                        )
+                        authority = _build_authority_with_apex_soa(origin_name, txn)
+                else:
+                    logging.info(
+                        "%s DNS owner name is not present in the active zone; returning NXDOMAIN: source=%s:%d id=%d qname=%s qtype=%s",
+                        _DNS_TRAFFIC_NORMAL,
+                        source_host,
+                        source_port,
+                        query_id,
+                        query_name,
+                        dns.rdatatype.to_text(query_type),
+                    )
+                    rcode = dns.rcode.NXDOMAIN
+                    authority = _build_authority_with_apex_soa(origin_name, txn)
+
+        response.set_rcode(rcode)
+        response.authority.extend(authority)
+        response.answer.extend(answer)
+
     # Implements socketserver.BaseRequestHandler inheritance contract.
     def handle(self) -> None:
         """Handle incoming DNS query and send appropriate response."""
@@ -432,15 +431,6 @@ class DnsServerUdpHandler(socketserver.BaseRequestHandler):
         if question_result.rcode is not None:
             response.set_rcode(question_result.rcode)
         elif question_result.question is not None:
-            _update_response(
-                response,
-                question_result.question.name,
-                question_result.question.rdtype,
-                self.server.zone,
-                self.server.zone_origins,
-                query.id,
-                self.client_address[0],
-                self.client_address[1],
-            )
+            self._update_response(response, question_result.question, query.id)
 
         sock.sendto(_response_to_udp_wire(response), self.client_address)
