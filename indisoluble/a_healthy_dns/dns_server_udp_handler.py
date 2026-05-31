@@ -13,6 +13,7 @@ import dns.exception
 import dns.flags
 import dns.message
 import dns.name
+import dns.node
 import dns.opcode
 import dns.rcode
 import dns.rdata
@@ -22,7 +23,7 @@ import dns.rdatatype
 import dns.rrset
 import dns.zone
 
-from typing import List, NamedTuple, Optional
+from typing import List, NamedTuple, Optional, Tuple
 
 
 class _ApexSOA(NamedTuple):
@@ -39,6 +40,20 @@ class _QueryParseResult(NamedTuple):
 class _QuestionValidationResult(NamedTuple):
     question: Optional[dns.rrset.RRset]
     rcode: Optional[int]
+
+
+class _LogEvent(NamedTuple):
+    level: int
+    message: str
+    args: Tuple[object, ...]
+
+
+class _ResponseOutcome(NamedTuple):
+    rcode: int
+    is_authoritative: bool
+    answer: Tuple[dns.rrset.RRset, ...]
+    authority: Tuple[dns.rrset.RRset, ...]
+    log_event: Optional[_LogEvent]
 
 
 _DNS_HEADER_LENGTH = 12
@@ -287,121 +302,228 @@ class DnsServerUdpHandler(socketserver.BaseRequestHandler):
 
         return _QuestionValidationResult(question=question, rcode=None)
 
+    def _make_query_log_event(
+        self,
+        question: dns.rrset.RRset,
+        query_id: int,
+        traffic_marker: str,
+        description: str,
+        answer_count: Optional[int] = None,
+    ) -> _LogEvent:
+        message = f"%s {description}: source=%s:%d id=%d qname=%s qtype=%s"
+        args = (
+            traffic_marker,
+            self.client_address[0],
+            self.client_address[1],
+            query_id,
+            question.name,
+            dns.rdatatype.to_text(question.rdtype),
+        )
+        if answer_count is None:
+            return _LogEvent(level=logging.INFO, message=message, args=args)
+
+        return _LogEvent(
+            level=logging.INFO,
+            message=f"{message} answers=%d",
+            args=args + (answer_count,),
+        )
+
+    def _make_response_outcome(
+        self,
+        rcode: int,
+        is_authoritative: bool,
+        log_event: _LogEvent,
+        answer: Optional[List[dns.rrset.RRset]] = None,
+        authority: Optional[List[dns.rrset.RRset]] = None,
+    ) -> _ResponseOutcome:
+        return _ResponseOutcome(
+            rcode=rcode,
+            is_authoritative=is_authoritative,
+            answer=tuple(answer or ()),
+            authority=tuple(authority or ()),
+            log_event=log_event,
+        )
+
+    def _make_refused_outcome(
+        self, question: dns.rrset.RRset, query_id: int
+    ) -> _ResponseOutcome:
+        return self._make_response_outcome(
+            rcode=dns.rcode.REFUSED,
+            is_authoritative=False,
+            log_event=self._make_query_log_event(
+                question,
+                query_id,
+                _DNS_TRAFFIC_NOISE,
+                "Refused DNS query outside hosted or alias zones",
+            ),
+        )
+
+    def _make_answer_outcome(
+        self,
+        question: dns.rrset.RRset,
+        query_id: int,
+        answer: List[dns.rrset.RRset],
+        description: str,
+    ) -> _ResponseOutcome:
+        return self._make_response_outcome(
+            rcode=dns.rcode.NOERROR,
+            is_authoritative=True,
+            answer=answer,
+            log_event=self._make_query_log_event(
+                question,
+                query_id,
+                _DNS_TRAFFIC_NORMAL,
+                description,
+                answer_count=len(answer),
+            ),
+        )
+
+    def _make_soa_authority_outcome(
+        self,
+        question: dns.rrset.RRset,
+        query_id: int,
+        origin_name: dns.name.Name,
+        txn: dns.zone.Transaction,
+        rcode: int,
+        description: str,
+    ) -> _ResponseOutcome:
+        return self._make_response_outcome(
+            rcode=rcode,
+            is_authoritative=True,
+            authority=_build_authority_with_apex_soa(origin_name, txn),
+            log_event=self._make_query_log_event(
+                question,
+                query_id,
+                _DNS_TRAFFIC_NORMAL,
+                description,
+            ),
+        )
+
+    def _classify_existing_node_query(
+        self,
+        question: dns.rrset.RRset,
+        query_id: int,
+        origin_name: dns.name.Name,
+        txn: dns.zone.Transaction,
+        node: dns.node.Node,
+    ) -> _ResponseOutcome:
+        query_name = question.name
+        query_type = question.rdtype
+        zone = self.server.zone
+
+        if query_type == dns.rdatatype.ANY:
+            return self._make_answer_outcome(
+                question,
+                query_id,
+                _build_rfc8482_hinfo_answer(query_name, txn),
+                "Answered RFC 8482 ANY query with synthesized HINFO",
+            )
+
+        rdataset = node.get_rdataset(zone.rdclass, query_type)
+        if rdataset:
+            return self._make_answer_outcome(
+                question,
+                query_id,
+                _build_answer(query_name, rdataset),
+                "Answered DNS query from hosted zone",
+            )
+
+        return self._make_soa_authority_outcome(
+            question,
+            query_id,
+            origin_name,
+            txn,
+            dns.rcode.NOERROR,
+            "DNS owner name exists but has no requested records; returning NODATA",
+        )
+
+    def _classify_empty_non_terminal_query(
+        self,
+        question: dns.rrset.RRset,
+        query_id: int,
+        origin_name: dns.name.Name,
+        txn: dns.zone.Transaction,
+    ) -> _ResponseOutcome:
+        if question.rdtype == dns.rdatatype.ANY:
+            return self._make_answer_outcome(
+                question,
+                query_id,
+                _build_rfc8482_hinfo_answer(question.name, txn),
+                "Answered RFC 8482 ANY query for empty non-terminal with synthesized HINFO",
+            )
+
+        return self._make_soa_authority_outcome(
+            question,
+            query_id,
+            origin_name,
+            txn,
+            dns.rcode.NOERROR,
+            "DNS owner name is an empty non-terminal in the active zone; returning NODATA",
+        )
+
+    def _classify_query(
+        self,
+        question: dns.rrset.RRset,
+        query_id: int,
+    ) -> _ResponseOutcome:
+        query_name = question.name
+        zone = self.server.zone
+        zone_origins = self.server.zone_origins
+
+        origin_name = zone_origins.origin_for(query_name)
+        if origin_name is None:
+            return self._make_refused_outcome(question, query_id)
+
+        relative_name = zone_origins.relativize(query_name)
+
+        with zone.reader() as txn:
+            node = txn.get_node(relative_name)
+            if node:
+                return self._classify_existing_node_query(
+                    question, query_id, origin_name, txn, node
+                )
+
+            if _is_empty_non_terminal(relative_name, txn):
+                return self._classify_empty_non_terminal_query(
+                    question, query_id, origin_name, txn
+                )
+
+            return self._make_soa_authority_outcome(
+                question,
+                query_id,
+                origin_name,
+                txn,
+                dns.rcode.NXDOMAIN,
+                "DNS owner name is not present in the active zone; returning NXDOMAIN",
+            )
+
+    def _log_response_outcome(self, outcome: _ResponseOutcome) -> None:
+        if outcome.log_event is not None:
+            logging.log(
+                outcome.log_event.level,
+                outcome.log_event.message,
+                *outcome.log_event.args,
+            )
+
+    def _apply_response_outcome(
+        self, response: dns.message.Message, outcome: _ResponseOutcome
+    ) -> None:
+        if outcome.is_authoritative:
+            response.flags |= dns.flags.AA  # Authoritative Answer
+
+        response.set_rcode(outcome.rcode)
+        response.authority.extend(outcome.authority)
+        response.answer.extend(outcome.answer)
+
     def _update_response(
         self,
         response: dns.message.Message,
         question: dns.rrset.RRset,
         query_id: int,
     ) -> None:
-        query_name = question.name
-        query_type = question.rdtype
-        zone = self.server.zone
-        zone_origins = self.server.zone_origins
-        source_host = self.client_address[0]
-        source_port = self.client_address[1]
-
-        origin_name = zone_origins.origin_for(query_name)
-        if origin_name is None:
-            logging.info(
-                "%s Refused DNS query outside hosted or alias zones: source=%s:%d id=%d qname=%s qtype=%s",
-                _DNS_TRAFFIC_NOISE,
-                source_host,
-                source_port,
-                query_id,
-                query_name,
-                dns.rdatatype.to_text(query_type),
-            )
-            response.set_rcode(dns.rcode.REFUSED)
-            return
-
-        relative_name = zone_origins.relativize(query_name)
-        response.flags |= dns.flags.AA  # Authoritative Answer
-
-        with zone.reader() as txn:
-            rcode = dns.rcode.NOERROR
-            authority = []
-            answer = []
-
-            node = txn.get_node(relative_name)
-            if node:
-                if query_type == dns.rdatatype.ANY:
-                    answer = _build_rfc8482_hinfo_answer(query_name, txn)
-                    logging.info(
-                        "%s Answered RFC 8482 ANY query with synthesized HINFO: source=%s:%d id=%d qname=%s qtype=%s answers=%d",
-                        _DNS_TRAFFIC_NORMAL,
-                        source_host,
-                        source_port,
-                        query_id,
-                        query_name,
-                        dns.rdatatype.to_text(query_type),
-                        len(answer),
-                    )
-                else:
-                    rdataset = node.get_rdataset(zone.rdclass, query_type)
-                    if rdataset:
-                        answer = _build_answer(query_name, rdataset)
-                        logging.info(
-                            "%s Answered DNS query from hosted zone: source=%s:%d id=%d qname=%s qtype=%s answers=%d",
-                            _DNS_TRAFFIC_NORMAL,
-                            source_host,
-                            source_port,
-                            query_id,
-                            query_name,
-                            dns.rdatatype.to_text(query_type),
-                            len(answer),
-                        )
-                    else:
-                        logging.info(
-                            "%s DNS owner name exists but has no requested records; returning NODATA: source=%s:%d id=%d qname=%s qtype=%s",
-                            _DNS_TRAFFIC_NORMAL,
-                            source_host,
-                            source_port,
-                            query_id,
-                            query_name,
-                            dns.rdatatype.to_text(query_type),
-                        )
-                        authority = _build_authority_with_apex_soa(origin_name, txn)
-            else:
-                if _is_empty_non_terminal(relative_name, txn):
-                    if query_type == dns.rdatatype.ANY:
-                        answer = _build_rfc8482_hinfo_answer(query_name, txn)
-                        logging.info(
-                            "%s Answered RFC 8482 ANY query for empty non-terminal with synthesized HINFO: source=%s:%d id=%d qname=%s qtype=%s answers=%d",
-                            _DNS_TRAFFIC_NORMAL,
-                            source_host,
-                            source_port,
-                            query_id,
-                            query_name,
-                            dns.rdatatype.to_text(query_type),
-                            len(answer),
-                        )
-                    else:
-                        logging.info(
-                            "%s DNS owner name is an empty non-terminal in the active zone; returning NODATA: source=%s:%d id=%d qname=%s qtype=%s",
-                            _DNS_TRAFFIC_NORMAL,
-                            source_host,
-                            source_port,
-                            query_id,
-                            query_name,
-                            dns.rdatatype.to_text(query_type),
-                        )
-                        authority = _build_authority_with_apex_soa(origin_name, txn)
-                else:
-                    logging.info(
-                        "%s DNS owner name is not present in the active zone; returning NXDOMAIN: source=%s:%d id=%d qname=%s qtype=%s",
-                        _DNS_TRAFFIC_NORMAL,
-                        source_host,
-                        source_port,
-                        query_id,
-                        query_name,
-                        dns.rdatatype.to_text(query_type),
-                    )
-                    rcode = dns.rcode.NXDOMAIN
-                    authority = _build_authority_with_apex_soa(origin_name, txn)
-
-        response.set_rcode(rcode)
-        response.authority.extend(authority)
-        response.answer.extend(answer)
+        outcome = self._classify_query(question, query_id)
+        self._log_response_outcome(outcome)
+        self._apply_response_outcome(response, outcome)
 
     # Implements socketserver.BaseRequestHandler inheritance contract.
     def handle(self) -> None:
