@@ -137,10 +137,60 @@ def is_valid_ip(ip: Any) -> Tuple[bool, str]:
 
 Class members are declared in this order:
 
-1. `@property` accessors
+1. class-owned `@property` accessors
 2. `__init__`
-3. public methods
-4. dunder methods (`__eq__`, `__hash__`, `__repr__`)
+3. dunder methods for equality, hashing, representation, or ordering when they are not the primary protocol-conformance surface
+4. private methods
+5. protocol conformance members, such as context-manager methods or protocol-required properties
+6. class inheritance conformance members, such as framework hooks or base-class-required properties
+7. public methods
+
+When adding protocol or class inheritance conformance members, add a single-line
+comment before that section naming the exact protocol or inherited class
+contract being implemented. If both protocol conformance and class inheritance
+conformance exist in the same class, place protocol conformance first. Properties
+defined by a protocol or inherited class belong under that protocol or inherited
+class comment, not above `__init__`. If the class then has ordinary public API,
+add a single-line comment before that section.
+
+```python
+class ExampleService:
+    @property
+    def name(self) -> str: ...
+
+    def __init__(self, state: str) -> None: ...
+
+    def __repr__(self) -> str: ...
+
+    def _load_state(self) -> str: ...
+
+    # Implements context manager protocol.
+    @property
+    def resource(self) -> str: ...
+
+    def __enter__(self) -> "ExampleService": ...
+
+    def __exit__(self, exc_type: object, exc_value: object, traceback: object) -> bool:
+        ...
+
+    # Implements BaseWorker inheritance contract.
+    @property
+    def worker_id(self) -> str: ...
+
+    def run(self) -> None: ...
+
+    # Public methods.
+    def refresh(self) -> None: ...
+```
+
+Protocol conformance members implement an interface or Python protocol rather
+than ordinary public API, such as context-manager hooks. Class inheritance
+conformance members implement an inherited class or framework contract, such as
+`socketserver.BaseRequestHandler.handle()`.
+
+When a class has no protocol or class inheritance conformance members, place
+private helpers after ordinary dunder methods and before ordinary public
+methods.
 
 ```python
 class AHealthyIp:
@@ -152,11 +202,12 @@ class AHealthyIp:
 
     def __init__(self, ip: Any, health_port: Any, is_healthy: bool) -> None: ...
 
-    def updated_status(self, is_healthy: bool) -> "AHealthyIp": ...
-
     def __eq__(self, other: Any) -> bool: ...
     def __hash__(self) -> int: ...
     def __repr__(self) -> str: ...
+
+    # Public methods.
+    def updated_status(self, is_healthy: bool) -> "AHealthyIp": ...
 ```
 
 ## NamedTuple Usage

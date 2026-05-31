@@ -33,6 +33,17 @@ class _ApexSOA(NamedTuple):
     ttl: int
 
 
+class _QueryParseResult(NamedTuple):
+    success: bool
+    query: Optional[dns.message.Message]
+    response: Optional[dns.message.Message]
+
+
+class _QuestionValidationResult(NamedTuple):
+    question: Optional[dns.rrset.RRset]
+    rcode: Optional[int]
+
+
 _DNS_HEADER_LENGTH = 12
 _DNS_OPCODE_MASK = 0x7800
 _CLASSIC_UDP_PAYLOAD_SIZE = 512
@@ -70,9 +81,7 @@ def _build_apex_soa(
     if soa_rdata is None:
         return None
 
-    return _ApexSOA(
-        rdata=soa_rdata, ttl=min(soa_rdataset.ttl, soa_rdata.minimum)
-    )
+    return _ApexSOA(rdata=soa_rdata, ttl=min(soa_rdataset.ttl, soa_rdata.minimum))
 
 
 def _build_authority_with_apex_soa(
@@ -116,7 +125,9 @@ def _build_rfc8482_hinfo_answer(
     return _build_answer(query_name, rdataset)
 
 
-def _is_empty_non_terminal(query_name: dns.name.Name, txn: dns.zone.Transaction) -> bool:
+def _is_empty_non_terminal(
+    query_name: dns.name.Name, txn: dns.zone.Transaction
+) -> bool:
     """Return True when *query_name* exists only via descendants (empty non-terminal).
 
     See `docs/RFC-conformance.md#3-level-1-protocol-target` for the
@@ -136,9 +147,7 @@ def _make_formerr_response_from_header(data: bytes) -> dns.message.Message:
 
 
 def _response_to_udp_wire(response: dns.message.Message) -> bytes:
-    return response.to_wire(
-        max_size=_CLASSIC_UDP_PAYLOAD_SIZE, prefer_truncation=True
-    )
+    return response.to_wire(max_size=_CLASSIC_UDP_PAYLOAD_SIZE, prefer_truncation=True)
 
 
 def _update_response(
@@ -258,9 +267,7 @@ def _update_response(
 class DnsServerUdpHandler(socketserver.BaseRequestHandler):
     """UDP request handler for DNS queries with health-aware responses."""
 
-    def handle(self) -> None:
-        """Handle incoming DNS query and send appropriate response."""
-        data, sock = self.request
+    def _drop_inbound_response_packet(self, data: bytes) -> bool:
         if len(data) >= _DNS_HEADER_LENGTH:
             header_flags = int.from_bytes(data[2:4], "big")
             if header_flags & dns.flags.QR:
@@ -272,10 +279,15 @@ class DnsServerUdpHandler(socketserver.BaseRequestHandler):
                     int.from_bytes(data[:2], "big"),
                     len(data),
                 )
-                return
+                return True
 
+        return False
+
+    def _parse_query(self, data: bytes) -> _QueryParseResult:
         try:
-            query = dns.message.from_wire(data)
+            return _QueryParseResult(
+                success=True, query=dns.message.from_wire(data), response=None
+            )
         except dns.message.ShortHeader as ex:
             # Payload too short to contain a DNS header - no transaction ID to
             # recover, drop without a DNS response (RFC 1035 §4.1.1).
@@ -295,7 +307,7 @@ class DnsServerUdpHandler(socketserver.BaseRequestHandler):
                 len(data),
                 exc_info=True,
             )
-            return
+            return _QueryParseResult(success=False, query=None, response=None)
         except dns.exception.DNSException as ex:
             # Header is readable but message is malformed - recover the
             # transaction ID and respond with FORMERR (RFC 1035 §4.1.1).
@@ -319,12 +331,17 @@ class DnsServerUdpHandler(socketserver.BaseRequestHandler):
                 exc_info=True,
             )
 
-            formerr = _make_formerr_response_from_header(data)
-            sock.sendto(_response_to_udp_wire(formerr), self.client_address)
-            return
+            return _QueryParseResult(
+                success=False,
+                query=None,
+                response=_make_formerr_response_from_header(data),
+            )
 
+    def _make_response(
+        self, query: dns.message.Message, data_length: int
+    ) -> Optional[dns.message.Message]:
         try:
-            response = dns.message.make_response(query)
+            return dns.message.make_response(query)
         except dns.exception.FormError as ex:
             logging.info(
                 "%s Unable to build DNS response; dropping packet: source=%s:%d id=%d bytes=%d problem=%s",
@@ -332,7 +349,7 @@ class DnsServerUdpHandler(socketserver.BaseRequestHandler):
                 self.client_address[0],
                 self.client_address[1],
                 query.id,
-                len(data),
+                data_length,
                 ex,
             )
             logging.debug(
@@ -341,11 +358,14 @@ class DnsServerUdpHandler(socketserver.BaseRequestHandler):
                 self.client_address[0],
                 self.client_address[1],
                 query.id,
-                len(data),
+                data_length,
                 exc_info=True,
             )
-            return
+            return None
 
+    def _validate_question(
+        self, query: dns.message.Message
+    ) -> _QuestionValidationResult:
         if query.opcode() != dns.opcode.QUERY:
             logging.warning(
                 "%s DNS query uses unsupported opcode; returning NOTIMP: source=%s:%d id=%d opcode=%s expected=QUERY",
@@ -355,8 +375,9 @@ class DnsServerUdpHandler(socketserver.BaseRequestHandler):
                 query.id,
                 dns.opcode.to_text(query.opcode()),
             )
-            response.set_rcode(dns.rcode.NOTIMP)
-        elif len(query.question) != 1:
+            return _QuestionValidationResult(question=None, rcode=dns.rcode.NOTIMP)
+
+        if len(query.question) != 1:
             logging.info(
                 "%s DNS query has invalid question count; returning FORMERR: source=%s:%d id=%d qdcount=%d expected=1",
                 _DNS_TRAFFIC_JUNK,
@@ -365,32 +386,61 @@ class DnsServerUdpHandler(socketserver.BaseRequestHandler):
                 query.id,
                 len(query.question),
             )
-            response.set_rcode(dns.rcode.FORMERR)
-        else:
-            question = query.question[0]
-            if question.rdclass != dns.rdataclass.IN:
-                logging.info(
-                    "%s Refused DNS query with unsupported class: source=%s:%d id=%d qname=%s qtype=%s qclass=%s expected=IN",
-                    _DNS_TRAFFIC_NOISE,
-                    self.client_address[0],
-                    self.client_address[1],
-                    query.id,
-                    question.name,
-                    dns.rdatatype.to_text(question.rdtype),
-                    dns.rdataclass.to_text(question.rdclass),
-                )
-                response.set_rcode(dns.rcode.REFUSED)
-            else:
-                _update_response(
-                    response,
-                    question.name,
-                    question.rdtype,
-                    self.server.zone,
-                    self.server.zone_origins,
-                    query.id,
-                    self.client_address[0],
-                    self.client_address[1],
-                )
+            return _QuestionValidationResult(question=None, rcode=dns.rcode.FORMERR)
 
-        # Send the response back to the client
+        question = query.question[0]
+        if question.rdclass != dns.rdataclass.IN:
+            logging.info(
+                "%s Refused DNS query with unsupported class: source=%s:%d id=%d qname=%s qtype=%s qclass=%s expected=IN",
+                _DNS_TRAFFIC_NOISE,
+                self.client_address[0],
+                self.client_address[1],
+                query.id,
+                question.name,
+                dns.rdatatype.to_text(question.rdtype),
+                dns.rdataclass.to_text(question.rdclass),
+            )
+            return _QuestionValidationResult(question=None, rcode=dns.rcode.REFUSED)
+
+        return _QuestionValidationResult(question=question, rcode=None)
+
+    # Implements socketserver.BaseRequestHandler inheritance contract.
+    def handle(self) -> None:
+        """Handle incoming DNS query and send appropriate response."""
+        data, sock = self.request
+
+        if self._drop_inbound_response_packet(data):
+            return
+
+        parse_result = self._parse_query(data)
+        if not parse_result.success:
+            if parse_result.response is not None:
+                sock.sendto(
+                    _response_to_udp_wire(parse_result.response), self.client_address
+                )
+            return
+
+        query = parse_result.query
+        if query is None:
+            return
+
+        response = self._make_response(query, len(data))
+        if response is None:
+            return
+
+        question_result = self._validate_question(query)
+        if question_result.rcode is not None:
+            response.set_rcode(question_result.rcode)
+        elif question_result.question is not None:
+            _update_response(
+                response,
+                question_result.question.name,
+                question_result.question.rdtype,
+                self.server.zone,
+                self.server.zone_origins,
+                query.id,
+                self.client_address[0],
+                self.client_address[1],
+            )
+
         sock.sendto(_response_to_udp_wire(response), self.client_address)
