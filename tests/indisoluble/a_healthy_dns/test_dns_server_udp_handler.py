@@ -62,6 +62,7 @@ class _FakeReaderContext:
     def __init__(self, transaction):
         self._transaction = transaction
 
+    # Implements context manager protocol.
     def __enter__(self):
         return self._transaction
 

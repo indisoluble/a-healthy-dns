@@ -46,15 +46,6 @@ class AHealthyIp:
         self._health_port = health_port
         self._is_healthy = is_healthy
 
-    def updated_status(self, is_healthy: bool) -> "AHealthyIp":
-        """Return new instance with updated health status if changed."""
-        if is_healthy == self._is_healthy:
-            return self
-
-        return AHealthyIp(
-            ip=self.ip, health_port=self.health_port, is_healthy=is_healthy
-        )
-
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, AHealthyIp):
             return False
@@ -72,4 +63,13 @@ class AHealthyIp:
         return (
             f"AHealthyIp(ip='{self.ip}', health_port={self.health_port}, "
             f"is_healthy={self.is_healthy})"
+        )
+
+    def updated_status(self, is_healthy: bool) -> "AHealthyIp":
+        """Return new instance with updated health status if changed."""
+        if is_healthy == self._is_healthy:
+            return self
+
+        return AHealthyIp(
+            ip=self.ip, health_port=self.health_port, is_healthy=is_healthy
         )

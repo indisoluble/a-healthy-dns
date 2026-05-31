@@ -31,13 +31,6 @@ class AHealthyRecord:
         self._subdomain = subdomain
         self._healthy_ips = frozenset(healthy_ips)
 
-    def updated_ips(self, updated_ips: List[AHealthyIp]) -> "AHealthyRecord":
-        """Return new record with updated IP list if changed."""
-        if frozenset(updated_ips) == self.healthy_ips:
-            return self
-
-        return AHealthyRecord(subdomain=self.subdomain, healthy_ips=updated_ips)
-
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, AHealthyRecord):
             return False
@@ -51,3 +44,10 @@ class AHealthyRecord:
         ips_str = ", ".join(f"{ip}" for ip in self.healthy_ips)
 
         return f"AHealthyRecord(subdomain={self.subdomain}, healthy_ips=[{ips_str}])"
+
+    def updated_ips(self, updated_ips: List[AHealthyIp]) -> "AHealthyRecord":
+        """Return new record with updated IP list if changed."""
+        if frozenset(updated_ips) == self.healthy_ips:
+            return self
+
+        return AHealthyRecord(subdomain=self.subdomain, healthy_ips=updated_ips)

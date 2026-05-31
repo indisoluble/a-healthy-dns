@@ -35,6 +35,21 @@ class ZoneOrigins:
             key=lambda zone: (-len(zone), zone.to_text()),
         )
 
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, ZoneOrigins):
+            return False
+
+        return self._primary == other._primary and self._origins == other._origins
+
+    def __hash__(self) -> int:
+        return hash((self._primary, tuple(self._origins)))
+
+    def __repr__(self) -> str:
+        aliases = [
+            origin.to_text() for origin in self._origins if origin != self._primary
+        ]
+        return f"ZoneOrigins(primary={self._primary.to_text()!r}, aliases={aliases!r})"
+
     def origin_for(self, name: dns.name.Name) -> Optional[dns.name.Name]:
         """Return the matching origin for *name*, or None when unmatched."""
         if not name.is_absolute():
@@ -51,18 +66,3 @@ class ZoneOrigins:
 
         origin = self.origin_for(name)
         return None if origin is None else name.relativize(origin)
-
-    def __eq__(self, other: object) -> bool:
-        if not isinstance(other, ZoneOrigins):
-            return False
-
-        return self._primary == other._primary and self._origins == other._origins
-
-    def __hash__(self) -> int:
-        return hash((self._primary, tuple(self._origins)))
-
-    def __repr__(self) -> str:
-        aliases = [
-            origin.to_text() for origin in self._origins if origin != self._primary
-        ]
-        return f"ZoneOrigins(primary={self._primary.to_text()!r}, aliases={aliases!r})"

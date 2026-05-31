@@ -2,7 +2,7 @@
 
 Python-specific implementation guidance for **A Healthy DNS**.
 
-This document is the canonical home for language-specific, runtime-specific, and module-level implementation conventions. Repository-wide engineering principles live in [`docs/engineering-rules.md`](engineering-rules.md); testing strategy and commands live in [`docs/testing.md`](testing.md); CI and release workflow live in [`docs/workflow.md`](workflow.md); architecture lives in [`docs/architecture.md`](architecture.md).
+This document owns language-, runtime-, and module-level conventions. Repository-wide engineering principles live in [`docs/engineering-rules.md`](engineering-rules.md); testing in [`docs/testing.md`](testing.md); workflow in [`docs/workflow.md`](workflow.md); architecture in [`docs/architecture.md`](architecture.md).
 
 ## Runtime And Package Shape
 
@@ -15,14 +15,12 @@ This document is the canonical home for language-specific, runtime-specific, and
 
 ## Dependencies
 
-Dependencies are managed in `pyproject.toml`. Keep runtime dependencies in `[project.dependencies]` and test-only dependencies in `[project.optional-dependencies].test`.
+Dependencies are managed in `pyproject.toml`. Runtime dependencies belong in `[project.dependencies]`; test-only dependencies belong in `[project.optional-dependencies].test`.
 
 | Package | Constraint | Purpose |
 |---|---|---|
 | `dnspython` | `>=2.8.0,<3.0.0` | DNS protocol, zones, records, and DNSSEC signing |
 | `cryptography` | `>=46.0.5,<47.0.0` | DNSSEC key loading and crypto operations |
-
-Test/development packages are declared in `pyproject.toml` under `[project.optional-dependencies].test` and installed in CI via project extras.
 
 Keep upper-bound pins at the next major version so minor and patch updates are allowed automatically.
 
@@ -41,7 +39,7 @@ Keep upper-bound pins at the next major version so minor and patch updates are a
 
 ## Import Ordering
 
-Each source and test module organizes imports into five groups, each separated by a blank line:
+Organize source and test imports into these groups, separated by blank lines:
 
 1. Standard-library direct imports (`import X`)
 2. Third-party direct imports (`import X`)
@@ -64,11 +62,11 @@ from indisoluble.a_healthy_dns import dns_server_config_factory as dscf
 from indisoluble.a_healthy_dns.records.a_healthy_ip import AHealthyIp
 ```
 
-Skip groups that are not needed; do not collapse remaining groups together. Local imports normally use `from ... import ...`; aliasing the imported symbol or submodule is acceptable when repeated constant access would otherwise add noise.
+Skip unused groups without collapsing the remaining groups. Local imports normally use `from ... import ...`; aliases are acceptable when they reduce repeated access noise.
 
 ## Module-Level Constants And Type Parameters
 
-For this section, **constant** means a module-level `UPPER_SNAKE_CASE` or `_UPPER_SNAKE_CASE` assignment intended to behave as a stable value. Lowercase module-level assignments are not constants.
+Here, **constant** means a module-level `UPPER_SNAKE_CASE` or `_UPPER_SNAKE_CASE` assignment intended to stay stable. Lowercase module-level assignments are not constants.
 
 Use this module-level declaration order:
 
@@ -77,7 +75,7 @@ Use this module-level declaration order:
 3. Public constants.
 4. Helper functions, public functions, and ordinary classes with methods or runtime behavior.
 
-Keep each group separated by a blank line. If a module has both private and public constants, private constants come first:
+Separate groups with blank lines. If both private and public constants exist, private constants come first:
 
 ```python
 _P = ParamSpec("_P")
@@ -93,7 +91,7 @@ _MAX_TTL = (1 << 31) - 1
 DEFAULT_TTL = 60
 ```
 
-Ordinary classes normally belong below constants. The exception is when a module-level constant is constructed from an ordinary class defined in the same module; in that case, define the class before the constant so the assignment can run.
+Ordinary classes normally belong below constants. If a module-level constant is constructed from a class in the same module, define the class first so the assignment can run.
 
 ```python
 class DefaultPolicy:
@@ -105,7 +103,7 @@ _DEFAULT_POLICY = DefaultPolicy()
 
 ## Module Headers
 
-Non-empty source modules start with the shebang line and, unless the file is an intentionally empty package `__init__.py`, immediately follow it with a module-level docstring:
+Non-empty source modules start with the shebang line and then a module docstring, except intentionally empty package `__init__.py` files:
 
 ```python
 #!/usr/bin/env python3
@@ -120,7 +118,7 @@ Test files include the shebang (`#!/usr/bin/env python3`) but omit the module do
 
 ## Validation Function Signature
 
-Utility functions in `tools/` that validate a primitive value return `Tuple[bool, str]`: `(True, "")` on success and `(False, error_message)` on failure. Input type is `Any` to safely handle unvalidated external input.
+Primitive validators in `tools/` return `Tuple[bool, str]`: `(True, "")` on success and `(False, error_message)` on failure. Input type is `Any` because validators accept untrusted external values.
 
 ```python
 from typing import Any, Tuple
@@ -145,13 +143,9 @@ Class members are declared in this order:
 6. class inheritance conformance members, such as framework hooks or base-class-required properties
 7. public methods
 
-When adding protocol or class inheritance conformance members, add a single-line
-comment before that section naming the exact protocol or inherited class
-contract being implemented. If both protocol conformance and class inheritance
-conformance exist in the same class, place protocol conformance first. Properties
-defined by a protocol or inherited class belong under that protocol or inherited
-class comment, not above `__init__`. If the class then has ordinary public API,
-add a single-line comment before that section.
+Protocol conformance implements an interface or Python protocol, such as context-manager hooks. Class inheritance conformance implements an inherited class or framework contract, such as `socketserver.BaseRequestHandler.handle()`.
+
+Add a single-line comment before each protocol or inheritance section, naming the exact protocol or inherited class contract. If both exist, place protocol conformance first. Properties required by a protocol or inherited class belong under that section comment, not above `__init__`. Add `# Public methods.` only when ordinary public API follows a protocol or inheritance section.
 
 ```python
 class ExampleService:
@@ -183,14 +177,7 @@ class ExampleService:
     def refresh(self) -> None: ...
 ```
 
-Protocol conformance members implement an interface or Python protocol rather
-than ordinary public API, such as context-manager hooks. Class inheritance
-conformance members implement an inherited class or framework contract, such as
-`socketserver.BaseRequestHandler.handle()`.
-
-When a class has no protocol or class inheritance conformance members, place
-private helpers after ordinary dunder methods and before ordinary public
-methods.
+When a class has no protocol or inheritance section, place public methods after private methods without a public-method section comment.
 
 ```python
 class AHealthyIp:
@@ -206,13 +193,12 @@ class AHealthyIp:
     def __hash__(self) -> int: ...
     def __repr__(self) -> str: ...
 
-    # Public methods.
     def updated_status(self, is_healthy: bool) -> "AHealthyIp": ...
 ```
 
 ## NamedTuple Usage
 
-`NamedTuple` is used for immutable containers that hold related fields with no behavior beyond construction, such as config, key containers, and signature timing. Classes are used when objects carry behavior (`AHealthyIp`, `AHealthyRecord`, `ZoneOrigins`).
+Use `NamedTuple` for immutable containers with no behavior beyond construction, such as config, key containers, and signature timing. Use classes when objects carry behavior (`AHealthyIp`, `AHealthyRecord`, `ZoneOrigins`).
 
 ```python
 class DnsServerConfig(NamedTuple):
@@ -234,7 +220,7 @@ logging.debug("Created A record with ttl: %d, and IPs: %s", ttl, ips)
 
 ## Type Annotations
 
-In source modules, all function and method signatures include parameter type annotations and return type annotations. Use `Any` only where the function intentionally accepts unvalidated external input, such as validator parameters.
+In source modules, every function and method signature includes parameter and return type annotations. Use `Any` only when intentionally accepting unvalidated external input, such as validator parameters.
 
 ```python
 def is_valid_ip(ip: Any) -> Tuple[bool, str]:
