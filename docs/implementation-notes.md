@@ -75,7 +75,7 @@ Use this module-level declaration order:
 3. Public constants.
 4. Helper functions, public functions, and ordinary classes with methods or runtime behavior.
 
-Separate groups with blank lines. If both private and public constants exist, private constants come first:
+Separate groups with blank lines. Within each group, sort names alphabetically (ascending, case-sensitive). If both private and public constants exist, private constants come first:
 
 ```python
 _P = ParamSpec("_P")
