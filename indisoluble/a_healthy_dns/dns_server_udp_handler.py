@@ -47,6 +47,13 @@ _DNS_TRAFFIC_JUNK = "dns_traffic=junk"
 _DNS_TRAFFIC_NOISE = "dns_traffic=noise"
 _DNS_TRAFFIC_NORMAL = "dns_traffic=normal"
 _DNS_TRAFFIC_SUSPICIOUS = "dns_traffic=suspicious"
+_PARSE_ERROR_DESCRIPTIONS = {
+    dns.exception.FormError: "packet does not match the DNS message wire format",
+    dns.message.ShortHeader: "packet is shorter than the 12-byte DNS header",
+    dns.message.TrailingJunk: "packet has trailing bytes after a complete DNS message",
+    dns.name.BadLabelType: "packet uses an unsupported DNS label encoding",
+    dns.name.BadPointer: "packet contains an invalid DNS compression pointer",
+}
 _RFC8482_HINFO_CPU = "RFC8482"
 _RFC8482_HINFO_OS = ""
 
@@ -251,14 +258,7 @@ def _classify_query(
 
 
 def _describe_parse_error(ex: dns.exception.DNSException) -> str:
-    _descriptions = {
-        dns.exception.FormError: "packet does not match the DNS message wire format",
-        dns.message.ShortHeader: "packet is shorter than the 12-byte DNS header",
-        dns.message.TrailingJunk: "packet has trailing bytes after a complete DNS message",
-        dns.name.BadLabelType: "packet uses an unsupported DNS label encoding",
-        dns.name.BadPointer: "packet contains an invalid DNS compression pointer",
-    }
-    return _descriptions.get(type(ex), "packet could not be parsed as DNS wire format")
+    return _PARSE_ERROR_DESCRIPTIONS.get(type(ex), "packet could not be parsed as DNS wire format")
 
 
 def _drop_inbound_response_packet(
