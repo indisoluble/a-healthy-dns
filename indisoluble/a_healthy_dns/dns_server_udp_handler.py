@@ -33,6 +33,26 @@ class _ApexSOA(NamedTuple):
     ttl: int
 
 
+class _DropQuery(Exception):
+    """Stop processing the current DNS request without sending a response."""
+
+
+class _QuestionRejected(Exception):
+    """Stop question handling and set the response rcode."""
+
+    def __init__(self, rcode: int) -> None:
+        super().__init__(dns.rcode.to_text(rcode))
+        self.rcode = rcode
+
+
+class _RespondWith(Exception):
+    """Stop request processing and send the provided DNS response."""
+
+    def __init__(self, response: dns.message.Message) -> None:
+        super().__init__("respond with DNS message")
+        self.response = response
+
+
 class _ResponseOutcome(NamedTuple):
     rcode: int
     is_authoritative: bool
@@ -56,26 +76,6 @@ _PARSE_ERROR_DESCRIPTIONS = {
 }
 _RFC8482_HINFO_CPU = "RFC8482"
 _RFC8482_HINFO_OS = ""
-
-
-class _DropQuery(Exception):
-    """Stop processing the current DNS request without sending a response."""
-
-
-class _QuestionRejected(Exception):
-    """Stop question handling and set the response rcode."""
-
-    def __init__(self, rcode: int) -> None:
-        super().__init__(dns.rcode.to_text(rcode))
-        self.rcode = rcode
-
-
-class _RespondWith(Exception):
-    """Stop request processing and send the provided DNS response."""
-
-    def __init__(self, response: dns.message.Message) -> None:
-        super().__init__("respond with DNS message")
-        self.response = response
 
 
 def _apply_response_outcome(

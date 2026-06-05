@@ -64,18 +64,20 @@ from indisoluble.a_healthy_dns.records.a_healthy_ip import AHealthyIp
 
 Skip unused groups without collapsing the remaining groups. Local imports normally use `from ... import ...`; aliases are acceptable when they reduce repeated access noise.
 
-## Module-Level Constants And Type Parameters
+## Module-Level Type Definitions And Constants
 
 Here, **constant** means a module-level `UPPER_SNAKE_CASE` or `_UPPER_SNAKE_CASE` assignment intended to stay stable. Lowercase module-level assignments are not constants.
 
+Here, **simple type or support class definition** means a module-level declaration that defines a type shape or lightweight local control-flow helper without ordinary runtime behavior: `TypeVar`, `ParamSpec`, type aliases, `NamedTuple`, `Enum`, and simple exception classes.
+
 Use this module-level declaration order:
 
-1. Type definitions used by module-level constants, helpers, or public APIs: `TypeVar`, `ParamSpec`, type aliases, `NamedTuple`, and `Enum`.
+1. Simple type and support class definitions.
 2. Private constants.
 3. Public constants.
-4. Helper functions, public functions, and ordinary classes with methods or runtime behavior.
+4. Helper functions, public functions, and ordinary classes with runtime behavior.
 
-Separate groups with blank lines. Within each group, sort names alphabetically (ascending, case-sensitive). If both private and public constants exist, private constants come first:
+Keep simple type and support class definitions directly after imports, before constants and the rest of the module. Order related definitions for readability and dependency clarity; otherwise sort nearby definitions alphabetically (ascending, case-sensitive). Separate groups with blank lines. Sort constants alphabetically within their private and public groups. If both private and public constants exist, private constants come first:
 
 ```python
 _P = ParamSpec("_P")
@@ -86,22 +88,18 @@ class RRSigLifetime(NamedTuple):
     expiration: int
 
 
+class _DropQuery(Exception):
+    ...
+
+
 _MAX_TTL = (1 << 31) - 1
 
 DEFAULT_TTL = 60
 ```
 
-Ordinary classes normally belong below constants. If a module-level constant is constructed from a class in the same module, define the class first so the assignment can run.
+Ordinary classes with methods or runtime behavior are not simple support definitions and normally belong with the rest of the runtime code below constants. If a module-level constant is constructed from a runtime class in the same module, define the class first so the assignment can run.
 
-```python
-class DefaultPolicy:
-    ...
-
-
-_DEFAULT_POLICY = DefaultPolicy()
-```
-
-Exception classes (`Exception` subclasses) are ordinary classes and belong in group 4 alongside functions, not in group 1. When sorted alphabetically (case-sensitive), uppercase names such as `_DropQuery` come before lowercase names such as `_apply_response_outcome`.
+When sorting the runtime-code group alphabetically (case-sensitive), uppercase names such as `_DropQuery` come before lowercase names such as `_apply_response_outcome`.
 
 ## Module Headers
 
