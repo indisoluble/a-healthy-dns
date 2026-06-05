@@ -488,7 +488,7 @@ def _response_to_udp_wire(response: dns.message.Message) -> bytes:
     return response.to_wire(max_size=_CLASSIC_UDP_PAYLOAD_SIZE, prefer_truncation=True)
 
 
-def _validate_question(
+def _validated_question(
     query: dns.message.Message, client_address: Tuple[str, int]
 ) -> dns.rrset.RRset:
     if query.opcode() != dns.opcode.QUERY:
@@ -564,12 +564,12 @@ class DnsServerUdpHandler(socketserver.BaseRequestHandler):
             sock.sendto(_response_to_udp_wire(ex.response), self.client_address)
             return
 
-        response = _make_response(query, len(data), self.client_address)
+        response = _make_response_message(query, len(data), self.client_address)
         if response is None:
             return
 
         try:
-            question = _validate_question(query, self.client_address)
+            question = _validated_question(query, self.client_address)
         except _QuestionRejected as ex:
             response.set_rcode(ex.rcode)
         else:
