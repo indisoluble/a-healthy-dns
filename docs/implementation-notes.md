@@ -101,6 +101,8 @@ class DefaultPolicy:
 _DEFAULT_POLICY = DefaultPolicy()
 ```
 
+Exception classes (`Exception` subclasses) are ordinary classes and belong in group 4 alongside functions, not in group 1. When sorted alphabetically (case-sensitive), uppercase names such as `_DropQuery` come before lowercase names such as `_apply_response_outcome`.
+
 ## Module Headers
 
 Non-empty source modules start with the shebang line and then a module docstring, except intentionally empty package `__init__.py` files:

@@ -25,10 +25,30 @@ import dns.zone
 
 from typing import List, NamedTuple, Optional, Tuple
 
+from indisoluble.a_healthy_dns.records.zone_origins import ZoneOrigins
+
 
 class _ApexSOA(NamedTuple):
     rdata: dns.rdata.Rdata
     ttl: int
+
+
+class _ResponseOutcome(NamedTuple):
+    rcode: int
+    is_authoritative: bool
+    answer: Tuple[dns.rrset.RRset, ...]
+    authority: Tuple[dns.rrset.RRset, ...]
+
+
+_CLASSIC_UDP_PAYLOAD_SIZE = 512
+_DNS_HEADER_LENGTH = 12
+_DNS_OPCODE_MASK = 0x7800
+_DNS_TRAFFIC_JUNK = "dns_traffic=junk"
+_DNS_TRAFFIC_NOISE = "dns_traffic=noise"
+_DNS_TRAFFIC_NORMAL = "dns_traffic=normal"
+_DNS_TRAFFIC_SUSPICIOUS = "dns_traffic=suspicious"
+_RFC8482_HINFO_CPU = "RFC8482"
+_RFC8482_HINFO_OS = ""
 
 
 class _DropQuery(Exception):
@@ -49,24 +69,6 @@ class _RespondWith(Exception):
     def __init__(self, response: dns.message.Message) -> None:
         super().__init__("respond with DNS message")
         self.response = response
-
-
-class _ResponseOutcome(NamedTuple):
-    rcode: int
-    is_authoritative: bool
-    answer: Tuple[dns.rrset.RRset, ...]
-    authority: Tuple[dns.rrset.RRset, ...]
-
-
-_CLASSIC_UDP_PAYLOAD_SIZE = 512
-_DNS_HEADER_LENGTH = 12
-_DNS_OPCODE_MASK = 0x7800
-_DNS_TRAFFIC_JUNK = "dns_traffic=junk"
-_DNS_TRAFFIC_NOISE = "dns_traffic=noise"
-_DNS_TRAFFIC_NORMAL = "dns_traffic=normal"
-_DNS_TRAFFIC_SUSPICIOUS = "dns_traffic=suspicious"
-_RFC8482_HINFO_CPU = "RFC8482"
-_RFC8482_HINFO_OS = ""
 
 
 def _apply_response_outcome(
@@ -208,7 +210,7 @@ def _classify_query(
     question: dns.rrset.RRset,
     query_id: int,
     zone: dns.zone.Zone,
-    zone_origins,
+    zone_origins: ZoneOrigins,
     client_address: Tuple[str, int],
 ) -> _ResponseOutcome:
     query_name = question.name
@@ -298,9 +300,10 @@ def _log_query(
     client_address: Tuple[str, int],
     answer_count: Optional[int] = None,
 ) -> None:
-    message = f"%s {description}: source=%s:%d id=%d qname=%s qtype=%s"
+    message = "%s %s: source=%s:%d id=%d qname=%s qtype=%s"
     args = (
         traffic_marker,
+        description,
         client_address[0],
         client_address[1],
         query_id,
@@ -308,7 +311,7 @@ def _log_query(
         dns.rdatatype.to_text(question.rdtype),
     )
     if answer_count is not None:
-        message = f"{message} answers=%d"
+        message += " answers=%d"
         args = args + (answer_count,)
 
     logging.info(message, *args)
