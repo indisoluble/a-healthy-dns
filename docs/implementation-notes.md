@@ -64,20 +64,24 @@ from indisoluble.a_healthy_dns.records.a_healthy_ip import AHealthyIp
 
 Skip unused groups without collapsing the remaining groups. Local imports normally use `from ... import ...`; aliases are acceptable when they reduce repeated access noise.
 
-## Module-Level Type Definitions And Constants
+## Module-Level Declarations
 
 Here, **constant** means a module-level `UPPER_SNAKE_CASE` or `_UPPER_SNAKE_CASE` assignment intended to stay stable. Lowercase module-level assignments are not constants.
 
-Here, **simple type or support class definition** means a module-level declaration that defines a type shape or lightweight local control-flow helper without ordinary runtime behavior: `TypeVar`, `ParamSpec`, type aliases, `NamedTuple`, `Enum`, and simple exception classes.
+Here, **simple declaration** means a module-level declaration that defines a type shape or a lightweight local control-flow signal, without owning domain, service, framework, I/O, lifecycle, or mutation behavior. This group includes `TypeVar`, `ParamSpec`, type aliases, `NamedTuple`, `Enum`, and local exception classes used only to stop or redirect helper flow. A local exception may define `__init__` only to store payload needed by the catcher.
+
+Here, **runtime class** means a class with ordinary behavior: public methods or properties, domain state, service orchestration, framework inheritance contracts, resource lifecycle, I/O, mutation, or reusable API surface. Runtime classes are not simple declarations.
 
 Use this module-level declaration order:
 
-1. Simple type and support class definitions.
+1. Simple declarations.
 2. Private constants.
 3. Public constants.
-4. Helper functions, public functions, and ordinary classes with runtime behavior.
+4. Helper functions.
+5. Public functions.
+6. Runtime classes.
 
-Keep simple type and support class definitions directly after imports, before constants and the rest of the module. Order related definitions for readability and dependency clarity; otherwise sort nearby definitions alphabetically (ascending, case-sensitive). Separate groups with blank lines. Sort constants alphabetically within their private and public groups. If both private and public constants exist, private constants come first:
+Keep simple declarations directly after imports, before constants and the rest of the module. Order related simple declarations by dependency when one uses another; otherwise sort nearby declarations alphabetically (ascending, case-sensitive). Separate declaration groups with blank lines. Sort constants alphabetically within their private and public groups. If both private and public constants exist, private constants come first:
 
 ```python
 _P = ParamSpec("_P")
@@ -97,9 +101,21 @@ _MAX_TTL = (1 << 31) - 1
 DEFAULT_TTL = 60
 ```
 
-Ordinary classes with methods or runtime behavior are not simple support definitions and normally belong with the rest of the runtime code below constants. If a module-level constant is constructed from a runtime class in the same module, define the class first so the assignment can run.
+Use this classification:
 
-When sorting the runtime-code group alphabetically (case-sensitive), uppercase names such as `_DropQuery` come before lowercase names such as `_apply_response_outcome`.
+| Declaration | Group |
+|---|---|
+| `ShouldAbortOp = Callable[[], bool]` | simple declaration: type alias |
+| `class RRSigAction(NamedTuple): ...` | simple declaration: immutable data shape |
+| `class RefreshARecordsResult(Enum): ...` | simple declaration: named state set |
+| `class _DropQuery(Exception): ...` | simple declaration: local control-flow signal |
+| `class _QuestionRejected(Exception): ...` with an `__init__` that stores an rcode | simple declaration: local control-flow signal with payload |
+| `class AHealthyIp: ...` | runtime class: domain value object with behavior |
+| `class DnsServerUdpHandler(socketserver.BaseRequestHandler): ...` | runtime class: framework handler contract |
+
+Runtime classes normally belong after module-level helper and public functions. If a module-level constant must be constructed from a runtime class in the same module, define that class before the constant so the assignment can run, and keep the exception local to that module.
+
+Do not move a runtime class above constants just because it is a class. Only simple declarations belong in the top declaration group.
 
 ## Module Headers
 
