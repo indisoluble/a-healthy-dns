@@ -13,6 +13,7 @@ import dns.dnssec
 import dns.dnssectypes
 
 from functools import partial
+from types import FrameType
 from typing import Any, Dict
 
 from indisoluble.a_healthy_dns.dns_server_config_factory import (
@@ -214,7 +215,9 @@ Example usage
     return parser
 
 
-def _signal_handler(server: socketserver.UDPServer, signum: int, frame: Any) -> None:
+def _signal_handler(
+    server: socketserver.UDPServer, signum: int, frame: FrameType | None
+) -> None:
     signal_name = signal.Signals(signum).name
     logging.info("Received %s signal, shutting down DNS server...", signal_name)
 
