@@ -367,7 +367,7 @@ def _make_refused_outcome(
     )
 
 
-def _make_response(
+def _make_response_message(
     query: dns.message.Message,
     data_length: int,
     client_address: Tuple[str, int],
