@@ -12,6 +12,8 @@ import time
 
 import dns.versioned
 
+from typing import Optional
+
 from indisoluble.a_healthy_dns.dns_server_config_factory import DnsServerConfig
 from indisoluble.a_healthy_dns.dns_server_zone_updater import (
     DELTA_PER_RECORD_MANAGEMENT,
@@ -42,7 +44,7 @@ class DnsServerZoneUpdaterThreaded:
         self._connection_timeout = float(connection_timeout)
 
         self._stop_event = threading.Event()
-        self._updater_thread = None
+        self._updater_thread: Optional[threading.Thread] = None
 
     def _update_zone_loop(self) -> None:
         while not self._stop_event.is_set():
