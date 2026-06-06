@@ -27,19 +27,19 @@ from indisoluble.a_healthy_dns.records.soa_record import iter_soa_record
 from indisoluble.a_healthy_dns.tools.can_create_connection import can_create_connection
 
 
-class RRSigAction(NamedTuple):
-    """DNSSEC signature action containing resign time and key iterator."""
-
-    resign: datetime.datetime
-    iter: Iterator[ExtendedRRSigKey]
-
-
 class RefreshARecordsResult(Enum):
     """Result states for A record refresh operations."""
 
     NO_CHANGES = auto()
     CHANGES = auto()
     ABORTED = auto()
+
+
+class RRSigAction(NamedTuple):
+    """DNSSEC signature action containing resign time and key iterator."""
+
+    resign: datetime.datetime
+    iter: Iterator[ExtendedRRSigKey]
 
 
 ShouldAbortOp = Callable[[], bool]
