@@ -47,6 +47,8 @@ Organize source and test imports into these groups, separated by blank lines:
 4. Third-party from-imports (`from X import Y`)
 5. Local imports (`from indisoluble.a_healthy_dns... import Y`)
 
+Within each group, sort import statements alphabetically by full statement text.
+
 ```python
 import json
 
@@ -77,16 +79,13 @@ Use this module-level declaration order:
 1. Simple declarations.
 2. Private constants.
 3. Public constants.
-4. Helper functions.
+4. Private helper functions (`def _...`).
 5. Public functions.
 6. Runtime classes.
 
-Keep simple declarations directly after imports, before constants and the rest of the module. Order related simple declarations by dependency when one uses another; otherwise sort nearby declarations alphabetically (ascending, case-sensitive). Separate declaration groups with blank lines. Sort constants alphabetically within their private and public groups. If both private and public constants exist, private constants come first:
+Keep simple declarations directly after imports, before constants and the rest of the module. Sort simple declarations alphabetically by declared identifier using Python's default string ordering, regardless of declaration type; do not use declaration-type subgroups. Separate declaration groups with blank lines. Sort constants alphabetically within their private and public groups. If both private and public constants exist, private constants come first:
 
 ```python
-_P = ParamSpec("_P")
-
-
 class RRSigLifetime(NamedTuple):
     resign: int
     expiration: int
@@ -96,12 +95,15 @@ class _DropQuery(Exception):
     ...
 
 
+_P = ParamSpec("_P")
+
+
 _MAX_TTL = (1 << 31) - 1
 
 DEFAULT_TTL = 60
 ```
 
-Use this classification:
+Use this classification. This table is only a grouping reference, not a declaration-order example:
 
 | Declaration | Group |
 |---|---|
@@ -113,13 +115,13 @@ Use this classification:
 | `class AHealthyIp: ...` | runtime class: domain value object with behavior |
 | `class DnsServerUdpHandler(socketserver.BaseRequestHandler): ...` | runtime class: framework handler contract |
 
-Runtime classes normally belong after module-level helper and public functions. If a module-level constant must be constructed from a runtime class in the same module, define that class before the constant so the assignment can run, and keep the exception local to that module.
+Runtime classes normally belong after module-level private helper and public functions. If a module-level constant must be constructed from a runtime class in the same module, define that class before the constant so the assignment can run, and keep the ordering exception local to that module.
 
 Do not move a runtime class above constants just because it is a class. Only simple declarations belong in the top declaration group.
 
 ## Module Headers
 
-Non-empty source modules start with the shebang line and then a module docstring, except intentionally empty package `__init__.py` files:
+Non-empty source modules start with the shebang line and then a module docstring:
 
 ```python
 #!/usr/bin/env python3
@@ -130,7 +132,7 @@ Optional longer explanation of scope and design intent.
 """
 ```
 
-Test files include the shebang (`#!/usr/bin/env python3`) but omit the module docstring. Empty `__init__.py` files are the deliberate exception on the source side.
+Non-empty test files include the shebang (`#!/usr/bin/env python3`) but omit the module docstring. Empty package `__init__.py` files in both source and test trees are exempt from shebang and module docstring requirements.
 
 ## Validation Function Signature
 
@@ -148,6 +150,8 @@ def is_valid_ip(ip: Any) -> Tuple[bool, str]:
 ```
 
 ## Class Member Layout
+
+This layout applies to every class in source and tests, including test helper classes, fakes, and fixtures implemented as classes.
 
 Class members are declared in this order:
 
