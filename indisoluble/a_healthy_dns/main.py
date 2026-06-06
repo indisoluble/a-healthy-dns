@@ -14,7 +14,7 @@ import dns.dnssectypes
 
 from functools import partial
 from types import FrameType
-from typing import Any, Dict
+from typing import Any
 
 from indisoluble.a_healthy_dns.dns_server_config_factory import (
     ARG_ALIAS_ZONES,
@@ -223,7 +223,7 @@ def _signal_handler(
     threading.Thread(target=server.shutdown).start()
 
 
-def _main(args: Dict[str, Any]) -> int:
+def _main(args: dict[str, Any]) -> int:
     # Set up logging
     numeric_level = getattr(logging, args[_ARG_LOG_LEVEL].upper())
     logging.basicConfig(

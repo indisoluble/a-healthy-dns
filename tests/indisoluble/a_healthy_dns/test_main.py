@@ -2,7 +2,7 @@
 
 import pytest
 
-from typing import Any, Dict
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 from indisoluble.a_healthy_dns import dns_server_config_factory as dscf
@@ -18,7 +18,7 @@ from indisoluble.a_healthy_dns.main import (
 
 
 @pytest.fixture
-def default_args() -> Dict[str, Any]:
+def default_args() -> dict[str, Any]:
     return {
         _ARG_PORT: 53053,
         _ARG_LOG_LEVEL: "info",

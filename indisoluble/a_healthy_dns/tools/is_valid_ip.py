@@ -6,10 +6,10 @@ Provides functions to validate IPv4 addresses by checking octet format
 and numeric ranges.
 """
 
-from typing import Any, Tuple
+from typing import Any
 
 
-def is_valid_ip(ip: Any) -> Tuple[bool, str]:
+def is_valid_ip(ip: Any) -> tuple[bool, str]:
     """Validate IPv4 address format and octet ranges."""
     if not isinstance(ip, str):
         return (False, "It must be a string")

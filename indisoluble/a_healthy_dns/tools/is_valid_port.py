@@ -6,10 +6,10 @@ Provides functions to validate TCP/UDP port numbers within the valid
 range of 1-65535.
 """
 
-from typing import Any, Tuple
+from typing import Any
 
 
-def is_valid_port(port: Any) -> Tuple[bool, str]:
+def is_valid_port(port: Any) -> tuple[bool, str]:
     """Validate port number is within valid range (1-65535)."""
     if not isinstance(port, int):
         return (False, "Port must be an integer")

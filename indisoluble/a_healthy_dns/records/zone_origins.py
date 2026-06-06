@@ -4,7 +4,7 @@
 
 import dns.name
 
-from typing import Any, List, Optional
+from typing import Any
 
 from indisoluble.a_healthy_dns.tools.is_valid_subdomain import is_valid_subdomain
 
@@ -25,7 +25,7 @@ class ZoneOrigins:
         """Get the primary zone origin."""
         return self._primary
 
-    def __init__(self, primary: Any, aliases: List[Any]) -> None:
+    def __init__(self, primary: Any, aliases: list[Any]) -> None:
         """Initialize zone origins with a primary and alias set."""
         self._primary = _to_abs_name(primary)
 
@@ -50,7 +50,7 @@ class ZoneOrigins:
         ]
         return f"ZoneOrigins(primary={self._primary.to_text()!r}, aliases={aliases!r})"
 
-    def origin_for(self, name: dns.name.Name) -> Optional[dns.name.Name]:
+    def origin_for(self, name: dns.name.Name) -> dns.name.Name | None:
         """Return the matching origin for *name*, or None when unmatched."""
         if not name.is_absolute():
             return self._primary
@@ -59,7 +59,7 @@ class ZoneOrigins:
             (origin for origin in self._origins if name.is_subdomain(origin)), None
         )
 
-    def relativize(self, name: dns.name.Name) -> Optional[dns.name.Name]:
+    def relativize(self, name: dns.name.Name) -> dns.name.Name | None:
         """Return relative name using matching origin, or None when unmatched."""
         if not name.is_absolute():
             return name

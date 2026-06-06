@@ -11,14 +11,14 @@ import functools
 from typing import Callable, NamedTuple, ParamSpec
 
 
-_P = ParamSpec("_P")
-
-
 class RRSigLifetime(NamedTuple):
     """DNSSEC signature lifetime with resign and expiration times."""
 
     resign: int
     expiration: int
+
+
+_P = ParamSpec("_P")
 
 
 _RFC8767_MAX_TTL = (1 << 31) - 1

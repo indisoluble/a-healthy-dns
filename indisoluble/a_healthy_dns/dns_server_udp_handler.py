@@ -23,7 +23,7 @@ import dns.rdatatype
 import dns.rrset
 import dns.zone
 
-from typing import List, NamedTuple, Optional, Tuple
+from typing import NamedTuple
 
 from indisoluble.a_healthy_dns.records.zone_origins import ZoneOrigins
 
@@ -56,8 +56,8 @@ class _RespondWith(Exception):
 class _ResponseOutcome(NamedTuple):
     rcode: int
     is_authoritative: bool
-    answer: Tuple[dns.rrset.RRset, ...]
-    authority: Tuple[dns.rrset.RRset, ...]
+    answer: tuple[dns.rrset.RRset, ...]
+    authority: tuple[dns.rrset.RRset, ...]
 
 
 _CLASSIC_UDP_PAYLOAD_SIZE = 512
@@ -91,7 +91,7 @@ def _apply_response_outcome(
 
 def _build_answer(
     query_name: dns.name.Name, rdataset: dns.rdataset.Rdataset
-) -> List[dns.rrset.RRset]:
+) -> list[dns.rrset.RRset]:
     rrset = dns.rrset.RRset(query_name, rdataset.rdclass, rdataset.rdtype)
     rrset.ttl = rdataset.ttl
     for rdata in rdataset:
@@ -102,7 +102,7 @@ def _build_answer(
 
 def _build_apex_soa(
     txn: dns.zone.Transaction,
-) -> Optional[_ApexSOA]:
+) -> _ApexSOA | None:
     soa_rdataset = txn.get(dns.name.empty, dns.rdatatype.SOA)
     if soa_rdataset is None:
         return None
@@ -116,7 +116,7 @@ def _build_apex_soa(
 
 def _build_authority_with_apex_soa(
     apex_name: dns.name.Name, txn: dns.zone.Transaction
-) -> List[dns.rrset.RRset]:
+) -> list[dns.rrset.RRset]:
     soa_authority = _build_apex_soa(txn)
     if soa_authority is None:
         return []
@@ -130,7 +130,7 @@ def _build_authority_with_apex_soa(
 
 def _build_rfc8482_hinfo_answer(
     query_name: dns.name.Name, txn: dns.zone.Transaction
-) -> List[dns.rrset.RRset]:
+) -> list[dns.rrset.RRset]:
     soa_authority = _build_apex_soa(txn)
     ttl = soa_authority.ttl if soa_authority is not None else 0
 
@@ -149,7 +149,7 @@ def _classify_empty_non_terminal_query(
     query_id: int,
     origin_name: dns.name.Name,
     txn: dns.zone.Transaction,
-    client_address: Tuple[str, int],
+    client_address: tuple[str, int],
 ) -> _ResponseOutcome:
     if question.rdtype == dns.rdatatype.ANY:
         return _make_answer_outcome(
@@ -178,7 +178,7 @@ def _classify_existing_node_query(
     txn: dns.zone.Transaction,
     node: dns.node.Node,
     zone_rdclass: dns.rdataclass.RdataClass,
-    client_address: Tuple[str, int],
+    client_address: tuple[str, int],
 ) -> _ResponseOutcome:
     query_name = question.name
     query_type = question.rdtype
@@ -218,7 +218,7 @@ def _classify_query(
     query_id: int,
     zone: dns.zone.Zone,
     zone_origins: ZoneOrigins,
-    client_address: Tuple[str, int],
+    client_address: tuple[str, int],
 ) -> _ResponseOutcome:
     query_name = question.name
 
@@ -263,7 +263,7 @@ def _describe_parse_error(ex: dns.exception.DNSException) -> str:
     )
 
 
-def _drop_inbound_response_packet(data: bytes, client_address: Tuple[str, int]) -> bool:
+def _drop_inbound_response_packet(data: bytes, client_address: tuple[str, int]) -> bool:
     if len(data) >= _DNS_HEADER_LENGTH:
         header_flags = int.from_bytes(data[2:4], "big")
         if header_flags & dns.flags.QR:
@@ -297,8 +297,8 @@ def _log_query(
     query_id: int,
     traffic_marker: str,
     description: str,
-    client_address: Tuple[str, int],
-    answer_count: Optional[int] = None,
+    client_address: tuple[str, int],
+    answer_count: int | None = None,
 ) -> None:
     message = "%s %s: source=%s:%d id=%d qname=%s qtype=%s"
     args = (
@@ -320,9 +320,9 @@ def _log_query(
 def _make_answer_outcome(
     question: dns.rrset.RRset,
     query_id: int,
-    answer: List[dns.rrset.RRset],
+    answer: list[dns.rrset.RRset],
     description: str,
-    client_address: Tuple[str, int],
+    client_address: tuple[str, int],
 ) -> _ResponseOutcome:
     _log_query(
         question,
@@ -351,7 +351,7 @@ def _make_formerr_response_from_header(data: bytes) -> dns.message.Message:
 def _make_refused_outcome(
     question: dns.rrset.RRset,
     query_id: int,
-    client_address: Tuple[str, int],
+    client_address: tuple[str, int],
 ) -> _ResponseOutcome:
     _log_query(
         question,
@@ -369,8 +369,8 @@ def _make_refused_outcome(
 def _make_response_message(
     query: dns.message.Message,
     data_length: int,
-    client_address: Tuple[str, int],
-) -> Optional[dns.message.Message]:
+    client_address: tuple[str, int],
+) -> dns.message.Message | None:
     try:
         return dns.message.make_response(query)
     except dns.exception.FormError as ex:
@@ -398,8 +398,8 @@ def _make_response_message(
 def _make_response_outcome(
     rcode: int,
     is_authoritative: bool,
-    answer: Optional[List[dns.rrset.RRset]] = None,
-    authority: Optional[List[dns.rrset.RRset]] = None,
+    answer: list[dns.rrset.RRset] | None = None,
+    authority: list[dns.rrset.RRset] | None = None,
 ) -> _ResponseOutcome:
     return _ResponseOutcome(
         rcode=rcode,
@@ -416,7 +416,7 @@ def _make_soa_authority_outcome(
     txn: dns.zone.Transaction,
     rcode: int,
     description: str,
-    client_address: Tuple[str, int],
+    client_address: tuple[str, int],
 ) -> _ResponseOutcome:
     _log_query(
         question,
@@ -432,7 +432,7 @@ def _make_soa_authority_outcome(
     )
 
 
-def _parse_query(data: bytes, client_address: Tuple[str, int]) -> dns.message.Message:
+def _parse_query(data: bytes, client_address: tuple[str, int]) -> dns.message.Message:
     try:
         return dns.message.from_wire(data)
     except dns.message.ShortHeader as ex:
@@ -486,7 +486,7 @@ def _response_to_udp_wire(response: dns.message.Message) -> bytes:
 
 
 def _validated_question(
-    query: dns.message.Message, client_address: Tuple[str, int]
+    query: dns.message.Message, client_address: tuple[str, int]
 ) -> dns.rrset.RRset:
     if query.opcode() != dns.opcode.QUERY:
         logging.warning(

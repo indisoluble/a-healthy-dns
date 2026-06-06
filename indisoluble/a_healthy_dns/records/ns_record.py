@@ -12,13 +12,11 @@ import dns.rdataclass
 import dns.rdataset
 import dns.rdatatype
 
-from typing import FrozenSet
-
 from indisoluble.a_healthy_dns.records.time import calculate_ns_ttl
 
 
 def make_ns_record(
-    max_interval: int, name_servers: FrozenSet[str]
+    max_interval: int, name_servers: frozenset[str]
 ) -> dns.rdataset.Rdataset:
     """Create DNS NS record with calculated TTL for given name servers."""
     ttl = calculate_ns_ttl(max_interval)

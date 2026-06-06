@@ -6,7 +6,7 @@ Provides functions to validate DNS subdomain names according to basic
 DNS naming rules and character restrictions.
 """
 
-from typing import Any, Tuple
+from typing import Any
 
 _MAX_DNS_LABEL_LENGTH = 63
 _MAX_DNS_NAME_LENGTH = 253
@@ -19,7 +19,7 @@ def _is_ascii_ldh_label(label: str) -> bool:
     return all(char in _ASCII_LABEL_CHARS for char in label)
 
 
-def is_valid_subdomain(name: Any, origin_name: str = "") -> Tuple[bool, str]:
+def is_valid_subdomain(name: Any, origin_name: str = "") -> tuple[bool, str]:
     """Validate subdomain name format and character restrictions.
 
     origin_name is an already validated origin without a trailing root dot.
@@ -53,7 +53,7 @@ def is_valid_subdomain(name: Any, origin_name: str = "") -> Tuple[bool, str]:
     return (True, "")
 
 
-def is_valid_fqdn(name: Any) -> Tuple[bool, str]:
+def is_valid_fqdn(name: Any) -> tuple[bool, str]:
     """Validate a dotted hostname using subdomain validation as a base."""
     success, error = is_valid_subdomain(name)
     if not success:

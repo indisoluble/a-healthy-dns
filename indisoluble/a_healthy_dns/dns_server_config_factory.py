@@ -13,7 +13,7 @@ import dns.dnssec
 import dns.dnssecalgs
 import dns.name
 
-from typing import Any, Dict, FrozenSet, NamedTuple, Optional, Tuple
+from typing import Any, NamedTuple
 
 from indisoluble.a_healthy_dns.records.a_healthy_ip import AHealthyIp
 from indisoluble.a_healthy_dns.records.a_healthy_record import AHealthyRecord
@@ -30,9 +30,9 @@ class DnsServerConfig(NamedTuple):
 
     zone_origins: ZoneOrigins
     primary_name_server: str
-    name_servers: FrozenSet[str]
-    a_records: FrozenSet[AHealthyRecord]
-    ext_private_key: Optional[ExtendedPrivateKey]
+    name_servers: frozenset[str]
+    a_records: frozenset[AHealthyRecord]
+    ext_private_key: ExtendedPrivateKey | None
 
 
 ARG_ALIAS_ZONES = "alias_zones"
@@ -45,7 +45,7 @@ ARG_SUBDOMAIN_IP_LIST = "ips"
 ARG_ZONE_RESOLUTIONS = "resolutions"
 
 
-def _make_zone_origins(args: Dict[str, Any]) -> Optional[ZoneOrigins]:
+def _make_zone_origins(args: dict[str, Any]) -> ZoneOrigins | None:
     hosted_zone = args[ARG_HOSTED_ZONE]
 
     try:
@@ -69,7 +69,7 @@ def _make_zone_origins(args: Dict[str, Any]) -> Optional[ZoneOrigins]:
 
 def _make_healthy_a_record(
     origin_name: dns.name.Name, subdomain: Any, sub_config: Any
-) -> Optional[AHealthyRecord]:
+) -> AHealthyRecord | None:
     success, error = is_valid_subdomain(
         subdomain, origin_name.to_text(omit_final_dot=True)
     )
@@ -140,8 +140,8 @@ def _make_healthy_a_record(
 
 
 def _make_a_records(
-    origin_name: dns.name.Name, args: Dict[str, Any]
-) -> Optional[FrozenSet[AHealthyRecord]]:
+    origin_name: dns.name.Name, args: dict[str, Any]
+) -> frozenset[AHealthyRecord] | None:
     try:
         raw_resolutions = json.loads(args[ARG_ZONE_RESOLUTIONS])
     except json.JSONDecodeError as ex:
@@ -171,7 +171,7 @@ def _make_a_records(
     return frozenset(a_records)
 
 
-def _make_name_servers(args: Dict[str, Any]) -> Optional[Tuple[str, FrozenSet[str]]]:
+def _make_name_servers(args: dict[str, Any]) -> tuple[str, frozenset[str]] | None:
     try:
         name_servers = json.loads(args[ARG_NAME_SERVERS])
     except json.JSONDecodeError as ex:
@@ -200,7 +200,7 @@ def _make_name_servers(args: Dict[str, Any]) -> Optional[Tuple[str, FrozenSet[st
     return (abs_name_servers[0], frozenset(abs_name_servers))
 
 
-def _load_dnssec_private_key(key_path: str) -> Optional[bytes]:
+def _load_dnssec_private_key(key_path: str) -> bytes | None:
     try:
         with open(key_path, "rb") as key_file:
             private_key = key_file.read()
@@ -211,7 +211,7 @@ def _load_dnssec_private_key(key_path: str) -> Optional[bytes]:
         return None
 
 
-def _make_private_key(args: Dict[str, Any]) -> Optional[ExtendedPrivateKey]:
+def _make_private_key(args: dict[str, Any]) -> ExtendedPrivateKey | None:
     priv_key_pem = _load_dnssec_private_key(args[ARG_DNSSEC_PRIVATE_KEY_PATH])
     if priv_key_pem is None:
         return None
@@ -228,7 +228,7 @@ def _make_private_key(args: Dict[str, Any]) -> Optional[ExtendedPrivateKey]:
     return ExtendedPrivateKey(private_key=priv_key, dnskey=dnskey)
 
 
-def make_config(args: Dict[str, Any]) -> Optional[DnsServerConfig]:
+def make_config(args: dict[str, Any]) -> DnsServerConfig | None:
     """Create complete DNS server configuration from command-line arguments."""
     zone_origins = _make_zone_origins(args)
     if zone_origins is None:
