@@ -258,12 +258,12 @@ def _classify_query(
 
 
 def _describe_parse_error(ex: dns.exception.DNSException) -> str:
-    return _PARSE_ERROR_DESCRIPTIONS.get(type(ex), "packet could not be parsed as DNS wire format")
+    return _PARSE_ERROR_DESCRIPTIONS.get(
+        type(ex), "packet could not be parsed as DNS wire format"
+    )
 
 
-def _drop_inbound_response_packet(
-    data: bytes, client_address: Tuple[str, int]
-) -> bool:
+def _drop_inbound_response_packet(data: bytes, client_address: Tuple[str, int]) -> bool:
     if len(data) >= _DNS_HEADER_LENGTH:
         header_flags = int.from_bytes(data[2:4], "big")
         if header_flags & dns.flags.QR:
@@ -432,9 +432,7 @@ def _make_soa_authority_outcome(
     )
 
 
-def _parse_query(
-    data: bytes, client_address: Tuple[str, int]
-) -> dns.message.Message:
+def _parse_query(data: bytes, client_address: Tuple[str, int]) -> dns.message.Message:
     try:
         return dns.message.from_wire(data)
     except dns.message.ShortHeader as ex:

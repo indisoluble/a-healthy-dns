@@ -32,7 +32,6 @@ from indisoluble.a_healthy_dns.dns_server_zone_updater_threaded import (
     DnsServerZoneUpdaterThreaded,
 )
 
-
 _ARG_CONNECTION_TIMEOUT = "timeout"
 _ARG_LOG_LEVEL = "log_level"
 _ARG_MIN_TEST_INTERVAL = "min_interval"
