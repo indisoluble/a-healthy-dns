@@ -93,7 +93,7 @@ Use this module-level declaration order:
 5. Public functions.
 6. Runtime classes.
 
-Keep simple declarations directly after imports, before constants and the rest of the module. Sort simple declarations alphabetically by declared identifier using Python's default string ordering, regardless of declaration type; do not use declaration-type subgroups. Separate declaration groups with blank lines. Sort constants alphabetically within their private and public groups. If both private and public constants exist, private constants come first:
+Keep simple declarations directly after imports, before constants and the rest of the module. Sort simple declarations alphabetically by declared identifier using a case-insensitive ordering (equivalent to `sorted(..., key=str.casefold)`), regardless of declaration type; do not use declaration-type subgroups. Separate declaration groups with blank lines. Sort constants alphabetically within their private and public groups. If both private and public constants exist, private constants come first:
 
 ```python
 class RRSigLifetime(NamedTuple):
