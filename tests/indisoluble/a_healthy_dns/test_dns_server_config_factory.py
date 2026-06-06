@@ -6,7 +6,7 @@ import dns.dnssectypes
 import dns.name
 import pytest
 
-from typing import Any, Dict
+from typing import Any
 from unittest.mock import patch
 
 from dns.dnssecalgs.rsa import PrivateRSASHA256
@@ -22,7 +22,7 @@ _LOAD_DNSSEC_PRIVATE_KEY = (
 
 
 @pytest.fixture
-def valid_args() -> Dict[str, Any]:
+def valid_args() -> dict[str, Any]:
     return {
         dscf.ARG_HOSTED_ZONE: "dev.example.com",
         dscf.ARG_ALIAS_ZONES: json.dumps(["dev.alias-one.com", "dev.alias-two.com"]),
@@ -62,7 +62,7 @@ def valid_args() -> Dict[str, Any]:
 
 
 @pytest.fixture
-def args_with_dnssec(valid_args: Dict[str, Any]) -> Dict[str, Any]:
+def args_with_dnssec(valid_args: dict[str, Any]) -> dict[str, Any]:
     return {
         **valid_args,
         dscf.ARG_DNSSEC_PRIVATE_KEY_PATH: _DNSSEC_KEY_PATH,

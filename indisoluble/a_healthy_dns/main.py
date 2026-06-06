@@ -13,7 +13,8 @@ import dns.dnssec
 import dns.dnssectypes
 
 from functools import partial
-from typing import Any, Dict
+from types import FrameType
+from typing import Any
 
 from indisoluble.a_healthy_dns.dns_server_config_factory import (
     ARG_ALIAS_ZONES,
@@ -30,7 +31,6 @@ from indisoluble.a_healthy_dns.dns_server_udp_handler import DnsServerUdpHandler
 from indisoluble.a_healthy_dns.dns_server_zone_updater_threaded import (
     DnsServerZoneUpdaterThreaded,
 )
-
 
 _ARG_CONNECTION_TIMEOUT = "timeout"
 _ARG_LOG_LEVEL = "log_level"
@@ -214,14 +214,16 @@ Example usage
     return parser
 
 
-def _signal_handler(server: socketserver.UDPServer, signum: int, frame: Any) -> None:
+def _signal_handler(
+    server: socketserver.UDPServer, signum: int, frame: FrameType | None
+) -> None:
     signal_name = signal.Signals(signum).name
     logging.info("Received %s signal, shutting down DNS server...", signal_name)
 
     threading.Thread(target=server.shutdown).start()
 
 
-def _main(args: Dict[str, Any]) -> int:
+def _main(args: dict[str, Any]) -> int:
     # Set up logging
     numeric_level = getattr(logging, args[_ARG_LOG_LEVEL].upper())
     logging.basicConfig(

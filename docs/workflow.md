@@ -8,20 +8,22 @@ This document is the canonical home for repository change process, CI validation
 
 All workflows target the `master` branch.
 
+The validation workflows `test python code`, `test integration`, and `test version` run on both pushes to `master` and pull requests targeting `master`. The remaining workflows are post-merge `workflow_run` chains on `master`: `validate tests` waits for the three validation workflows, `release version` runs only after successful validation, and `release docker` runs only after a successful GitHub release.
+
 | Workflow | File | Trigger | Purpose |
 |---|---|---|---|
 | `test python code` | `test-py-code.yml` | push/PR -> master | Runs pytest with coverage, uploads to Codecov |
-| `test integration` | `test-integration.yml` | push/PR -> master | Builds Docker image; runs end-to-end tests including health-check-driven DNS state transitions |
+| `test integration` | `test-integration.yml` | push/PR -> master | Builds Docker image; runs end-to-end tests for alias zones, health-check-driven DNS state transitions, real container networking, and Compose syntax |
 | `test version` | `test-version.yml` | push/PR -> master | Verifies version in `pyproject.toml` was increased |
 | `validate tests` | `validate-tests.yml` | `workflow_run` on any of the three above | Gate: all three must pass for the same commit |
 | `release version` | `release-version.yml` | after `validate tests` succeeds | Creates git tag and GitHub release from `pyproject.toml` version |
-| `release docker` | `release-docker.yml` | after `release version` succeeds | Pushes Docker image to Docker Hub |
+| `release docker` | `release-docker.yml` | after `release version` succeeds | Pushes `latest` and version-tagged Docker images for `linux/amd64` and `linux/arm64`, then updates the Docker Hub description from `README.md` |
 | `security scan` | `security-scan.yml` | push -> master | Trivy vulnerability scan on Docker image, uploads SARIF to GitHub Security tab |
 
 Rules:
 
-- Never push directly to `master` from a branch that has not passed the three gate workflows.
-- Workflow names are part of the automation contract. If you rename a workflow's `name:`, update every dependent `workflow_run` reference in the repository.
+- Do not merge or push a commit to `master` unless the required three gate workflows have passed for that commit or PR.
+- Workflow names, triggers, workflow dependencies, and release-chain side effects are part of the automation contract. If you change a workflow's `name:`, trigger model, `workflow_run` dependency, release output, published artifact, or required secret, update every dependent workflow plus [`docs/testing.md`](testing.md), [`docs/release.md`](release.md), and this document as applicable.
 - `security scan` is important, but it is not part of the three-workflow `validate tests` gate. The release chain depends on `test python code`, `test integration`, and `test version` only.
 
 ## Validate Tests Trigger Model

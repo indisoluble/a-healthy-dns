@@ -6,7 +6,7 @@ Provides an IP address value object that stores a normalized address, optional
 health port, and health status for use in health-aware DNS A records.
 """
 
-from typing import Any, Optional
+from typing import Any
 
 from indisoluble.a_healthy_dns.tools.is_valid_ip import is_valid_ip
 from indisoluble.a_healthy_dns.tools.is_valid_port import is_valid_port
@@ -22,7 +22,7 @@ class AHealthyIp:
         return self._ip
 
     @property
-    def health_port(self) -> Optional[int]:
+    def health_port(self) -> int | None:
         """Get the optional health check port number."""
         return self._health_port
 
@@ -46,15 +46,6 @@ class AHealthyIp:
         self._health_port = health_port
         self._is_healthy = is_healthy
 
-    def updated_status(self, is_healthy: bool) -> "AHealthyIp":
-        """Return new instance with updated health status if changed."""
-        if is_healthy == self._is_healthy:
-            return self
-
-        return AHealthyIp(
-            ip=self.ip, health_port=self.health_port, is_healthy=is_healthy
-        )
-
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, AHealthyIp):
             return False
@@ -72,4 +63,13 @@ class AHealthyIp:
         return (
             f"AHealthyIp(ip='{self.ip}', health_port={self.health_port}, "
             f"is_healthy={self.is_healthy})"
+        )
+
+    def updated_status(self, is_healthy: bool) -> "AHealthyIp":
+        """Return new instance with updated health status if changed."""
+        if is_healthy == self._is_healthy:
+            return self
+
+        return AHealthyIp(
+            ip=self.ip, health_port=self.health_port, is_healthy=is_healthy
         )

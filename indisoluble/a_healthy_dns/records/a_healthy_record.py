@@ -8,8 +8,6 @@ IP addresses for a single subdomain.
 
 import dns.name
 
-from typing import FrozenSet, List
-
 from indisoluble.a_healthy_dns.records.a_healthy_ip import AHealthyIp
 
 
@@ -22,21 +20,14 @@ class AHealthyRecord:
         return self._subdomain
 
     @property
-    def healthy_ips(self) -> FrozenSet[AHealthyIp]:
+    def healthy_ips(self) -> frozenset[AHealthyIp]:
         """Get the set of healthy IP addresses for this record."""
         return self._healthy_ips
 
-    def __init__(self, subdomain: dns.name.Name, healthy_ips: List[AHealthyIp]) -> None:
+    def __init__(self, subdomain: dns.name.Name, healthy_ips: list[AHealthyIp]) -> None:
         """Initialize healthy A record with subdomain and IP list."""
         self._subdomain = subdomain
         self._healthy_ips = frozenset(healthy_ips)
-
-    def updated_ips(self, updated_ips: List[AHealthyIp]) -> "AHealthyRecord":
-        """Return new record with updated IP list if changed."""
-        if frozenset(updated_ips) == self.healthy_ips:
-            return self
-
-        return AHealthyRecord(subdomain=self.subdomain, healthy_ips=updated_ips)
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, AHealthyRecord):
@@ -51,3 +42,10 @@ class AHealthyRecord:
         ips_str = ", ".join(f"{ip}" for ip in self.healthy_ips)
 
         return f"AHealthyRecord(subdomain={self.subdomain}, healthy_ips=[{ips_str}])"
+
+    def updated_ips(self, updated_ips: list[AHealthyIp]) -> "AHealthyRecord":
+        """Return new record with updated IP list if changed."""
+        if frozenset(updated_ips) == self.healthy_ips:
+            return self
+
+        return AHealthyRecord(subdomain=self.subdomain, healthy_ips=updated_ips)

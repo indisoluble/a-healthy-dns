@@ -56,7 +56,7 @@ Level 1 covers the minimum behaviour required to be a correct authoritative UDP 
 | Behaviour | Level 1 target |
 |---|---|
 | Query is for a name **outside** all hosted or alias zones | Return **REFUSED** without the **AA** flag |
-| Query is for a name **inside** a hosted or alias zone but the owner name does not exist | Return **NXDOMAIN** (name does not exist) with the **AA** flag |
+| Query is for a name **inside** a hosted or alias zone but the owner name and its subtree do not exist | Return **NXDOMAIN** (the queried name and all names below it do not exist) with the **AA** flag |
 | Owner name exists but the queried record type is absent | Return **NOERROR** with an empty answer section (a **NODATA** response) and the **AA** flag |
 | Owner name is an empty non-terminal inside a hosted or alias zone | Return **NOERROR** with an empty answer section (a **NODATA** response) and the **AA** flag |
 | NODATA or NXDOMAIN response | Include the matched zone apex **SOA** record in the authority section, with the negative-response TTL set to the minimum of the SOA RR TTL and `SOA.MINIMUM` |
@@ -85,14 +85,14 @@ Level 1 covers the minimum behaviour required to be a correct authoritative UDP 
 - CNAME, DNAME, or other xNAME redirection-chain processing
 - DNS Stateful Operations (DSO), including RFC 8490 session semantics
 - Delegation referral and glue response construction, including RFC 9471 referral-glue behavior
-- Full DNSSEC authoritative-server behavior, including EDNS(0)/DO processing, automatic inclusion of RRSIG RRsets with signed answers, DNSSEC negative-denial proofs, DNSSEC algorithm policy enforcement, and complete DNSKEY / NSEC / RRSIG query semantics, even though the current signing path publishes DNSKEY, NSEC, and RRSIG RRsets when DNSSEC is enabled
+- Full DNSSEC authoritative-server behavior, including EDNS(0)/DO processing, automatic inclusion of RRSIG RRsets with signed answers, DNSSEC negative-denial proofs, DNSSEC algorithm policy enforcement, and DNSSEC-aware query handling. When DNSSEC is enabled, the current signing path delegates to `dnspython` and may add DNSKEY, NSEC, and RRSIG rdatasets to the zone; those rdatasets are served only through the same exact-type lookup path used for ordinary zone data, not through DNSSEC-specific response logic.
 
 ### Key term glossary
 
 | Term | Meaning |
 |---|---|
 | **Authoritative** | The server holds the definitive records for a zone and sets the AA (Authoritative Answer) flag only on responses evaluated against a hosted or alias zone |
-| **NXDOMAIN** | "Non-Existent Domain" — the queried name does not exist in the zone at all |
+| **NXDOMAIN** | "Non-Existent Domain" — the queried name and all names below it do not exist in the zone |
 | **NODATA / NOERROR empty answer** | The queried name exists but has no records of the requested type; the response code is NOERROR (not an error) and the answer section is empty |
 | **SOA in authority** | For negative responses (NXDOMAIN and NODATA) the server includes the matched hosted or alias zone's Start of Authority record in the authority section so that negative caching behaviour is well-defined. The authority SOA RRset TTL is the negative-cache TTL, not necessarily the stored apex SOA TTL |
 | **Non-meta RR type** | An ordinary resource-record type query handled as data lookup when unsupported, such as `AAAA` or an unknown `TYPE####` data type under RFC 3597 and current DNS registry terminology. This excludes special operation or extension query types such as `ANY`, which has its own RFC 8482 policy in Level 1, and out-of-scope query types such as `AXFR`, `IXFR`, and `OPT`/EDNS(0). |
@@ -162,12 +162,12 @@ RFC 1034 — https://www.rfc-editor.org/rfc/rfc1034 defines zones, authoritative
 
 | Behaviour | Status | Notes |
 |---|---|---|
-| Authoritative Answer (AA) flag set only for hosted-zone responses | **Implemented** | `_update_response()` in `indisoluble/a_healthy_dns/dns_server_udp_handler.py` sets `dns.flags.AA` only after `ZoneOrigins.relativize()` confirms the query name belongs to a hosted or alias zone. `DnsServerUdpHandler.handle()` rejects malformed packets, inbound response packets, unsupported opcodes, invalid question counts, and unsupported classes before `_update_response()` can set AA. |
-| REFUSED for queries outside all served zones | **Implemented** | `_update_response()` returns `dns.rcode.REFUSED` without AA when `ZoneOrigins.relativize()` returns `None` for a query name outside every hosted or alias zone. |
-| NXDOMAIN when owner name is absent from an in-zone query | **Implemented** | `_update_response()` sets AA after the zone match, reads `txn.get_node(relative_name)`, and sets `dns.rcode.NXDOMAIN` when that owner node is absent. |
-| NOERROR when owner name exists and matching records are found | **Implemented** | `_update_response()` keeps the default NOERROR for in-zone queries, reads the owner node and requested rdataset, then uses `_build_answer()` to populate the answer section. |
-| SOA in authority for NXDOMAIN responses (RFC 2308 §3) | **Implemented** | The NXDOMAIN branch in `_update_response()` builds authority with `_build_authority_with_apex_soa()` using the matched hosted or alias zone apex and appends the returned RRsets to `response.authority`. |
-| SOA in authority for NODATA responses (RFC 2308 §2.1) | **Implemented** | The NODATA branch in `_update_response()` builds authority with `_build_authority_with_apex_soa()` using the matched hosted or alias zone apex and appends the returned RRsets to `response.authority`. |
+| Authoritative Answer (AA) flag set only for hosted-zone responses | **Implemented** | `_classify_query()` marks only hosted or alias-zone outcomes authoritative after `ZoneOrigins.origin_for()` confirms the query name belongs to a served zone. `DnsServerUdpHandler.handle()` rejects malformed packets, inbound response packets, unsupported opcodes, invalid question counts, and unsupported classes before an authoritative outcome can be applied. |
+| REFUSED for queries outside all served zones | **Implemented** | `_classify_query()` returns a `dns.rcode.REFUSED` non-authoritative outcome when `ZoneOrigins.origin_for()` returns `None` for a query name outside every hosted or alias zone. |
+| NXDOMAIN when the queried owner name and its subtree are absent from an in-zone query | **Implemented** | `_classify_query()` reads `txn.get_node(relative_name)` after the zone match, checks for empty non-terminals, and returns a `dns.rcode.NXDOMAIN` authoritative outcome only when that owner node and its descendants are absent. |
+| NOERROR when owner name exists and matching records are found | **Implemented** | `_classify_query()` keeps the default NOERROR for in-zone queries, reads the owner node and requested rdataset, then uses `_build_answer()` to populate the answer outcome. |
+| SOA in authority for NXDOMAIN responses (RFC 2308 §3) | **Implemented** | The NXDOMAIN branch in `_classify_query()` builds authority with `_build_authority_with_apex_soa()` using the matched hosted or alias zone apex; `DnsServerUdpHandler._update_response()` appends the outcome RRsets to `response.authority`. |
+| SOA in authority for NODATA responses (RFC 2308 §2.1) | **Implemented** | The NODATA branch in `_classify_query()` builds authority with `_build_authority_with_apex_soa()` using the matched hosted or alias zone apex; `DnsServerUdpHandler._update_response()` appends the outcome RRsets to `response.authority`. |
 
 ---
 
@@ -180,9 +180,9 @@ RFC 1035 — https://www.rfc-editor.org/rfc/rfc1035: wire format (header §4.1.1
 | Wire parsing of incoming queries | **Implemented** | `dns.message.from_wire()` is used; `dns.exception.DNSException` is caught |
 | FORMERR when wire parsing fails | **Implemented** | When `dns.message.from_wire()` raises a `DNSException` other than `ShortHeader` (DNS header readable), the handler extracts the transaction ID from bytes 0-1 and responds with FORMERR. That minimal parse-failure response sets QR, preserves the ID, preserves the request opcode and RD bit from the header, and does not set AA because no authoritative question is available. When `ShortHeader` is raised (payload < 12 bytes), the packet is dropped without a DNS response. See the note below for details. |
 | DNS response packet rejection | **Implemented** | Packets with a readable DNS header and the `QR` response flag set are not queries; the handler logs the rejection and drops the packet before parsing, so both well-formed and malformed response packets are ignored. |
-| Opcode validation — NOTIMP for non-QUERY opcodes | **Implemented** | `DnsServerUdpHandler.handle()` checks `query.opcode() != dns.opcode.QUERY` and returns `dns.rcode.NOTIMP` without AA. Tested with STATUS (opcode 2), NOTIFY (opcode 4), and valid UPDATE messages (opcode 5). Standard-query-shaped packets with opcode UPDATE are malformed and are rejected by dnspython's wire parser before this check is reached. |
-| QDCOUNT validation — FORMERR for ≠ 1 question | **Implemented** | `DnsServerUdpHandler.handle()` checks `len(query.question) != 1`; zero or more-than-one questions return `dns.rcode.FORMERR` without AA. Confirmed: dnspython preserves all questions for QDCOUNT > 1 wire messages. See also RFC 9619 below. |
-| QCLASS / IN class validation | **Implemented** | `DnsServerUdpHandler.handle()` checks `question.rdclass != dns.rdataclass.IN`; non-IN queries return `dns.rcode.REFUSED` without AA. Project decision: REFUSED because the server exclusively serves IN-class data. |
+| Opcode validation — NOTIMP for non-QUERY opcodes | **Implemented** | `_validated_question()` checks `query.opcode() != dns.opcode.QUERY` and raises `_QuestionRejected(dns.rcode.NOTIMP)`; `DnsServerUdpHandler.handle()` catches it and sets the rcode. Tested with STATUS (opcode 2), NOTIFY (opcode 4), and valid UPDATE messages (opcode 5). Standard-query-shaped packets with opcode UPDATE are malformed and are rejected by dnspython's wire parser before this check is reached. |
+| QDCOUNT validation — FORMERR for ≠ 1 question | **Implemented** | `_validated_question()` checks `len(query.question) != 1`; zero or more-than-one questions raise `_QuestionRejected(dns.rcode.FORMERR)` without AA. Confirmed: dnspython preserves all questions for QDCOUNT > 1 wire messages. See also RFC 9619 below. |
+| QCLASS / IN class validation | **Implemented** | `_validated_question()` checks `question.rdclass != dns.rdataclass.IN`; non-IN queries raise `_QuestionRejected(dns.rcode.REFUSED)` without AA. Project decision: REFUSED because the server exclusively serves IN-class data. |
 | Wire serialisation of responses | **Implemented** | `response.to_wire()` is called before every `sendto()` |
 | UDP response truncation | **Implemented** | `_response_to_udp_wire()` serializes every UDP response with a 512-byte classic DNS payload limit and `prefer_truncation=True`, so oversized responses set TC and stay within RFC 1035 UDP size constraints. EDNS(0) payload negotiation remains outside Level 1. |
 | A, SOA, NS record types in responses | **Implemented** | All three record types are populated by the zone updater |
@@ -229,7 +229,7 @@ RFC 3597 — https://www.rfc-editor.org/rfc/rfc3597: defines how DNS implementat
 | Behaviour | Status | Notes |
 |---|---|---|
 | Unknown numeric non-meta RR type query at an existing owner name receives a normal NODATA response | **Implemented** | `tests/indisoluble/a_healthy_dns/test_dns_server_udp_integration.py` sends an unknown numeric `TYPE####` query for an existing owner name and asserts a normal NOERROR/empty-answer response with SOA authority. |
-| Unknown numeric non-meta RR type query at an absent in-zone owner name receives NXDOMAIN | **Implemented** | `tests/indisoluble/a_healthy_dns/test_dns_server_udp_integration.py` sends an unknown numeric `TYPE####` query for an absent in-zone owner name and asserts NXDOMAIN with SOA authority. |
+| Unknown numeric non-meta RR type query at an absent in-zone owner name with no subtree receives NXDOMAIN | **Implemented** | `tests/indisoluble/a_healthy_dns/test_dns_server_udp_integration.py` sends an unknown numeric `TYPE####` query for an absent in-zone owner name with no subtree and asserts NXDOMAIN with SOA authority. |
 | Transparent loading, storage, transfer, and serving of unknown RR data | **Out of Level 1 scope** | Level 1 generates A, NS, and SOA records only, plus optional DNSSEC artifacts when signing is enabled. The server does not load arbitrary zone files, accept zone transfers, or publish unknown-RR RDATA. |
 | Generic master-file representation and DNSSEC canonical form for unknown RR data | **Out of Level 1 scope** | These requirements apply to arbitrary unknown RR data handling, which is not a Level 1 product capability. |
 
@@ -292,8 +292,8 @@ RFC 4592 — https://www.rfc-editor.org/rfc/rfc4592: updates RFC 1034 by refinin
 
 | Behaviour | Status | Notes |
 |---|---|---|
-| Exact owner names with RRsets exist | **Implemented** | `_update_response()` treats a zone node returned by `txn.get_node(relative_name)` as an existing owner name and returns either an answer or NODATA depending on whether the requested rdataset exists. |
-| Empty non-terminal owner names exist and return NODATA | **Implemented** | `_update_response()` treats a missing node as an empty non-terminal when `txn.iterate_names()` contains a descendant name, and returns NOERROR/empty-answer with SOA authority. Coverage: `tests/indisoluble/a_healthy_dns/test_dns_server_udp_integration.py` and `tests/indisoluble/a_healthy_dns/test_dns_server_udp_handler.py`. |
+| Exact owner names with RRsets exist | **Implemented** | `_classify_query()` treats a zone node returned by `txn.get_node(relative_name)` as an existing owner name and returns either an answer or NODATA depending on whether the requested rdataset exists. |
+| Empty non-terminal owner names exist and return NODATA | **Implemented** | `_classify_query()` treats a missing node as an empty non-terminal when `txn.iterate_names()` contains a descendant name, and returns NOERROR/empty-answer with SOA authority. Coverage: `tests/indisoluble/a_healthy_dns/test_dns_server_udp_integration.py` and `tests/indisoluble/a_healthy_dns/test_dns_server_udp_handler.py`. |
 | Wildcard synthesis | **Out of Level 1 scope** | The configuration validator does not support wildcard labels, and Level 1 does not claim wildcard behavior. |
 
 No remaining Level 1 gaps in RFC 4592 empty non-terminal coverage.
@@ -306,7 +306,7 @@ RFC 8020 — https://www.rfc-editor.org/rfc/rfc8020: updates RFC 1034 and RFC 23
 
 | Behaviour | Status | Notes |
 |---|---|---|
-| NXDOMAIN only when the queried owner name and its subtree do not exist | **Implemented** | `_update_response()` checks for an empty non-terminal (a missing owner node with existing descendants) before returning NXDOMAIN, so NXDOMAIN is reserved for names with no node and no descendant nodes in the served zone view. |
+| NXDOMAIN only when the queried owner name and its subtree do not exist | **Implemented** | `_classify_query()` checks for an empty non-terminal (a missing owner node with existing descendants) before returning NXDOMAIN, so NXDOMAIN is reserved for names with no node and no descendant nodes in the served zone view. |
 | Empty non-terminal receives NODATA | **Implemented** | Missing owner nodes with descendants receive NOERROR/empty-answer with the matched zone apex SOA in authority (RFC 2308). Coverage: `tests/indisoluble/a_healthy_dns/test_dns_server_udp_integration.py` and `tests/indisoluble/a_healthy_dns/test_dns_server_udp_handler.py`. |
 | Resolver NXDOMAIN-cut caching behavior | **Out of Level 1 scope** | The server is authoritative-only and does not implement recursive resolver caching. |
 
@@ -351,7 +351,7 @@ RFC 8482 — https://www.rfc-editor.org/rfc/rfc8482: allows authoritative respon
 
 | Behaviour | Status | Notes |
 |---|---|---|
-| Existing owner name queried with `QTYPE=ANY` receives synthesized HINFO | **Implemented** | `_update_response()` detects `dns.rdatatype.ANY` after zone matching and returns one HINFO RRset whose CPU field is `RFC8482` and whose OS field is empty. The answer owner name is the queried hosted-zone or alias-zone name, and no SOA authority is added because this is a positive RFC 8482 minimization response. |
+| Existing owner name queried with `QTYPE=ANY` receives synthesized HINFO | **Implemented** | `_classify_query()` detects `dns.rdatatype.ANY` after zone matching and returns one HINFO RRset whose CPU field is `RFC8482` and whose OS field is empty. The answer owner name is the queried hosted-zone or alias-zone name, and no SOA authority is added because this is a positive RFC 8482 minimization response. |
 | Empty non-terminal queried with `QTYPE=ANY` receives synthesized HINFO | **Implemented** | Empty non-terminals are existing QNAMEs under RFC 4592. The `ANY` path therefore returns synthesized HINFO for them, while non-ANY queries at empty non-terminals continue to return NODATA with SOA authority under RFC 8020 and RFC 2308. |
 | Absent owner name queried with `QTYPE=ANY` remains NXDOMAIN | **Implemented** | RFC 8482 handling is limited to existing QNAMEs. Absent in-zone owner names continue through the normal NXDOMAIN branch with SOA authority. |
 | HINFO TTL reuses the apex SOA TTL calculation | **Implemented** | `_build_rfc8482_hinfo_answer()` reads the same apex SOA data and uses the shared `_build_apex_soa()` helper, so synthesized HINFO uses `min(SOA TTL, SOA.MINIMUM)` without building an authority RRset or adding a second TTL source of truth. Operators influence this value through the existing SOA timing inputs described in [`docs/architecture.md`](architecture.md#6-interval-calculation-pattern). |
@@ -383,7 +383,7 @@ RFC 2308 — https://www.rfc-editor.org/rfc/rfc2308: NXDOMAIN (§3) and NODATA/N
 | Behaviour | Status | Notes |
 |---|---|---|
 | SOA record with correct `MINIMUM` field exists in zone | **Implemented** | `soa_record.py` populates the minimum TTL from `calculate_soa_min_ttl()` |
-| SOA in authority section for NXDOMAIN (RFC 2308 §3) | **Implemented** | `_build_authority_with_apex_soa()` in `indisoluble/a_healthy_dns/dns_server_udp_handler.py` retrieves the apex SOA data and returns an authority RRset named at the matched hosted or alias zone apex; `_update_response()` appends that list to `response.authority`. |
+| SOA in authority section for NXDOMAIN (RFC 2308 §3) | **Implemented** | `_build_authority_with_apex_soa()` in `indisoluble/a_healthy_dns/dns_server_udp_handler.py` retrieves the apex SOA data and returns an authority RRset named at the matched hosted or alias zone apex; `DnsServerUdpHandler._update_response()` appends the outcome authority RRsets to `response.authority`. |
 | Negative-response SOA RRset TTL uses `min(SOA TTL, SOA.MINIMUM)` (RFC 2308 §5) | **Implemented** | `_build_authority_with_apex_soa()` sets the emitted authority SOA RRset TTL to the lower of the stored SOA rdataset TTL and the SOA RDATA `minimum` value |
 | SOA in authority section for NODATA (RFC 2308 §2.1) | **Implemented** | Same helper populates the authority section for NOERROR/empty-answer responses using the matched hosted or alias zone apex |
 
@@ -413,21 +413,19 @@ No remaining Level 1 gaps in RFC 2308 coverage.
 | Drop and log inbound DNS response packets (`QR=1`) | `tests/indisoluble/a_healthy_dns/test_dns_server_udp_handler.py` (unit) |
 | Drop without response for malformed wire shorter than 12 bytes | `tests/indisoluble/a_healthy_dns/test_dns_server_udp_handler.py` (unit — no transaction ID to reply to) |
 | Negative-response SOA TTL is trimmed for RFC 2308 negative caching | `tests/indisoluble/a_healthy_dns/test_dns_server_udp_handler.py` (unit) + `tests/indisoluble/a_healthy_dns/test_dns_server_udp_integration.py` (component integration) |
-| RFC 8767 TTL cap/range policy for generated TTL-bearing responses | `tests/indisoluble/a_healthy_dns/records/test_a_record.py` (unit) + `tests/indisoluble/a_healthy_dns/records/test_ns_record.py` (unit) + `tests/indisoluble/a_healthy_dns/records/test_soa_record.py` (unit) |
+| RFC 8767 TTL cap/range policy for generated TTL-bearing responses | `tests/indisoluble/a_healthy_dns/records/test_time.py` (unit) + `tests/indisoluble/a_healthy_dns/records/test_a_record.py` (unit) + `tests/indisoluble/a_healthy_dns/records/test_ns_record.py` (unit) + `tests/indisoluble/a_healthy_dns/records/test_soa_record.py` (unit) |
 | UDP response send path uses the query source address and port | `tests/indisoluble/a_healthy_dns/test_dns_server_udp_integration.py` (component integration over real UDP sockets) + `tests/indisoluble/a_healthy_dns/test_dns_server_udp_handler.py` (unit handler send path) |
 | RRset construction from zone rdatasets and oversized RRset truncation | `tests/indisoluble/a_healthy_dns/test_dns_server_udp_handler.py` (unit) + `tests/indisoluble/a_healthy_dns/records/test_a_record.py` (unit) |
 | Oversized UDP responses are truncated to the classic 512-byte limit and set TC | `tests/indisoluble/a_healthy_dns/test_dns_server_udp_handler.py` (unit) |
 | Parsed response header fields (QR, ID, AA, RA, TC), including non-AA rejected responses | `tests/indisoluble/a_healthy_dns/test_dns_server_udp_integration.py` (component integration) |
 | DNS request-flag robustness for `AD`, `CD`, and still-reserved flags | `tests/indisoluble/a_healthy_dns/test_dns_server_udp_integration.py` (component integration; wire-byte assertions) |
 | Raw response name compression and unsupported response header bits | `tests/indisoluble/a_healthy_dns/test_dns_server_udp_integration.py` (component integration; wire-byte assertions) |
-| Health-check-driven A-record addition/removal | `.github/workflows/test-integration.yml` (Docker end-to-end) |
-| Container startup, Docker networking, alias zone routing | `.github/workflows/test-integration.yml` (Docker end-to-end) |
 
 ## 7. Out-of-scope but related RFCs
 
 The RFCs below are not necessary to prove Level 1 conformance. They are listed because the product has optional DNSSEC artifact publication and the project intends to keep future DNSSEC compatibility work aligned with the relevant standards.
 
-When DNSSEC is enabled, `DnsServerZoneUpdater._sign_zone()` delegates to `dns.dnssec.sign_zone()`, and unit tests in `tests/indisoluble/a_healthy_dns/test_dns_server_zone_updater.py` confirm that generated DNSKEY, NSEC, and RRSIG rdatasets exist for signed zones. That is artifact-presence coverage only; it is not a claim of full DNSSEC authoritative-server conformance.
+When DNSSEC is enabled, `DnsServerZoneUpdater._sign_zone()` delegates to `dns.dnssec.sign_zone()`, and unit tests in `tests/indisoluble/a_healthy_dns/test_dns_server_zone_updater.py` confirm that generated DNSKEY, NSEC, and RRSIG rdatasets exist for signed zones. The UDP handler has no DNSSEC-specific branch; if one of those generated rdatasets is directly queried and exists at the owner name, the handler can return it through the generic exact-type rdataset lookup used for all served zone data. That is artifact publication through ordinary lookup only; it is not a claim of full DNSSEC authoritative-server conformance.
 
 | RFC | Related because it defines | Current repository status |
 |---|---|---|

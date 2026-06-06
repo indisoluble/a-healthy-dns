@@ -7,22 +7,24 @@ This document is the canonical home for test taxonomy, local validation commands
 ## Local Setup
 
 ```bash
-python3 -m venv venv
+python3.11 -m venv venv
 source venv/bin/activate
 pip install -e ".[test]"
 ```
 
+Use Python 3.11 or newer. CI currently runs the Python test workflow on Python 3.11.
+
 ## QA Commands
 
-Use the coverage command as the CI-equivalent local check before merge.
+Use the coverage command as the local equivalent of the `test python code` workflow. The full CI gate also includes Docker integration and version checks; see [`docs/workflow.md`](workflow.md).
 
-### Run All Tests
+### Run Python Tests
 
 ```bash
 pytest
 ```
 
-This runs the configured test suite and default coverage reports from `pyproject.toml`.
+This runs the configured local pytest suite and default coverage reports from `pyproject.toml`. It does not run Docker end-to-end workflow checks.
 
 ### Run Tests With Coverage
 
@@ -97,15 +99,25 @@ When every case needs a readable scenario name, prefer `ids=[...]` on `@pytest.m
 
 ## Component Integration Tests
 
-Component integration tests exercise a production component end-to-end over real I/O, such as real UDP sockets, but with pre-populated in-memory state rather than the live health-check lifecycle.
+Component integration tests exercise a production component end-to-end over local real I/O, such as real UDP sockets, but with pre-populated in-memory state rather than the live health-check lifecycle. They must not require Docker, external services, backend containers, or real TCP health-check targets.
 
 - Test file location: same directory as the corresponding unit tests, mirroring the source tree.
 - Test file naming: `test_<scope>_integration.py`.
 - No real health-check lifecycle; zone state is pre-populated via `DnsServerZoneUpdater.initialize_zone()`.
+- No Docker, orchestrator, external service, or real backend dependency.
 - Tests that verify dynamic A-record changes driven by TCP health checks belong in Docker end-to-end coverage.
 
 ## Docker End-To-End Tests
 
-Docker end-to-end tests validate the fully packaged application, including health-check-driven DNS state transitions. They live in `.github/workflows/test-integration.yml` and use an isolated Docker network with a real nginx backend.
+Docker end-to-end tests validate the fully packaged application. They live in `.github/workflows/test-integration.yml` and use an isolated Docker network with a real nginx backend.
 
-Use this level when the behavior requires the built image, Docker entrypoint, container command argument handling, real container networking, or real TCP health checks.
+This workflow owns coverage for:
+
+- Docker image buildability,
+- Docker entrypoint and container command argument handling,
+- alias-zone behavior in the packaged container,
+- health-check-driven DNS state transitions over real container networking,
+- real TCP health checks against a backend container,
+- and `docker-compose.example.yml` syntax validation.
+
+Use this level when the behavior requires the built image, Docker entrypoint, container command argument handling, real container networking, real TCP health checks, or Compose example validation.

@@ -6,12 +6,14 @@ Provides DNSSEC signature lifetime management and key iteration for
 automatic zone signing with configurable timing parameters.
 """
 
+from __future__ import annotations
+
 import datetime
 import logging
 
 import dns.dnssec
 
-from typing import Iterator, List, NamedTuple, Tuple
+from typing import Iterator, NamedTuple
 
 from indisoluble.a_healthy_dns.records.time import (
     calculate_dnskey_ttl,
@@ -26,20 +28,20 @@ class ExtendedPrivateKey(NamedTuple):
     dnskey: dns.dnssec.DNSKEY
 
 
-class RRSigKey(NamedTuple):
-    """DNSSEC signature key with timing and validation parameters."""
-
-    keys: List[Tuple[dns.dnssec.PrivateKey, dns.dnssec.DNSKEY]]
-    dnskey_ttl: int
-    inception: datetime.datetime
-    expiration: datetime.datetime
-
-
 class ExtendedRRSigKey(NamedTuple):
     """Extended DNSSEC signature key with automatic resign timing."""
 
     key: RRSigKey
     resign: datetime.datetime
+
+
+class RRSigKey(NamedTuple):
+    """DNSSEC signature key with timing and validation parameters."""
+
+    keys: list[tuple[dns.dnssec.PrivateKey, dns.dnssec.DNSKEY]]
+    dnskey_ttl: int
+    inception: datetime.datetime
+    expiration: datetime.datetime
 
 
 def iter_rrsig_key(

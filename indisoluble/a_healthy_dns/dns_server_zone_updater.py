@@ -16,7 +16,7 @@ import dns.versioned
 
 from enum import auto, Enum
 from functools import partial
-from typing import Callable, FrozenSet, Iterator, NamedTuple, Optional
+from typing import Callable, Iterator, NamedTuple
 
 from indisoluble.a_healthy_dns.dns_server_config_factory import DnsServerConfig
 from indisoluble.a_healthy_dns.records.a_healthy_record import AHealthyRecord
@@ -27,7 +27,12 @@ from indisoluble.a_healthy_dns.records.soa_record import iter_soa_record
 from indisoluble.a_healthy_dns.tools.can_create_connection import can_create_connection
 
 
-ShouldAbortOp = Callable[[], bool]
+class RefreshARecordsResult(Enum):
+    """Result states for A record refresh operations."""
+
+    NO_CHANGES = auto()
+    CHANGES = auto()
+    ABORTED = auto()
 
 
 class RRSigAction(NamedTuple):
@@ -37,12 +42,7 @@ class RRSigAction(NamedTuple):
     iter: Iterator[ExtendedRRSigKey]
 
 
-class RefreshARecordsResult(Enum):
-    """Result states for A record refresh operations."""
-
-    NO_CHANGES = auto()
-    CHANGES = auto()
-    ABORTED = auto()
+ShouldAbortOp = Callable[[], bool]
 
 
 _DELTA_PER_RECORD_SIGN = 2
@@ -53,7 +53,7 @@ DELTA_PER_RECORD_MANAGEMENT = 1
 def _calculate_max_interval(
     min_interval: int,
     connection_timeout: int,
-    a_records: FrozenSet[AHealthyRecord],
+    a_records: frozenset[AHealthyRecord],
     do_sign: bool,
 ) -> int:
     delta_per_record = DELTA_PER_RECORD_MANAGEMENT + (
@@ -177,7 +177,7 @@ class DnsServerZoneUpdater:
 
     def _refresh_a_record(
         self, a_record: AHealthyRecord, should_abort: ShouldAbortOp
-    ) -> Optional[AHealthyRecord]:
+    ) -> AHealthyRecord | None:
         logging.debug("Checking A record %s ...", a_record.subdomain)
 
         updated_ips = []

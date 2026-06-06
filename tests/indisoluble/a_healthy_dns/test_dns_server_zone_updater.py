@@ -7,7 +7,6 @@ import dns.rdataset
 import dns.rdatatype
 import pytest
 
-from typing import List
 from unittest.mock import Mock, call, patch
 
 from dns.dnssecalgs.rsa import PrivateRSASHA256
@@ -34,7 +33,7 @@ _UINT32_CURRENT_TIME = (
 
 def _get_rrsig_rdatasets(
     node: dns.node.Node, rdatatype: dns.rdatatype.RdataType
-) -> List[dns.rdataset.Rdataset]:
+) -> list[dns.rdataset.Rdataset]:
     return [
         rd
         for rd in node.rdatasets

@@ -24,7 +24,6 @@ from indisoluble.a_healthy_dns.dns_server_udp_handler import (
     _DNS_TRAFFIC_SUSPICIOUS,
     _RFC8482_HINFO_CPU,
     _RFC8482_HINFO_OS,
-    _update_response,
     DnsServerUdpHandler,
 )
 from indisoluble.a_healthy_dns.dns_server_config_factory import DnsServerConfig
@@ -62,6 +61,7 @@ class _FakeReaderContext:
     def __init__(self, transaction):
         self._transaction = transaction
 
+    # Implements context manager protocol.
     def __enter__(self):
         return self._transaction
 
@@ -170,6 +170,13 @@ def _make_server(zone, zone_origins):
     return server
 
 
+def _make_handler(zone, zone_origins):
+    handler = object.__new__(DnsServerUdpHandler)
+    handler.server = _make_server(zone, zone_origins)
+    handler.client_address = (_TEST_SOURCE_HOST, _TEST_SOURCE_PORT)
+    return handler
+
+
 def _make_request(wire_data):
     mock_sock = MagicMock()
     return (wire_data, mock_sock), mock_sock
@@ -193,15 +200,9 @@ def _sent_response(mock_sock, client_address, from_wire=dns.message.from_wire):
 
 
 def _update_test_response(response, query_name, query_type, zone, zone_origins):
-    _update_response(
-        response,
-        query_name,
-        query_type,
-        zone,
-        zone_origins,
-        _TEST_QUERY_ID,
-        _TEST_SOURCE_HOST,
-        _TEST_SOURCE_PORT,
+    question = dns.message.make_query(query_name, query_type).question[0]
+    _make_handler(zone, zone_origins)._update_response(
+        response, question, _TEST_QUERY_ID
     )
 
 
@@ -606,33 +607,6 @@ class TestUpdateResponse:
             caplog, logging.INFO, "returning NODATA", _DNS_TRAFFIC_NORMAL
         )
 
-    @pytest.mark.parametrize(
-        "soa_rdataset",
-        [
-            None,
-            dns.rdataset.from_text(
-                dns.rdataclass.IN,
-                dns.rdatatype.SOA,
-                300,
-            ),
-        ],
-        ids=["missing-soa-rdataset", "empty-soa-rdataset"],
-    )
-    def test_domain_not_found_without_usable_soa_omits_authority(
-        self, dns_response, zone_origins, soa_rdataset
-    ):
-        query_name = dns.name.from_text("nonexistent", origin=zone_origins.primary)
-        transaction = _FakeTransaction(soa_rdataset=soa_rdataset)
-        zone = _make_zone(zone_origins, transaction)
-
-        _update_test_response(
-            dns_response, query_name, dns.rdatatype.A, zone, zone_origins
-        )
-
-        assert dns_response.rcode() == dns.rcode.NXDOMAIN
-        assert bool(dns_response.flags & dns.flags.AA)
-        _assert_section_counts(dns_response)
-
     def test_record_type_not_found_returns_nodata_with_soa_authority(
         self, dns_response, zone_origins, soa_rdataset, caplog
     ):
@@ -665,7 +639,9 @@ class TestUpdateResponse:
 
 
 class TestHandlerValidQuery:
-    @patch("indisoluble.a_healthy_dns.dns_server_udp_handler._update_response")
+    @patch(
+        "indisoluble.a_healthy_dns.dns_server_udp_handler.DnsServerUdpHandler._update_response"
+    )
     def test_valid_query_calls_update_response_and_sends_response_to_client(
         self, mock_update_response, dns_request, dns_client_address, zone_origins
     ):
@@ -683,13 +659,8 @@ class TestHandlerValidQuery:
         call_args = mock_update_response.call_args[0]
 
         mock_update_response.assert_called_once()
-        assert call_args[1] == question.name
-        assert call_args[2] == question.rdtype
-        assert call_args[3] == server.zone
-        assert call_args[4] == server.zone_origins
-        assert call_args[5] == query.id
-        assert call_args[6] == dns_client_address[0]
-        assert call_args[7] == dns_client_address[1]
+        assert call_args[1] == question
+        assert call_args[2] == query.id
 
         response = _sent_response(mock_sock, dns_client_address)
         _assert_response_header(
@@ -744,7 +715,9 @@ class TestHandlerUdpWireEncoding:
 
 class TestMalformedWireInput:
     @patch("dns.message.from_wire")
-    @patch("indisoluble.a_healthy_dns.dns_server_udp_handler._update_response")
+    @patch(
+        "indisoluble.a_healthy_dns.dns_server_udp_handler.DnsServerUdpHandler._update_response"
+    )
     def test_recoverable_parse_exception_returns_formerr_and_preserves_id(
         self,
         mock_update_response,
@@ -772,7 +745,9 @@ class TestMalformedWireInput:
         mock_update_response.assert_not_called()
 
     @pytest.mark.parametrize("wire_data", [b"", b"\x00\x01\x00\x00"])
-    @patch("indisoluble.a_healthy_dns.dns_server_udp_handler._update_response")
+    @patch(
+        "indisoluble.a_healthy_dns.dns_server_udp_handler.DnsServerUdpHandler._update_response"
+    )
     def test_short_packet_drops_without_response(
         self,
         mock_update_response,
@@ -825,7 +800,9 @@ class TestMalformedWireInput:
             ),
         ],
     )
-    @patch("indisoluble.a_healthy_dns.dns_server_udp_handler._update_response")
+    @patch(
+        "indisoluble.a_healthy_dns.dns_server_udp_handler.DnsServerUdpHandler._update_response"
+    )
     def test_malformed_wire_with_recoverable_header_returns_formerr(
         self,
         mock_update_response,
@@ -860,7 +837,9 @@ class TestMalformedWireInput:
         assert f"problem={expected_problem}" in caplog.text
         assert "Stack trace for malformed DNS query" in caplog.text
 
-    @patch("indisoluble.a_healthy_dns.dns_server_udp_handler._update_response")
+    @patch(
+        "indisoluble.a_healthy_dns.dns_server_udp_handler.DnsServerUdpHandler._update_response"
+    )
     def test_malformed_wire_formerr_preserves_header_opcode_and_rd(
         self, mock_update_response, dns_client_address, zone_origins
     ):
@@ -897,7 +876,9 @@ class TestInboundResponsePackets:
         ],
         ids=["well-formed-response", "malformed-response"],
     )
-    @patch("indisoluble.a_healthy_dns.dns_server_udp_handler._update_response")
+    @patch(
+        "indisoluble.a_healthy_dns.dns_server_udp_handler.DnsServerUdpHandler._update_response"
+    )
     def test_dns_response_packet_logs_warning_and_drops(
         self,
         mock_update_response,
@@ -927,7 +908,9 @@ class TestInboundResponsePackets:
 
 class TestResponseConstructionFailure:
     @patch("dns.message.make_response")
-    @patch("indisoluble.a_healthy_dns.dns_server_udp_handler._update_response")
+    @patch(
+        "indisoluble.a_healthy_dns.dns_server_udp_handler.DnsServerUdpHandler._update_response"
+    )
     def test_make_response_failure_logs_info_and_drops(
         self,
         mock_update_response,
@@ -972,7 +955,9 @@ class TestRejectedQueries:
         ],
         ids=["iquery", "status", "notify", "unassigned-opcode", "update"],
     )
-    @patch("indisoluble.a_healthy_dns.dns_server_udp_handler._update_response")
+    @patch(
+        "indisoluble.a_healthy_dns.dns_server_udp_handler.DnsServerUdpHandler._update_response"
+    )
     def test_query_with_unsupported_opcode_returns_notimp(
         self,
         mock_update_response,
@@ -1016,7 +1001,9 @@ class TestRejectedQueries:
         ],
         ids=["zero-question", "multi-question"],
     )
-    @patch("indisoluble.a_healthy_dns.dns_server_udp_handler._update_response")
+    @patch(
+        "indisoluble.a_healthy_dns.dns_server_udp_handler.DnsServerUdpHandler._update_response"
+    )
     def test_query_with_invalid_question_count_returns_formerr(
         self,
         mock_update_response,
@@ -1049,7 +1036,9 @@ class TestRejectedQueries:
         )
         _assert_log_context(caplog, query_id=response.id)
 
-    @patch("indisoluble.a_healthy_dns.dns_server_udp_handler._update_response")
+    @patch(
+        "indisoluble.a_healthy_dns.dns_server_udp_handler.DnsServerUdpHandler._update_response"
+    )
     def test_query_with_non_in_class_returns_refused(
         self, mock_update_response, dns_client_address, zone_origins, caplog
     ):

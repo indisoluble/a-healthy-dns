@@ -10,7 +10,7 @@ Only decisions supported by repository code, documentation, or commit history ar
 
 **Status:** accepted.
 
-**Decision:** A Healthy DNS is an authoritative DNS server for one hosted zone plus optional alias zones, served over UDP. It does not implement recursive resolution, caching-resolver behavior, zone transfers, replication, traffic-shaping policy, or IPv6 answers.
+**Decision:** A Healthy DNS is an authoritative DNS server for one hosted zone plus optional alias zones, served over UDP. It does not implement recursive resolution, caching-resolver behavior, DNS-over-TCP query service, TCP retry service, zone transfers, replication, traffic-shaping policy, or IPv6 answers.
 
 **Rationale:** The project brief defines operational simplicity as a goal and explicitly limits scope to a single-process authoritative server. The RFC conformance document owns the Level 1 authoritative UDP behavior target.
 
@@ -60,7 +60,7 @@ Only decisions supported by repository code, documentation, or commit history ar
 
 **Decision:** Runtime DNS state is held in a shared `dns.versioned.Zone`. The zone updater owns writes through a single writer transaction, while UDP query handling remains read-only through zone readers.
 
-**Rationale:** Current architecture documents the two-thread model and delegates concurrency safety to `dns.versioned.Zone` reader/writer semantics.
+**Rationale:** Current architecture documents synchronous initial zone creation followed by a background refresh loop, with all writes owned by the zone updater component. Concurrency safety is delegated to `dns.versioned.Zone` reader/writer semantics.
 
 **Alternatives considered:** not documented.
 
@@ -70,13 +70,13 @@ Only decisions supported by repository code, documentation, or commit history ar
 - Current concurrency structure remains owned by [`docs/architecture.md`](architecture.md).
 - Engineering rules for zone writes remain owned by [`docs/engineering-rules.md`](engineering-rules.md).
 
-## D005 - Keep DNSSEC Optional And Isolated
+## D005 - Keep DNSSEC Artifact Publication Optional And Isolated
 
 **Status:** accepted.
 
-**Decision:** DNSSEC signing is opt-in and treated as an isolated concern rather than a cross-cutting requirement for ordinary authoritative answers.
+**Decision:** DNSSEC artifact publication is opt-in and treated as an isolated concern rather than a cross-cutting requirement for ordinary authoritative answers.
 
-**Rationale:** Current architecture treats DNSSEC as additive behavior on top of base A, NS, and SOA records, avoiding DNSSEC awareness across unrelated layers.
+**Rationale:** Current architecture treats DNSSEC artifact generation as additive behavior on top of base A, NS, and SOA records, avoiding DNSSEC awareness across unrelated layers. Full DNSSEC authoritative-server protocol behavior remains outside the current product scope and is bounded by [`docs/RFC-conformance.md`](RFC-conformance.md).
 
 **Alternatives considered:** not documented.
 
@@ -85,21 +85,23 @@ Only decisions supported by repository code, documentation, or commit history ar
 - Unsigned operation remains the default product posture.
 - DNSSEC configuration details remain owned by [`docs/configuration-reference.md`](configuration-reference.md).
 - Docker key-mount guidance remains owned by [`docs/docker.md`](docker.md).
+- Wire-level DNSSEC protocol scope remains owned by [`docs/RFC-conformance.md`](RFC-conformance.md).
 
 ## D006 - Use Docker As A First-Class Runtime Target
 
 **Status:** accepted.
 
-**Decision:** The project supports both direct Python CLI execution and Docker container deployment, with Docker treated as a first-class runtime target.
+**Decision:** The project supports both direct Python CLI execution and Docker container deployment, with Docker treated as a first-class runtime target. The repository Docker image uses hardened Chainguard Python images: `cgr.dev/chainguard/python:latest-dev` for the builder stage and `cgr.dev/chainguard/python:latest` for the distroless runtime stage.
 
-**Rationale:** Current requirements and Docker documentation define Docker as a supported deployment mode and document the runtime security contract.
+**Rationale:** Current requirements, Dockerfile, and Docker documentation define Docker as a supported deployment mode and document the runtime security contract, including the Chainguard default non-root uid `65532`.
 
-**Alternatives considered:** Past history includes a Docker Hardened Image experiment that was reverted. Other alternatives are not documented.
+**Alternatives considered:** Past history includes an experiment with Docker Hardened Images, Docker's branded hardened image product. That path was rejected because it required registry login before use, which would have limited adoption and low-friction deployment of the DNS server, along with other compatibility concerns. That rejection applies to Docker Hardened Images specifically, not to hardened or minimal images generally; the current accepted hardened-image strategy is the Chainguard distroless Python runtime. Other alternatives are not documented.
 
 **Consequences:**
 
 - Docker remains a supported runtime rather than a convenience example only.
 - Docker configuration uses the same CLI flags as direct process execution instead of a separate environment-variable mapping.
+- The accepted hardened base-image strategy remains Chainguard unless a future decision explicitly changes it.
 - Operator deployment guidance remains owned by [`docs/docker.md`](docker.md).
 - Repository-side container invariants remain owned by [`docs/engineering-rules.md`](engineering-rules.md).
 
@@ -125,7 +127,12 @@ Only decisions supported by repository code, documentation, or commit history ar
 
 **Decision:** The image must not gain privileged-port binding mechanics: no `setcap`, no `libcap`, no additional build stage, and no root runtime user. Standard DNS exposure should avoid process-level privileged binding when runtime port publishing can map host port `53` to a non-privileged listener port. When the DNS process itself must bind port `53`, `net.ipv4.ip_unprivileged_port_start=53` (or `=0`) set in the network namespace where the process binds is the canonical strategy. `NET_BIND_SERVICE` remains a runtime-specific fallback only when the runtime grants it effectively to the non-root process. Exact Docker, Compose, Kubernetes, and ECS deployment procedures live in [`docs/docker.md`](docker.md).
 
-**Rationale:** `net.ipv4.ip_unprivileged_port_start` is a network-namespace sysctl. Applying it to the namespace where the process binds requires no image modification, is fully compatible with `no-new-privileges: true`, is the standard mechanism in Kubernetes for non-hostNetwork pods (`securityContext.sysctls`), and eliminates the need for any Linux capability inside the container when the sysctl can be set. When bridge-mode port publishing can map host port `53` to container port `53053`, the process never performs a privileged bind and no privileged-port mechanism is needed inside the container. The capability path is more fragile: Linux checks the effective capability set, and a non-root exec path does not automatically make `NET_BIND_SERVICE` effective merely because a container manifest names it. Some runtimes can deliver an effective capability to a non-root process; others may leave it only in bounding/permitted state, especially across older Docker or Kubernetes combinations. Baked-in file capabilities (`setcap cap_net_bind_service=+ep`) would make that promotion explicit but require an extra build stage and a non-distroless base layer, complicating the build and supply-chain properties of the image.
+**Rationale:**
+
+- When bridge-mode port publishing can map host port `53` to container port `53053`, the process never performs a privileged bind and no privileged-port mechanism is needed inside the container.
+- When the process itself must bind port `53`, `net.ipv4.ip_unprivileged_port_start` is a network-namespace sysctl. Applying it to the namespace where the process binds requires no image modification, is fully compatible with `no-new-privileges: true`, is the standard mechanism in Kubernetes for non-hostNetwork pods (`securityContext.sysctls`), and eliminates the need for any Linux capability inside the container when the sysctl can be set.
+- The capability path is more fragile: Linux checks the effective capability set, and a non-root exec path does not automatically make `NET_BIND_SERVICE` effective merely because a container manifest names it. Some runtimes can deliver an effective capability to a non-root process; others may leave it only in bounding/permitted state, especially across older Docker or Kubernetes combinations.
+- Baked-in file capabilities (`setcap cap_net_bind_service=+ep`) would make capability promotion explicit but require an extra build stage and a non-distroless base layer, complicating the build and supply-chain properties of the image.
 
 **Alternatives considered:**
 
@@ -141,4 +148,4 @@ Only decisions supported by repository code, documentation, or commit history ar
 - `NET_BIND_SERVICE` is documented only as a runtime-specific fallback when the sysctl cannot be set and the runtime makes the capability effective for the non-root process.
 - Operators who use the capability fallback must verify the running process has `CAP_NET_BIND_SERVICE` in its effective capability set; this image does not include a file capability on the Python interpreter or console-script entry point.
 - Operator deployment guidance and updated examples live in [`docs/docker.md`](docker.md).
-- The security requirement is owned by [`docs/requirements.md`](requirements.md) (R23); repository-side container rules are owned by [`docs/engineering-rules.md`](engineering-rules.md).
+- The security requirement is owned by [`docs/requirements.md`](requirements.md) (R24); repository-side container rules are owned by [`docs/engineering-rules.md`](engineering-rules.md).

@@ -56,8 +56,7 @@ The domain name for which this server is authoritative.
 |---|
 | `--zone-resolutions` |
 
-JSON object mapping each subdomain to one of the two supported record modes:
-health-checked or standard static.
+Non-empty JSON object mapping each relative owner name to one of the two supported record modes: health-checked or standard static.
 
 There are two first-class record modes for each subdomain entry:
 
@@ -95,9 +94,10 @@ Both modes can be mixed in the same configuration.
 }
 ```
 
-- Each `<subdomain>` is relative to the hosted zone (e.g. `www` → `www.sub.domain.com`).
-- `ips` must be valid IPv4 addresses (IPv6/AAAA is not supported).
-- `health_port` is the TCP port used for health checks. It is required when using the dict format.
+- Each `<subdomain>` is relative to the hosted zone (e.g. `www` → `www.sub.domain.com`). Nested names such as `api.v1` are allowed when the resulting absolute DNS name remains valid.
+- Empty subdomain keys are invalid. The hosted-zone apex is reserved for generated `SOA` and `NS` records plus optional DNSSEC artifacts; apex `A` records are not configurable through `--zone-resolutions`.
+- `ips` must be a non-empty list of valid IPv4 address strings (IPv6/AAAA is not supported).
+- `health_port` is the TCP port used for health checks. It is required when using the dict format and must be an integer from `1` through `65535`.
 - All IPs for a subdomain share the same health port.
 - Standard static entries are not TCP health-checked and remain publishable without a health probe.
 - Use the bare-list format for standard static entries; a dict with `health_port: null` is invalid.
@@ -108,7 +108,7 @@ Both modes can be mixed in the same configuration.
 |---|
 | `--ns` |
 
-JSON array of fully-qualified name server hostnames for the zone's apex `NS` record. Single-label hostnames such as `ns1` are rejected. Provide names without a trailing root dot; the server normalizes them to absolute DNS names internally.
+Non-empty JSON array of fully-qualified name server hostnames for the zone's apex `NS` record. Every entry must be a string. Single-label hostnames such as `ns1` are rejected. Provide names without a trailing root dot; the server normalizes them to absolute DNS names internally.
 
 ```json
 ["ns1.dns.example.net", "ns2.dns.example.net"]
@@ -226,13 +226,11 @@ Both parameters are optional. If `--priv-key-path` is omitted, DNSSEC signing is
 |---|---|
 | `--priv-key-path` | _(none)_ |
 
-Path to a PEM-encoded DNSSEC private key file. In Docker, mount the key directory into `/app/keys` (read-only) and point this to the mounted path.
+Path to a PEM-encoded DNSSEC private key file.
+
+For Docker key mounts, `/app/keys` ownership, and read-only mount examples, see [`docs/docker.md § 4`](docker.md#4-dnssec-deployment). Once the key is mounted, point this flag to the mounted file path:
 
 ```bash
-# Docker mount option before the image name:
--v "$(pwd)/keys:/app/keys:ro"
-
-# CLI flag after the image name:
 --priv-key-path /app/keys/private.pem
 ```
 
@@ -242,7 +240,11 @@ Path to a PEM-encoded DNSSEC private key file. In Docker, mount the key director
 |---|---|
 | `--priv-key-alg` | `RSASHA256` |
 
-Algorithm used to sign the zone. Accepted values are the DNSSEC algorithm names supported by `dnspython` (e.g. `RSASHA256`, `RSASHA512`, `ECDSAP256SHA256`, `ECDSAP384SHA384`, `ED25519`, `ED448`). The full list is validated at startup against the installed `dnspython` version.
+Algorithm used to sign the zone.
+
+Parser acceptance is restricted to the DNSSEC algorithm names exposed by the installed `dnspython` version for algorithm enum values lower than `INDIRECT`; run `a-healthy-dns --help` to see the exact list for the current environment. Common practical values include `RSASHA256`, `RSASHA512`, `ECDSAP256SHA256`, `ECDSAP384SHA384`, `ED25519`, and `ED448`.
+
+Passing parser validation does not guarantee the key can be used. Startup still fails if the private key file cannot be read, the selected algorithm has no usable loader/signing support in the installed dependencies, or the PEM key type does not match `--priv-key-alg`.
 
 ---
 
@@ -274,19 +276,6 @@ a-healthy-dns \
   --ns '["ns1.dns.example.net"]'
 ```
 
-### Docker — with DNSSEC
+### Docker
 
-```bash
-docker run -d \
-  --cap-drop=ALL \
-  --security-opt=no-new-privileges:true \
-  -p 53:53053/udp \
-  -v "$(pwd)/keys:/app/keys:ro" \
-  indisoluble/a-healthy-dns \
-  --port 53053 \
-  --hosted-zone sub.domain.com \
-  --zone-resolutions '{"www":{"ips":["192.168.1.100"],"health_port":8080}}' \
-  --ns '["ns1.dns.example.net"]' \
-  --priv-key-path /app/keys/private.pem \
-  --priv-key-alg RSASHA256
-```
+For Docker run, Compose, DNSSEC key mount, port publishing, and hardening examples, use [`docs/docker.md`](docker.md). Docker containers use the same CLI flags documented here as command arguments after the image name.

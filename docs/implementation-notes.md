@@ -2,7 +2,7 @@
 
 Python-specific implementation guidance for **A Healthy DNS**.
 
-This document is the canonical home for language-specific, runtime-specific, and module-level implementation conventions. Repository-wide engineering principles live in [`docs/engineering-rules.md`](engineering-rules.md); testing strategy and commands live in [`docs/testing.md`](testing.md); CI and release workflow live in [`docs/workflow.md`](workflow.md); architecture lives in [`docs/architecture.md`](architecture.md).
+This document owns language-, runtime-, and module-level conventions. Repository-wide engineering principles live in [`docs/engineering-rules.md`](engineering-rules.md); testing in [`docs/testing.md`](testing.md); workflow in [`docs/workflow.md`](workflow.md); architecture in [`docs/architecture.md`](architecture.md).
 
 ## Runtime And Package Shape
 
@@ -15,14 +15,22 @@ This document is the canonical home for language-specific, runtime-specific, and
 
 ## Dependencies
 
-Dependencies are managed in `pyproject.toml`. Keep runtime dependencies in `[project.dependencies]` and test-only dependencies in `[project.optional-dependencies].test`.
+Dependencies are managed in `pyproject.toml`. Runtime dependencies belong in `[project.dependencies]`; test-only dependencies belong in `[project.optional-dependencies].test`.
+
+Runtime dependency summary:
 
 | Package | Constraint | Purpose |
 |---|---|---|
-| `dnspython` | `>=2.8.0,<3.0.0` | DNS protocol, zones, records, and DNSSEC signing |
+| `dnspython` | `>=2.8.0,<3.0.0` | DNS message, zone, and record primitives; DNSSEC artifact signing support |
 | `cryptography` | `>=46.0.5,<47.0.0` | DNSSEC key loading and crypto operations |
 
-Test/development packages are declared in `pyproject.toml` under `[project.optional-dependencies].test` and installed in CI via project extras.
+Test dependency summary:
+
+| Package | Constraint | Purpose |
+|---|---|---|
+| `pytest` | `>=8.0,<9.0` | Test framework and fixtures |
+| `pytest-cov` | `>=5.0,<6.0` | Pytest coverage integration |
+| `coverage` | `>=7.0,<8.0` | Coverage measurement and reports |
 
 Keep upper-bound pins at the next major version so minor and patch updates are allowed automatically.
 
@@ -41,13 +49,15 @@ Keep upper-bound pins at the next major version so minor and patch updates are a
 
 ## Import Ordering
 
-Each source and test module organizes imports into five groups, each separated by a blank line:
+Organize source and test imports into these groups, separated by blank lines:
 
 1. Standard-library direct imports (`import X`)
 2. Third-party direct imports (`import X`)
 3. Standard-library from-imports (`from X import Y`)
 4. Third-party from-imports (`from X import Y`)
 5. Local imports (`from indisoluble.a_healthy_dns... import Y`)
+
+Within each group, sort import statements alphabetically by full statement text.
 
 ```python
 import json
@@ -64,28 +74,38 @@ from indisoluble.a_healthy_dns import dns_server_config_factory as dscf
 from indisoluble.a_healthy_dns.records.a_healthy_ip import AHealthyIp
 ```
 
-Skip groups that are not needed; do not collapse remaining groups together. Local imports normally use `from ... import ...`; aliasing the imported symbol or submodule is acceptable when repeated constant access would otherwise add noise.
+Skip unused groups without collapsing the remaining groups. Local imports normally use `from ... import ...`; aliases are acceptable when they reduce repeated access noise.
 
-## Module-Level Constants And Type Parameters
+## Module-Level Declarations
 
-For this section, **constant** means a module-level `UPPER_SNAKE_CASE` or `_UPPER_SNAKE_CASE` assignment intended to behave as a stable value. Lowercase module-level assignments are not constants.
+Here, **constant** means a module-level `UPPER_SNAKE_CASE` or `_UPPER_SNAKE_CASE` assignment intended to stay stable. Lowercase module-level assignments are not constants.
+
+Here, **simple declaration** means a module-level declaration that defines a type shape or a lightweight local control-flow signal, without owning domain, service, framework, I/O, lifecycle, or mutation behavior. This group includes `TypeVar`, `ParamSpec`, type aliases, `NamedTuple`, `Enum`, and local exception classes used only to stop or redirect helper flow. A local exception may define `__init__` only to initialize a diagnostic exception message and store payload needed by the catcher.
+
+Here, **runtime class** means a class with ordinary behavior: public methods or properties, domain state, service orchestration, framework inheritance contracts, resource lifecycle, I/O, mutation, or reusable API surface. Runtime classes are not simple declarations.
 
 Use this module-level declaration order:
 
-1. Type definitions used by module-level constants, helpers, or public APIs: `TypeVar`, `ParamSpec`, type aliases, `NamedTuple`, and `Enum`.
+1. Simple declarations.
 2. Private constants.
 3. Public constants.
-4. Helper functions, public functions, and ordinary classes with methods or runtime behavior.
+4. Private helper functions (`def _...`).
+5. Public functions.
+6. Runtime classes.
 
-Keep each group separated by a blank line. If a module has both private and public constants, private constants come first:
+Keep simple declarations directly after imports, before constants and the rest of the module. Sort simple declarations alphabetically by declared identifier using a case-insensitive ordering (equivalent to `sorted(..., key=str.casefold)`), regardless of declaration type; do not use declaration-type subgroups. Separate declaration groups with blank lines. Sort constants alphabetically within their private and public groups. If both private and public constants exist, private constants come first:
 
 ```python
-_P = ParamSpec("_P")
-
-
 class RRSigLifetime(NamedTuple):
     resign: int
     expiration: int
+
+
+class _DropQuery(Exception):
+    ...
+
+
+_P = ParamSpec("_P")
 
 
 _MAX_TTL = (1 << 31) - 1
@@ -93,19 +113,25 @@ _MAX_TTL = (1 << 31) - 1
 DEFAULT_TTL = 60
 ```
 
-Ordinary classes normally belong below constants. The exception is when a module-level constant is constructed from an ordinary class defined in the same module; in that case, define the class before the constant so the assignment can run.
+Use this classification. This table is only a grouping reference, not a declaration-order example:
 
-```python
-class DefaultPolicy:
-    ...
+| Declaration | Group |
+|---|---|
+| `ShouldAbortOp = Callable[[], bool]` | simple declaration: type alias |
+| `class RRSigAction(NamedTuple): ...` | simple declaration: immutable data shape |
+| `class RefreshARecordsResult(Enum): ...` | simple declaration: named state set |
+| `class _DropQuery(Exception): ...` | simple declaration: local control-flow signal |
+| `class _QuestionRejected(Exception): ...` with an `__init__` that stores an rcode | simple declaration: local control-flow signal with payload |
+| `class AHealthyIp: ...` | runtime class: domain value object with behavior |
+| `class DnsServerUdpHandler(socketserver.BaseRequestHandler): ...` | runtime class: framework handler contract |
 
+Runtime classes normally belong after module-level private helper and public functions. If a module-level constant must be constructed from a runtime class in the same module, define that class before the constant so the assignment can run, and keep the ordering exception local to that module.
 
-_DEFAULT_POLICY = DefaultPolicy()
-```
+Do not move a runtime class above constants just because it is a class. Only simple declarations belong in the top declaration group.
 
 ## Module Headers
 
-Non-empty source modules start with the shebang line and, unless the file is an intentionally empty package `__init__.py`, immediately follow it with a module-level docstring:
+Non-empty source modules start with the shebang line and then a module docstring:
 
 ```python
 #!/usr/bin/env python3
@@ -116,11 +142,11 @@ Optional longer explanation of scope and design intent.
 """
 ```
 
-Test files include the shebang (`#!/usr/bin/env python3`) but omit the module docstring. Empty `__init__.py` files are the deliberate exception on the source side.
+Non-empty test files include the shebang (`#!/usr/bin/env python3`) but omit the module docstring. Empty package `__init__.py` files in both source and test trees are exempt from shebang and module docstring requirements.
 
 ## Validation Function Signature
 
-Utility functions in `tools/` that validate a primitive value return `Tuple[bool, str]`: `(True, "")` on success and `(False, error_message)` on failure. Input type is `Any` to safely handle unvalidated external input.
+Primitive validators in `tools/` return `Tuple[bool, str]`: `(True, "")` on success and `(False, error_message)` on failure. Input type is `Any` because validators accept untrusted external values.
 
 ```python
 from typing import Any, Tuple
@@ -135,12 +161,53 @@ def is_valid_ip(ip: Any) -> Tuple[bool, str]:
 
 ## Class Member Layout
 
+This layout applies to every class in source and tests, including test helper classes, fakes, and fixtures implemented as classes.
+
 Class members are declared in this order:
 
-1. `@property` accessors
+1. class-owned `@property` accessors
 2. `__init__`
-3. public methods
-4. dunder methods (`__eq__`, `__hash__`, `__repr__`)
+3. dunder methods for equality, hashing, representation, or ordering when they are not the primary protocol-conformance surface
+4. private methods
+5. protocol conformance members, such as context-manager methods or protocol-required properties
+6. class inheritance conformance members, such as framework hooks or base-class-required properties
+7. public methods
+
+Protocol conformance implements an interface or Python protocol, such as context-manager hooks. Class inheritance conformance implements an inherited class or framework contract, such as `socketserver.BaseRequestHandler.handle()`.
+
+Add a single-line comment before each protocol or inheritance section, naming the exact protocol or inherited class contract. If both exist, place protocol conformance first. Properties required by a protocol or inherited class belong under that section comment, not above `__init__`. Add `# Public methods.` only when ordinary public API follows a protocol or inheritance section.
+
+```python
+class ExampleService:
+    @property
+    def name(self) -> str: ...
+
+    def __init__(self, state: str) -> None: ...
+
+    def __repr__(self) -> str: ...
+
+    def _load_state(self) -> str: ...
+
+    # Implements context manager protocol.
+    @property
+    def resource(self) -> str: ...
+
+    def __enter__(self) -> "ExampleService": ...
+
+    def __exit__(self, exc_type: object, exc_value: object, traceback: object) -> bool:
+        ...
+
+    # Implements BaseWorker inheritance contract.
+    @property
+    def worker_id(self) -> str: ...
+
+    def run(self) -> None: ...
+
+    # Public methods.
+    def refresh(self) -> None: ...
+```
+
+When a class has no protocol or inheritance section, place public methods after private methods without a public-method section comment.
 
 ```python
 class AHealthyIp:
@@ -152,16 +219,16 @@ class AHealthyIp:
 
     def __init__(self, ip: Any, health_port: Any, is_healthy: bool) -> None: ...
 
-    def updated_status(self, is_healthy: bool) -> "AHealthyIp": ...
-
     def __eq__(self, other: Any) -> bool: ...
     def __hash__(self) -> int: ...
     def __repr__(self) -> str: ...
+
+    def updated_status(self, is_healthy: bool) -> "AHealthyIp": ...
 ```
 
 ## NamedTuple Usage
 
-`NamedTuple` is used for immutable containers that hold related fields with no behavior beyond construction, such as config, key containers, and signature timing. Classes are used when objects carry behavior (`AHealthyIp`, `AHealthyRecord`, `ZoneOrigins`).
+Use `NamedTuple` for immutable containers with no behavior beyond construction, such as config, key containers, and signature timing. Use classes when objects carry behavior (`AHealthyIp`, `AHealthyRecord`, `ZoneOrigins`).
 
 ```python
 class DnsServerConfig(NamedTuple):
@@ -183,19 +250,29 @@ logging.debug("Created A record with ttl: %d, and IPs: %s", ttl, ips)
 
 ## Type Annotations
 
-In source modules, all function and method signatures include parameter type annotations and return type annotations. Use `Any` only where the function intentionally accepts unvalidated external input, such as validator parameters.
+In source modules, every function and method signature includes parameter and return type annotations. Use `Any` only when intentionally accepting unvalidated external input, such as validator parameters.
+
+Use modern Python 3.11 annotation spelling for new and normalized code:
+
+- Use built-in generic containers such as `list[str]`, `tuple[bool, str]`, `dict[str, Any]`, and `frozenset[AHealthyRecord]` instead of `typing.List`, `typing.Tuple`, `typing.Dict`, and `typing.FrozenSet`.
+- Use union syntax such as `str | None` instead of `Optional[str]`.
+- Use `from __future__ import annotations` when forward references are needed, then write the type name directly instead of quoting it.
+- Keep importing typing constructs that do not have built-in syntax equivalents, such as `Any`, `Callable`, `NamedTuple`, and `ParamSpec`.
 
 ```python
-def is_valid_ip(ip: Any) -> Tuple[bool, str]:
+from __future__ import annotations
+
+from typing import Any
+
+
+def is_valid_ip(ip: Any) -> tuple[bool, str]:
     ...
 
 
-def make_a_record(
-    max_interval: int, ips: FrozenSet[str]
-) -> Optional[dns.rdataset.Rdataset]:
+def make_a_record(max_interval: int, ips: frozenset[str]) -> dns.rdataset.Rdataset | None:
     ...
 
 
-def updated_status(self, is_healthy: bool) -> "AHealthyIp":
+def updated_status(self, is_healthy: bool) -> AHealthyIp:
     ...
 ```

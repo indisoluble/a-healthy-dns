@@ -14,27 +14,29 @@ Traditional authoritative DNS returns static records. When a backend becomes una
 
 ## Goals
 
-1. **Automatic failover** — remove unhealthy IP addresses from DNS responses without manual intervention.
+1. **Automatic failover** — remove unhealthy health-checked IP addresses from DNS responses without manual intervention.
 2. **Authoritative DNS** — serve one hosted zone plus any configured alias zones as an authoritative UDP DNS server.
 3. **Dual record modes** — support standard static records, health-checked records, and mixed configurations as first-class product behavior.
 4. **Multi-domain support** — let multiple domain aliases reuse the same records without duplicating record or health-check state.
-5. **Optional DNSSEC** — sign the zone when a private key is provided and publish the generated DNSSEC artifacts alongside the base records.
+5. **Optional DNSSEC artifact publication** — sign the zone when a private key is provided and publish the generated DNSSEC artifacts alongside the base records.
 6. **Configurable health checking** — allow operators to tune check interval, TCP timeout, and health port per health-checked subdomain.
 7. **Operational simplicity** — run as a single Python process or Docker container with startup-time configuration only.
 
 ## Non-goals
 
 - **Recursive resolution** — the server does not perform recursive lookups or act as a caching resolver.
+- **DNS-over-TCP query service** — DNS query handling is UDP-only; TCP transport and TCP retry service are out of scope.
 - **Non-TCP health checks** — health is determined exclusively by TCP connectivity; ICMP, HTTP, and other protocols are out of scope.
 - **Live configuration reload** — adding or removing subdomains or zones requires a restart.
 - **Zone replication and transfers** — AXFR, IXFR, and multi-instance state replication are out of scope.
+- **Full DNSSEC authoritative-server behavior** — optional signing publishes generated artifacts, but EDNS(0)/DO handling, signed-answer augmentation, authenticated denial, and complete DNSSEC query semantics are out of scope.
 - **IPv6 answer support** — current implementation serves A records (IPv4) only.
 - **Traffic-shaping policy** — weighted, geographic, or policy-based routing is out of scope.
 
 ## High-level capabilities
 
 - Serve authoritative UDP DNS answers for one hosted zone and optional alias zones.
-- Publish A, SOA, and NS records, with optional DNSSEC-generated DNSKEY, NSEC, and RRSIG data.
+- Publish A, SOA, and NS records, with optional DNSSEC-generated DNSKEY, NSEC, and RRSIG artifact data.
 - Mix standard static A records and TCP health-checked A records in the same zone.
 - Update the in-memory zone automatically as backend health changes.
 - Run directly from the Python CLI or as a Docker container.
