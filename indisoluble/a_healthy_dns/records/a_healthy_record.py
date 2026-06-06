@@ -6,6 +6,8 @@ Provides a DNS A record implementation that tracks health status of multiple
 IP addresses for a single subdomain.
 """
 
+from __future__ import annotations
+
 import dns.name
 
 from indisoluble.a_healthy_dns.records.a_healthy_ip import AHealthyIp
@@ -43,7 +45,7 @@ class AHealthyRecord:
 
         return f"AHealthyRecord(subdomain={self.subdomain}, healthy_ips=[{ips_str}])"
 
-    def updated_ips(self, updated_ips: list[AHealthyIp]) -> "AHealthyRecord":
+    def updated_ips(self, updated_ips: list[AHealthyIp]) -> AHealthyRecord:
         """Return new record with updated IP list if changed."""
         if frozenset(updated_ips) == self.healthy_ips:
             return self

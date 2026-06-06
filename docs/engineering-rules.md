@@ -4,6 +4,8 @@ Repository-specific engineering rules for **A Healthy DNS**.
 
 This document is the canonical home for implementation-independent engineering principles, source-of-truth rules, maintainability expectations, and repository-wide code-shape constraints. Python implementation details live in [`docs/implementation-notes.md`](implementation-notes.md); test strategy and commands live in [`docs/testing.md`](testing.md); CI and release workflow live in [`docs/workflow.md`](workflow.md); architecture and file placement live in [`docs/architecture.md`](architecture.md).
 
+This document uses the [`AGENTS.md`](../AGENTS.md#3-terminology-and-task-classification) distinction between design invariants, current patterns, and examples. Design invariants are repository contracts. Current patterns are the default shape for new and touched work, but may be improved when the task explicitly includes that change and the update remains scoped, tested, documented, and compatible with higher-level requirements.
+
 ## Default Engineering Posture
 
 - Prefer simple, explicit implementations over clever abstractions.
@@ -16,7 +18,20 @@ This document is the canonical home for implementation-independent engineering p
 - Use dependency injection when it improves separation, clarity, or testability.
 - Avoid unnecessary configurability, indirection, and abstraction.
 
+## Changing Established Patterns
+
+Established implementation shapes should be preserved by default, but not treated as untouchable when they are the problem being solved.
+
+- Identify whether the affected guidance is a design invariant, current pattern, or example before changing it.
+- Change a design invariant only when the task explicitly changes that contract. Update the relevant implementation, tests, requirements, architecture, decisions, and operational docs in the same change as needed.
+- Change a current pattern when the replacement is simpler, clearer, better tested, or better aligned with documented requirements. Keep the change scoped to the affected behavior.
+- Do not use pattern changes as a vehicle for unrelated cleanup, formatting sweeps, dependency updates, or broad rewrites.
+- Preserve observable behavior unless the requested change explicitly changes it.
+- State the rationale and the affected canonical documentation when a pattern is intentionally changed.
+
 ## Source-Of-Truth Rules
+
+The table below is a set of design invariants for shared project facts. When a change alters one of these surfaces, update the implementation and the canonical documentation in the same change.
 
 | Concern | Source of truth |
 |---|---|
@@ -33,9 +48,9 @@ This document is the canonical home for implementation-independent engineering p
 | Protocol conformance target | [`docs/RFC-conformance.md`](RFC-conformance.md) |
 | Parameter reference | [`docs/configuration-reference.md`](configuration-reference.md) |
 
-When a change alters one of these surfaces, update the implementation and the canonical documentation in the same change.
-
 ## Boundary Rules
+
+These rules are design invariants for the current architecture. Changing them is an architecture change and must update [`docs/architecture.md`](architecture.md), affected tests, and any affected decisions or requirements.
 
 - Follow the layer direction documented in [`docs/architecture.md`](architecture.md); lower layers must not import higher layers.
 - Add new code at the lowest layer that can own the behavior.
@@ -66,7 +81,7 @@ When a change alters one of these surfaces, update the implementation and the ca
 
 ## Container Build Rules
 
-These rules apply to repository-side changes in `Dockerfile`, `docker-compose.example.yml`, and Docker-related CI workflows. Operator deployment guidance lives in [`docs/docker.md`](docker.md).
+These rules apply to repository-side changes in `Dockerfile`, `docker-compose.example.yml`, and Docker-related CI workflows. They are design invariants for the current deployment contract unless the task explicitly changes that contract. Operator deployment guidance lives in [`docs/docker.md`](docker.md).
 
 - The final image uses the accepted hardened Chainguard Python base-image strategy from D006 in [`docs/decisions.md`](decisions.md) and runs as the Chainguard default non-root user, uid `65532`, avoiding custom user creation in the distroless runtime.
 - Changing the base-image strategy, runtime uid, key mount, or privileged-port approach is a security/deployment contract change; update implementation, [`docs/docker.md`](docker.md), [`docs/requirements.md`](requirements.md), [`docs/decisions.md`](decisions.md), and affected deployment examples in the same change.

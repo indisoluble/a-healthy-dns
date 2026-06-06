@@ -6,6 +6,8 @@ Provides an IP address value object that stores a normalized address, optional
 health port, and health status for use in health-aware DNS A records.
 """
 
+from __future__ import annotations
+
 from typing import Any
 
 from indisoluble.a_healthy_dns.tools.is_valid_ip import is_valid_ip
@@ -65,7 +67,7 @@ class AHealthyIp:
             f"is_healthy={self.is_healthy})"
         )
 
-    def updated_status(self, is_healthy: bool) -> "AHealthyIp":
+    def updated_status(self, is_healthy: bool) -> AHealthyIp:
         """Return new instance with updated health status if changed."""
         if is_healthy == self._is_healthy:
             return self

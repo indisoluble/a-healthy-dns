@@ -10,6 +10,8 @@ This document is the canonical home for:
 - integration points,
 - and physical file-placement rules.
 
+This document distinguishes between **design invariants** and **current patterns** using the terminology in [`AGENTS.md`](../AGENTS.md#3-terminology-and-task-classification). Design invariants must remain true unless the task explicitly changes the architecture contract. Current patterns should be followed by default for new and touched work, but may be improved through the scoped pattern-change process in [`docs/engineering-rules.md`](engineering-rules.md#changing-established-patterns).
+
 It does not own requirements, major decision rationale, repository workflow, code-style conventions, parameter syntax, or protocol-level DNS behavior. Those topics live in [`docs/requirements.md`](requirements.md), [`docs/decisions.md`](decisions.md), [`docs/workflow.md`](workflow.md), [`docs/implementation-notes.md`](implementation-notes.md), [`docs/configuration-reference.md`](configuration-reference.md), and [`docs/RFC-conformance.md`](RFC-conformance.md).
 
 ---
@@ -81,7 +83,7 @@ Layer 4 – Tools (low-level utilities, no DNS wire/message handling or record-c
   tools/uint32_current_time.py
 ```
 
-**Convention:** when adding code, place it at the lowest layer it belongs to. Never move a dependency upward.
+**Design invariant:** when adding code, place it at the lowest layer it belongs to. Never move a dependency upward unless the task explicitly changes the layer contract and updates this document, affected tests, and relevant decisions.
 
 ---
 
@@ -94,9 +96,9 @@ Validated DNS zone configuration is assembled once at startup by `dns_server_con
 class DnsServerConfig(NamedTuple):
     zone_origins: ZoneOrigins
     primary_name_server: str
-    name_servers: FrozenSet[str]
-    a_records: FrozenSet[AHealthyRecord]
-    ext_private_key: Optional[ExtendedPrivateKey]
+    name_servers: frozenset[str]
+    a_records: frozenset[AHealthyRecord]
+    ext_private_key: ExtendedPrivateKey | None
 ```
 
 The factory validates every DNS configuration field (zone names, IP addresses, optional health-check ports, and DNSSEC algorithm) before constructing the config. If any field is invalid the factory logs the error and returns `None`; `main()` exits with a non-zero status without starting a server.
@@ -105,7 +107,7 @@ Operational process arguments that are not part of DNS zone state stay outside `
 
 The NS RRset is stored as a set because DNS RRset ordering is not meaningful. The SOA primary nameserver is stored separately as `primary_name_server`, derived from the first configured nameserver so SOA generation remains deterministic.
 
-**Convention:** new DNS zone, record, alias, nameserver, or DNSSEC configuration fields must be added to `DnsServerConfig` and validated inside `dns_server_config_factory.py`. Operational process arguments remain in `main.py` unless they become shared domain configuration.
+**Design invariant:** new DNS zone, record, alias, nameserver, or DNSSEC configuration fields must be added to `DnsServerConfig` and validated inside `dns_server_config_factory.py`. Operational process arguments remain in `main.py` unless they become shared domain configuration.
 
 ---
 
@@ -122,7 +124,7 @@ This makes change detection trivially safe: `object is new_object` indicates a c
 
 `AHealthyIp` is a passive value object: it validates and stores `ip`, `health_port`, and `is_healthy`, but it does not infer health state from the port value. Configuration parsing constructs all IPs with an initial unhealthy state. `DnsServerZoneUpdater` is the single source of truth for runtime health interpretation: it performs TCP checks for IPs with a `health_port` and treats `health_port is None` as healthy during refresh cycles. That shared internal treatment is an implementation detail; product-facing documentation should describe the feature as two supported record modes rather than as one mode being implicit.
 
-**Convention:** domain state objects must remain immutable. Produce updated copies instead of mutating in place.
+**Design invariant:** domain state objects must remain immutable. Produce updated copies instead of mutating in place.
 
 ---
 
@@ -145,7 +147,7 @@ The `dns.versioned.Zone` writer is used inside a `with` block; the transaction i
 
 `DnsServerZoneUpdaterThreaded.start()` initializes the zone once from the current health state before starting the refresh loop. Because configuration-created IPs start unhealthy, standard static entries (IPs with no health check) become publishable on the first updater refresh rather than during raw configuration parsing.
 
-**Convention:** all zone modifications must go through a single writer transaction. Partial writes are not allowed.
+**Design invariant:** all zone modifications must go through a single writer transaction. Partial writes are not allowed.
 
 ---
 
@@ -189,7 +191,7 @@ Generated DNS TTL and timing values are clamped by `records/time.py` to the RFC 
 
 RFC 8482 synthesized HINFO answers are not stored zone records. Their response TTL is copied in the UDP handler from the same `min(SOA TTL, SOA.MINIMUM)` value used for matched-apex SOA authority in negative responses, so they inherit the SOA timing derived here without adding separate updater state.
 
-**Convention:** do not hardcode TTL values or bypass clamping. All timing must be derived via functions in `records/time.py`, taking `max_interval` as input, or copied from another already-derived DNS timing value when a response is synthesized from that protocol context.
+**Design invariant:** do not hardcode TTL values or bypass clamping. All timing must be derived via functions in `records/time.py`, taking `max_interval` as input, or copied from another already-derived DNS timing value when a response is synthesized from that protocol context.
 
 ---
 
@@ -219,7 +221,7 @@ a-healthy-dns/
 
 This tree lists tracked, project-owned files and directories. Local generated artifacts such as virtual environments, caches, coverage output, and IDE state are ignored and are not part of the repository layout.
 
-**Convention:** root-level files are project-wide concerns (packaging, containerisation, CI configuration, agent contract, license, and ignore rules). Do not add source modules or tests at the root level.
+**Design invariant:** root-level files are project-wide concerns (packaging, containerisation, CI configuration, agent contract, license, and ignore rules). Do not add source modules or tests at the root level.
 
 ### 7.2 Source package: `indisoluble/a_healthy_dns/`
 
@@ -247,7 +249,7 @@ Groups all files responsible for constructing or assembling DNS resource records
 | Timing helper | it derives TTL or signature timing from health-check parameters |
 | Zone-origin value | it carries primary or alias zone names |
 
-**Convention:** do not place network I/O, threading, or configuration-parsing logic inside `records/`.
+**Design invariant:** do not place network I/O, threading, or configuration-parsing logic inside `records/`.
 
 ### 7.4 Subpackage: `tools/`
 
@@ -260,7 +262,7 @@ Groups low-level utility functions that have **no DNS wire/message handling or r
 | Time helper | it reads the system clock as a raw value (`uint32_current_time`) |
 | Connectivity probe | it tests a raw TCP connection (`can_create_connection`) |
 
-**Convention:** files in `tools/` must not import from `records/` or any higher layer.
+**Design invariant:** files in `tools/` must not import from `records/` or any higher layer.
 
 ### 7.5 Test tree: `tests/`
 
@@ -277,7 +279,7 @@ tests/
 
 The test tree mirrors the source tree by default. Most source folders have a corresponding test folder, and most source modules `foo.py` should have a mirrored test file `test_foo.py`.
 
-**Convention:** when adding a new source file `indisoluble/a_healthy_dns/X/foo.py`, default to placing its module-focused test under `tests/indisoluble/a_healthy_dns/X/`. Naming and broader test-convention rules are defined in [`docs/testing.md`](testing.md). Exceptions are allowed when a dedicated mirrored test would be redundant or when behavior is better covered by a higher-level or cross-cutting test, but the exception should be deliberate and justified in the change.
+**Current pattern:** when adding a new source file `indisoluble/a_healthy_dns/X/foo.py`, default to placing its module-focused test under `tests/indisoluble/a_healthy_dns/X/`. Naming and broader test-convention rules are defined in [`docs/testing.md`](testing.md). Exceptions are allowed when a dedicated mirrored test would be redundant or when behavior is better covered by a higher-level or cross-cutting test, but the exception should be deliberate and justified in the change.
 
 ### 7.6 Placement rules for new files
 
@@ -304,7 +306,7 @@ relative_name = zone_origins.relativize(query_name)
 
 Origins are sorted by descending specificity (length) to ensure the most specific zone matches first. The zone itself is always stored under the primary origin; alias zones are lookup aliases only.
 
-**Convention:** alias zones must never appear as a separate `dns.versioned.Zone`. They are handled purely at query-relativization time in `ZoneOrigins.relativize()`.
+**Design invariant:** alias zones must never appear as a separate `dns.versioned.Zone`. They are handled purely at query-relativization time in `ZoneOrigins.relativize()`.
 
 ---
 
@@ -319,7 +321,7 @@ This architecture section covers signing inputs, artifact generation, and refres
 
 RRSIG key rotation timing is managed by `records/dnssec.iter_rrsig_key()`, a stateful generator that yields a new `ExtendedRRSigKey` each time signing is invoked. The zone updater tracks `resign` time and forces a zone recreation before the current signature expires.
 
-**Convention:** DNSSEC logic must remain isolated to `records/dnssec.py` and the `_sign_zone()` call in `DnsServerZoneUpdater`. Do not spread DNSSEC awareness into other layers.
+**Design invariant:** DNSSEC logic must remain isolated to `records/dnssec.py` and the `_sign_zone()` call in `DnsServerZoneUpdater`. Do not spread DNSSEC awareness into other layers.
 
 ---
 
@@ -331,4 +333,4 @@ RRSIG key rotation timing is managed by `records/dnssec.iter_rrsig_key()`, a sta
 
 `stop()` sets a `threading.Event` to signal the background loop, then `join()`s the thread with a timeout.
 
-**Convention:** any new background thread or resource must be cleanly stopped in the `main()` shutdown sequence following the same `Event + join` pattern.
+**Design invariant:** any new background thread or resource must be cleanly stopped in the `main()` shutdown sequence. The current pattern is the existing `Event + join` shutdown flow.

@@ -1,6 +1,6 @@
 # AGENTS.md
 
-**Release date:** 2026-05-23 - **Canonical source:** https://github.com/indisoluble/AGENTS-spec
+**Release date:** 2026-06-06 - **Canonical source:** https://github.com/indisoluble/AGENTS-spec
 
 ## 1. Canonical status
 
@@ -32,11 +32,19 @@ A **documentation normalization pass** checks only affected documents and direct
 
 Documentation work is **significant** when it creates a new baseline document, changes a document's primary responsibility, moves content between documents, or changes project-level requirements, architecture, workflow, or engineering rules.
 
+A **design invariant** is a documented constraint that must remain true unless the current task explicitly changes that contract and updates all affected code, tests, configuration, and documentation.
+
+A **current pattern** is a documented implementation shape or convention that should be followed by default, but may be changed when the change is scoped, justified, tested, documented, and compatible with higher-level requirements.
+
+An **example** illustrates one valid use or implementation. Do not treat examples as exclusive unless the surrounding documentation says they are required.
+
 Single-source-of-truth rules allow intentional duplication required for generated files, migrations, compatibility layers, test fixtures, snapshots, examples, external protocol boundaries, or concise documentation summaries. Preserve intentional duplication unless the task requires changing it.
 
 ## 4. Purpose and scope
 
 This contract keeps project rules repository-local, reviewable, versioned, and portable across tools and IDEs. Treat repository files as authoritative for project behavior, constraints, rules, and documentation structure. Do not make hidden, personal, remote, or tool-specific configuration the source of truth.
+
+This file governs agent behavior. Project behavior belongs in project documentation, source code, tests, configuration, and executable behavior.
 
 ## 5. Repository source precedence and conflicts
 
@@ -71,6 +79,7 @@ If implementation conflicts with intended documentation, state the conflict and 
 - Do not perform opportunistic refactors, renames, reformatting, dependency upgrades, file moves, or unrelated cleanup.
 - Do not hide material changes in unrelated files.
 - Do not defer required documentation updates when behavior, interfaces, architecture, configuration, operations, workflow, or constraints change.
+- Do not preserve a current pattern merely because it exists if the current task explicitly requires a better design and the required contract updates are included.
 
 ### 6.2 Preferred style
 
@@ -92,7 +101,31 @@ Use this workflow, scaling depth to task complexity:
 
 For trivial tasks, collapse the workflow to applicable steps and avoid elaborate plans.
 
-Before non-trivial changes, consult `AGENTS.md`, `README.md`, referenced `/docs` files, directly affected files, and adjacent tests, configuration, scripts, or operational docs when relevant.
+### 7.1 Proportional reading model
+
+For non-trivial work, always consult:
+
+- `AGENTS.md`
+- `docs/table-of-contents.md` when it exists
+- directly affected files
+- adjacent tests, configuration, scripts, or operational docs that materially affect the task
+
+Then use the table of contents and affected files to select task-relevant canonical documents. Do not read the entire baseline documentation set by default unless the task affects project scope, requirements, architecture, repository-wide engineering rules, documentation structure, or multiple cross-cutting areas.
+
+`README.md` should be consulted when the task affects first-run guidance, user-facing overview, quick-start behavior, public positioning, or documentation navigation. It is not mandatory context for every internal code change.
+
+### 7.2 Deep-read triggers
+
+Read the relevant canonical project documents when the task touches their domain:
+
+- Product scope, goals, non-goals, or supported behavior: project brief and requirements.
+- Public behavior, compatibility, protocol behavior, configuration semantics, or operational expectations: requirements plus the affected topic document.
+- Architecture, data flow, module boundaries, file placement, concurrency, lifecycle, or ownership boundaries: architecture and engineering rules.
+- Repository-wide coding standards, source-of-truth rules, test expectations, or maintainability constraints: engineering rules and implementation notes.
+- Tests, test taxonomy, fixtures, QA commands, coverage, or validation: testing docs.
+- CI, release readiness, workflow dependencies, or automation behavior: workflow and release docs.
+- Deployment, runtime hardening, container behavior, or operations: Docker, operations, troubleshooting, security, or other relevant operational docs.
+- Documentation restructuring, new baseline docs, or duplicate-topic cleanup: table of contents plus affected canonical owners.
 
 If missing context still permits a safe, reversible, local change, state the assumption and proceed with the smallest safe assumption set. If missing context affects public behavior, data integrity, security, irreversible operations, external compatibility, production operations, or user intent, stop and ask unless the user requested best-effort work.
 
@@ -228,6 +261,8 @@ Prefer designs that are clear, maintainable, and consistent with documented arch
 - Separate concurrent, asynchronous, or multi-threaded code from ordinary sequential logic when practical.
 - Favor existing repository patterns unless those patterns are themselves the problem.
 - Preserve single source of truth for domain rules, schemas, constants, and shared logic, subject to section 3 exceptions.
+
+When a current pattern is the problem, improve it directly within the task scope instead of preserving it artificially. Such changes must identify the affected invariant or pattern, preserve required behavior, update tests, update canonical documentation, and state the rationale.
 
 Language-specific or framework-specific rules belong in repository documentation, usually `/docs/implementation-notes.md` or a more specific `/docs` document. Do not place detailed language-specific rules in `AGENTS.md` unless this repository itself is language-specific and the rule is part of the agent contract.
 

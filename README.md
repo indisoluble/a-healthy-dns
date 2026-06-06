@@ -63,7 +63,7 @@ Requires Python 3.11+.
 
 ## Documentation
 
-Start with [docs/table-of-contents.md](docs/table-of-contents.md) for the full documentation index, minimum reading set, and canonical owner of each documentation topic.
+Start with [docs/table-of-contents.md](docs/table-of-contents.md) for the full documentation index, proportional reading model, and canonical owner of each documentation topic.
 
 Common next stops:
 

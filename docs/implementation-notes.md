@@ -4,6 +4,8 @@ Python-specific implementation guidance for **A Healthy DNS**.
 
 This document owns language-, runtime-, and module-level conventions. Repository-wide engineering principles live in [`docs/engineering-rules.md`](engineering-rules.md); testing in [`docs/testing.md`](testing.md); workflow in [`docs/workflow.md`](workflow.md); architecture in [`docs/architecture.md`](architecture.md).
 
+Unless a section explicitly defines a narrower scope, the rules in this document are repository-wide Python implementation conventions for all source and test code. If one of these conventions is itself the problem, change it through the scoped pattern-change process in [`docs/engineering-rules.md`](engineering-rules.md#changing-established-patterns).
+
 ## Runtime And Package Shape
 
 | Item | Rule |
@@ -146,13 +148,13 @@ Non-empty test files include the shebang (`#!/usr/bin/env python3`) but omit the
 
 ## Validation Function Signature
 
-Primitive validators in `tools/` return `Tuple[bool, str]`: `(True, "")` on success and `(False, error_message)` on failure. Input type is `Any` because validators accept untrusted external values.
+Primitive validators in `tools/` return `tuple[bool, str]`: `(True, "")` on success and `(False, error_message)` on failure. Input type is `Any` because validators accept untrusted external values.
 
 ```python
-from typing import Any, Tuple
+from typing import Any
 
 
-def is_valid_ip(ip: Any) -> Tuple[bool, str]:
+def is_valid_ip(ip: Any) -> tuple[bool, str]:
     if not isinstance(ip, str):
         return (False, "It must be a string")
 
@@ -192,7 +194,7 @@ class ExampleService:
     @property
     def resource(self) -> str: ...
 
-    def __enter__(self) -> "ExampleService": ...
+    def __enter__(self) -> ExampleService: ...
 
     def __exit__(self, exc_type: object, exc_value: object, traceback: object) -> bool:
         ...
@@ -215,15 +217,15 @@ class AHealthyIp:
     def ip(self) -> str: ...
 
     @property
-    def health_port(self) -> Optional[int]: ...
+    def health_port(self) -> int | None: ...
 
     def __init__(self, ip: Any, health_port: Any, is_healthy: bool) -> None: ...
 
-    def __eq__(self, other: Any) -> bool: ...
+    def __eq__(self, other: object) -> bool: ...
     def __hash__(self) -> int: ...
     def __repr__(self) -> str: ...
 
-    def updated_status(self, is_healthy: bool) -> "AHealthyIp": ...
+    def updated_status(self, is_healthy: bool) -> AHealthyIp: ...
 ```
 
 ## NamedTuple Usage
@@ -234,9 +236,9 @@ Use `NamedTuple` for immutable containers with no behavior beyond construction, 
 class DnsServerConfig(NamedTuple):
     zone_origins: ZoneOrigins
     primary_name_server: str
-    name_servers: FrozenSet[str]
-    a_records: FrozenSet[AHealthyRecord]
-    ext_private_key: Optional[ExtendedPrivateKey]
+    name_servers: frozenset[str]
+    a_records: frozenset[AHealthyRecord]
+    ext_private_key: ExtendedPrivateKey | None
 ```
 
 ## Logging Format
@@ -252,7 +254,7 @@ logging.debug("Created A record with ttl: %d, and IPs: %s", ttl, ips)
 
 In source modules, every function and method signature includes parameter and return type annotations. Use `Any` only when intentionally accepting unvalidated external input, such as validator parameters.
 
-Use modern Python 3.11 annotation spelling for new and normalized code:
+Use modern Python 3.11 annotation spelling:
 
 - Use built-in generic containers such as `list[str]`, `tuple[bool, str]`, `dict[str, Any]`, and `frozenset[AHealthyRecord]` instead of `typing.List`, `typing.Tuple`, `typing.Dict`, and `typing.FrozenSet`.
 - Use union syntax such as `str | None` instead of `Optional[str]`.
