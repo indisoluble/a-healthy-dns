@@ -67,7 +67,7 @@ docker exec a-healthy-dns python -c "import socket; socket.create_connection(('1
 |---|---|---|
 | `NOERROR` with answers | The queried name exists and currently has records of that type | Confirm the answer set matches configured standard static IPs plus currently healthy health-checked IPs |
 | `NOERROR` with empty answer and SOA in authority | The owner name exists but not for that record type (`NODATA`) | Check the queried type; `AAAA` is often empty because the project serves A records only |
-| `NXDOMAIN` with SOA in authority | The queried owner name does not exist in the active zone view | Check for an unknown subdomain, a configured subdomain with no currently publishable IPs, or a query issued before the first updater refresh has run |
+| `NXDOMAIN` with SOA in authority | The queried owner name and its subtree do not exist in the active zone view | Check for an unknown subdomain, a configured subdomain with no currently publishable IPs and no descendant records, or a stale/wrong instance configuration |
 | `REFUSED` | The query is outside the hosted or alias zones, or the query class is unsupported | Check the zone name and query class |
 | `FORMERR` | The request is malformed or contains the wrong question count | Check the client or packet generator |
 | Timeout / no response | The server is down, UDP is blocked, port mapping is wrong, or the packet was too short to answer | Check service status, firewall, packet capture, and port mapping |
@@ -111,7 +111,7 @@ When using Docker, confirm you are querying the exposed host port, not only the 
 
 ### 2.3 The server returns `NXDOMAIN`, `REFUSED`, or the wrong answers
 
-**Distinguish first:** `REFUSED` = query outside hosted/alias zones or non-`IN` class; `NXDOMAIN` = owner name absent from active zone view; `NOERROR` with empty answer = name exists but not for that type.
+**Distinguish first:** `REFUSED` = query outside hosted/alias zones or non-`IN` class; `NXDOMAIN` = owner name and subtree absent from active zone view; `NOERROR` with empty answer = name exists but not for that type.
 
 **Check:**
 ```bash
@@ -123,23 +123,26 @@ Use `--log-level debug` when you need the per-IP or per-record lines (`Checked I
 
 **Common causes:** wrong zone → `REFUSED`; unconfigured subdomain → `NXDOMAIN`; a health-checked subdomain has all backend IPs unhealthy → A record skipped → `NXDOMAIN`; record type not published (e.g. `AAAA`) → `NOERROR` empty answer; backend health changed and answer set reflects the new state. Standard static entries are published without TCP connection attempts.
 
-**Backend check:** `nc -zv 192.168.1.100 8080`. For health-checked entries, look for `A record <name> skipped` after `Updating zone...` when all backend IPs are unhealthy. For standard static entries, wait for the first `Updating zone...` after `Starting Zone Updater...` before treating a startup-time `NXDOMAIN` as persistent.
+**Backend check:** `nc -zv 192.168.1.100 8080`. For health-checked entries, look for `A record <name> skipped` after `Updating zone...` when all backend IPs are unhealthy. For standard static entries, the initial zone is built before `DNS server listening on port ...`; if a static entry returns `NXDOMAIN` after that log line, re-check the subdomain spelling, `--zone-resolutions`, and whether you are querying the expected instance.
 
 **Nameserver address queries:** `--ns` creates `NS` records only. It does not create `A` records for the nameserver hostnames, so address queries for out-of-zone nameserver names may return `REFUSED`, and in-zone nameserver names require separate glue/address planning. Do not add nameserver hostnames to `zone-resolutions` unless they are real service records, either health-checked or standard static. See [`docs/configuration-reference.md#name-servers`](configuration-reference.md#name-servers) for the canonical nameserver guidance.
 
-### 2.4 DNSSEC responses are missing or rejected
+### 2.4 DNSSEC artifacts are missing or key loading fails
 
-**Symptoms:** `dig +dnssec` shows no `RRSIG`, `DNSKEY`, or `NSEC` data; startup fails loading the key; validating resolver rejects the response.
+**Symptoms:** startup fails loading the key; direct `DNSKEY`, `NSEC`, or `RRSIG` lookups for expected signed-zone artifacts return empty. Do not treat validating-resolver rejection or lack of attached `RRSIG` data on ordinary `dig +dnssec` answers as a project defect by itself; full DNSSEC authoritative-server validation semantics are out of scope.
 
 **Check:**
 ```bash
 dig @localhost -p 53053 example.local DNSKEY
-dig @localhost -p 53053 www.example.local +dnssec
-docker logs --tail 200 a-healthy-dns | grep -i "dnssec\\|sign\\|key"
+dig @localhost -p 53053 example.local NSEC
+dig @localhost -p 53053 www.example.local RRSIG
+docker logs --tail 200 a-healthy-dns | grep -Ei "dnssec|sign|key"
 ```
 Use `--log-level debug` when you need signing-detail lines such as `Zone signed with expiration time ...`.
 
-**Likely causes:** no key path configured (DNSSEC disabled); key file missing or unreadable; PEM/algorithm mismatch; signature near expiration.
+**Interpretation:** when DNSSEC is enabled, signed-zone artifacts are ordinary rdatasets in the generated zone and can be returned only through exact-type lookup when present at the queried owner name. The UDP handler does not add DNSSEC proof data to unrelated answers based on the DNSSEC OK bit and does not implement authenticated denial semantics.
+
+**Likely causes:** no key path configured (DNSSEC disabled); key file missing or unreadable; PEM/algorithm mismatch; signature near expiration; artifact queried at the wrong owner name or record type.
 
 **Logs:** `Loaded DNSSEC private key from ...`, `Failed to load DNSSEC private key`, `Failed to load private key`, `Zone signing is near to expire`, `Zone signed with expiration time ...`.
 
@@ -213,6 +216,7 @@ These fragments span `info`, `warning`, and `debug`. Use `--log-level debug` whe
 | `Malformed DNS query; replying FORMERR: ...` | Malformed DNS input had a recoverable header, so the server returned `FORMERR` | Check the client or packet generator; public port-53 services commonly receive scan traffic |
 | `Ignoring malformed DNS packet: ...` | Packet was too short to contain a complete DNS header, so no response could be sent | Usually scan or broken-client traffic; use packet capture if the source should be legitimate |
 | `Ignoring DNS response packet received on query socket: ...` | A packet had the DNS response flag set and was not a query the server can answer | Usually scan, reflection, or misdirected traffic; check the source only if it is expected |
+| `Unable to build DNS response; dropping packet: ...` | The server parsed enough of the packet to identify the request but could not construct a valid DNS response | Check the client or packet generator; enable `--log-level debug` only if you need the paired traceback |
 | `Stack trace for DNS response construction failure: ...` | Debug-only traceback for an ignored packet that could not be converted into a response; includes source, transaction id, and byte count | Enable `--log-level debug` only when diagnosing handler internals |
 | `Received ... signal, shutting down DNS server...` | Graceful shutdown started | Normal during stop / restart |
 | `Stopping Zone Updater...` | Background updater is being stopped | Normal during shutdown |
@@ -240,7 +244,9 @@ dig @localhost -p 53053 example.local SOA
 dig @localhost -p 53053 example.local NS
 dig @localhost -p 53053 www.example.local A
 dig @localhost -p 53053 www.example.local AAAA
-dig @localhost -p 53053 www.example.local +dnssec
+dig @localhost -p 53053 example.local DNSKEY
+dig @localhost -p 53053 example.local NSEC
+dig @localhost -p 53053 www.example.local RRSIG
 ```
 
 **Packet capture:**

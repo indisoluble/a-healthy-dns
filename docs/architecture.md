@@ -16,14 +16,14 @@ It does not own requirements, major decision rationale, repository workflow, cod
 
 ## 1. High-level architecture
 
-The system is built around two independent, concurrently-running concerns separated from the start of `main()`:
+The runtime is built around two concerns that share one `dns.versioned.Zone`: a zone-updater component that owns all writes, and a UDP server that serves read-only queries. Startup creates the initial zone synchronously before serving begins; subsequent refreshes run in the background updater thread.
 
 ```
 ┌────────────────────────────────────────────────────────────────┐
 │  main.py (_main)                                               │
 │                                                                │
 │  ┌──────────────────────────────┐                              │
-│  │ DnsServerZoneUpdaterThreaded │  ← background daemon thread  │
+│  │ DnsServerZoneUpdaterThreaded │  ← initial sync + daemon loop│
 │  │  ┌──────────────────────┐    │                              │
 │  │  │ DnsServerZoneUpdater │    │  ← health check + zone write │
 │  │  └──────────────────────┘    │                              │
@@ -39,8 +39,8 @@ The system is built around two independent, concurrently-running concerns separa
 ```
 
 Key properties:
-- The **zone updater thread** holds the only write path to the zone.
-- The **UDP handler thread** performs only reads via `zone.reader()`.
+- The **zone updater component** holds the only write path to the zone. `DnsServerZoneUpdaterThreaded.start()` performs the first `initialize_zone()` synchronously, then starts the background refresh loop.
+- The **UDP serving path** performs only reads via `zone.reader()`.
 - Concurrency safety is delegated to `dns.versioned.Zone`, which provides a versioned reader/writer API.
 - The two concerns share **no mutable state** other than the zone object itself.
 
@@ -72,7 +72,7 @@ Layer 3 – Records
   records/zone_origins.py               (primary + alias zone set)
   records/time.py                       (TTL and signature timing calculations)
 
-Layer 4 – Tools (low-level utilities, no DNS protocol dependencies)
+Layer 4 – Tools (low-level utilities, no DNS wire/message handling or record-construction dependencies)
   tools/can_create_connection.py        (TCP health check)
   tools/is_valid_ip.py
   tools/is_valid_port.py
@@ -151,10 +151,23 @@ The `dns.versioned.Zone` writer is used inside a `with` block; the transaction i
 
 ## 6. Interval calculation pattern
 
-TTLs and timing values are derived consistently from a single source of truth: the **effective max interval**, calculated in `dns_server_zone_updater.py:_calculate_max_interval()`:
+TTLs and timing values are derived consistently from a single source of truth: the **effective max interval**, calculated in `dns_server_zone_updater.py:_calculate_max_interval()`.
+
+The effective interval is the larger of:
+
+- the configured `min_interval`;
+- the sum, for each configured A-record owner name, of `(health-checked IP count * connection_timeout) + per-record overhead`.
+
+The per-record overhead is `DELTA_PER_RECORD_MANAGEMENT`, plus the DNSSEC signing overhead when signing is enabled.
 
 ```
-max_interval = max(min_interval, sum(per-health-checked-IP connection_timeout + per-record delta))
+max_interval = max(
+    min_interval,
+    sum(
+        (health_checked_ip_count * connection_timeout) + per_record_overhead
+        for each configured A-record owner name
+    ),
+)
 ```
 
 All record TTLs are then calculated as multiples of `max_interval` by functions in `records/time.py`:
@@ -172,9 +185,11 @@ All record TTLs are then calculated as multiples of `max_interval` by functions 
 | RRSIG resign | `= DNSKEY TTL` |
 | RRSIG expiration | `2 × SOA refresh + SOA expire + SOA retry` |
 
+Generated DNS TTL and timing values are clamped by `records/time.py` to the RFC 8767 TTL range: `0 <= value <= 2^31-1`.
+
 RFC 8482 synthesized HINFO answers are not stored zone records. Their response TTL is copied in the UDP handler from the same `min(SOA TTL, SOA.MINIMUM)` value used for matched-apex SOA authority in negative responses, so they inherit the SOA timing derived here without adding separate updater state.
 
-**Convention:** do not hardcode TTL values. All timing must be derived via functions in `records/time.py`, taking `max_interval` as input, or copied from another already-derived DNS timing value when a response is synthesized from that protocol context.
+**Convention:** do not hardcode TTL values or bypass clamping. All timing must be derived via functions in `records/time.py`, taking `max_interval` as input, or copied from another already-derived DNS timing value when a response is synthesized from that protocol context.
 
 ---
 
@@ -212,7 +227,7 @@ This tree lists tracked, project-owned files and directories. Local generated ar
 indisoluble/              # regular Python package; package root for this repository's code
 └── a_healthy_dns/        # application package root; all source modules live here
     ├── records/          # DNS record construction and domain value objects (Layer 3)
-    ├── tools/            # low-level utilities with no DNS protocol dependencies (Layer 4)
+    ├── tools/            # low-level utilities with no DNS wire/message handling or record-construction dependencies (Layer 4)
     ├── dns_server_*.py   # server orchestration modules (Layers 1–2)
     └── main.py           # entry-point (Layer 0)
 ```
@@ -236,7 +251,7 @@ Groups all files responsible for constructing or assembling DNS resource records
 
 ### 7.4 Subpackage: `tools/`
 
-Groups low-level utility functions that have **no DNS protocol knowledge** and no dependencies above Layer 4. Most helpers are pure validators or converters; the deliberate exception is the raw TCP connectivity probe used by the health-check loop.
+Groups low-level utility functions that have **no DNS wire/message handling or record-construction dependencies** and no dependencies above Layer 4. Some helpers intentionally encode primitive DNS input rules, such as label syntax. Most helpers are pure validators or converters; the deliberate exception is the raw TCP connectivity probe used by the health-check loop.
 
 | File pattern | Belongs here if… |
 |---|---|
@@ -295,10 +310,12 @@ Origins are sorted by descending specificity (length) to ensure the most specifi
 
 ## 9. DNSSEC as an optional, isolated concern
 
-DNSSEC is an additive, opt-in behaviour controlled by the presence of `DnsServerConfig.ext_private_key`:
+DNSSEC artifact publication is an additive, opt-in behaviour controlled by the presence of `DnsServerConfig.ext_private_key`:
 
 - `None` → no signing; the zone contains only the base A/NS/SOA records.
 - set → `_sign_zone()` is called at the end of each zone-recreation transaction, and `dnspython.sign_zone()` adds DNSKEY, NSEC, and corresponding RRSIG datasets to the zone.
+
+This architecture section covers signing inputs, artifact generation, and refresh timing only. Full DNSSEC authoritative-server protocol behavior, including EDNS(0)/DO handling, signed-answer augmentation, authenticated denial, and complete DNSSEC query semantics, remains outside the current product scope and is bounded by [`docs/RFC-conformance.md`](RFC-conformance.md).
 
 RRSIG key rotation timing is managed by `records/dnssec.iter_rrsig_key()`, a stateful generator that yields a new `ExtendedRRSigKey` each time signing is invoked. The zone updater tracks `resign` time and forces a zone recreation before the current signature expires.
 

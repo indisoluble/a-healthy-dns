@@ -7,13 +7,13 @@
 
 An authoritative UDP DNS server for one hosted zone that can serve standard static A records, health-checked A records, or a mix of both.
 
-Health-checked entries are published only while their TCP check passes. Standard static entries are published without a health probe. When a subdomain has no currently publishable IPs, that name fails closed with `NXDOMAIN`.
+Health-checked entries are published only while their TCP check passes. Standard static entries are published without a health probe. When an owner name and its subtree are absent from the active zone view, queries return `NXDOMAIN`; existing empty non-terminals return `NODATA`.
 
 ## Quick start
 
 ### Option A: Docker (recommended)
 
-This quick start keeps the container on a high port so local testing does not require binding host port `53`.
+This quick start keeps the container on a high port so local testing does not require binding host port `53`. It intentionally mixes a standard static `www` record with a health-checked `checked` record; the verification query uses `www` so the first run does not depend on a reachable sample backend.
 
 ```bash
 docker run -d \
@@ -34,7 +34,7 @@ dig @localhost -p 53053 www.example.local A
 docker logs --tail 50 a-healthy-dns
 ```
 
-For Compose usage, port-53 deployment, DNSSEC key mounts, and hardening, use [docs/docker.md](docs/docker.md).
+For Compose usage, port-53 deployment, DNSSEC key mounts, hardening, and production image pinning, use [docs/docker.md](docs/docker.md). The untagged image above is for a local quick start; production deployments should pin a specific image tag.
 
 ### Option B: Python CLI (from source)
 
@@ -57,27 +57,20 @@ Requires Python 3.11+.
 - Health checks run in the background, testing TCP connectivity only for entries configured with a `health_port`.
 - Standard static entries are returned without a health probe and can be mixed freely with health-checked entries in the same zone.
 - When a health-checked IP becomes unhealthy it is removed from DNS A record responses on the next zone update.
-- When a subdomain has no currently publishable IPs, the subdomain returns `NXDOMAIN`.
+- When an owner name and its subtree are absent from the active zone view, queries return `NXDOMAIN`; existing empty non-terminals return `NODATA`.
 - Multiple domain aliases can share the same records without duplicated checks (`--alias-zones`).
-- DNSSEC zone signing is supported when a private key is provided (`--priv-key-path`).
+- Optional DNSSEC artifact publication is supported when a private key is provided (`--priv-key-path`); full DNSSEC authoritative-server behavior is out of scope.
 
 ## Documentation
 
-Start with [docs/table-of-contents.md](docs/table-of-contents.md) for the minimum reading set and the canonical owner of each documentation topic.
+Start with [docs/table-of-contents.md](docs/table-of-contents.md) for the full documentation index, minimum reading set, and canonical owner of each documentation topic.
 
-| Document | Contents |
+Common next stops:
+
+| Need | Document |
 |---|---|
-| [docs/table-of-contents.md](docs/table-of-contents.md) | Full documentation index, minimum reading set, and canonical topic ownership |
-| [docs/project-brief.md](docs/project-brief.md) | Purpose, scope, goals, non-goals, and high-level capabilities |
-| [docs/requirements.md](docs/requirements.md) | Functional, operational, protocol, quality, reliability, and deployment requirements |
-| [docs/architecture.md](docs/architecture.md) | Runtime model, component boundaries, data flow, and file placement rules |
-| [docs/decisions.md](docs/decisions.md) | Major design decisions, rationale, alternatives, and consequences |
-| [docs/engineering-rules.md](docs/engineering-rules.md) | Repository-wide engineering principles and source-of-truth rules |
-| [docs/implementation-notes.md](docs/implementation-notes.md) | Python-specific implementation conventions |
-| [docs/testing.md](docs/testing.md) | Test strategy, QA commands, and test placement rules |
-| [docs/workflow.md](docs/workflow.md) | CI validation, release readiness gates, and documentation workflow |
-| [docs/release.md](docs/release.md) | Versioning, release publication, artifacts, changelog, and compatibility |
-| [docs/RFC-conformance.md](docs/RFC-conformance.md) | Wire-level authoritative UDP behavior, response semantics, and RFC scope boundaries |
-| [docs/configuration-reference.md](docs/configuration-reference.md) | CLI flags, defaults, and parameter examples |
-| [docs/docker.md](docs/docker.md) | Docker deployment guide: quick start, Compose, DNSSEC mounts, hardening, orchestrator notes, and upgrades |
-| [docs/troubleshooting.md](docs/troubleshooting.md) | Runtime diagnosis, log interpretation, live debugging, monitoring, and incident handoff |
+| Full documentation navigation | [docs/table-of-contents.md](docs/table-of-contents.md) |
+| CLI flags and examples | [docs/configuration-reference.md](docs/configuration-reference.md) |
+| Docker deployment | [docs/docker.md](docs/docker.md) |
+| Runtime diagnosis | [docs/troubleshooting.md](docs/troubleshooting.md) |
+| DNS wire behavior and RFC scope | [docs/RFC-conformance.md](docs/RFC-conformance.md) |

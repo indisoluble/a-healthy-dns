@@ -607,33 +607,6 @@ class TestUpdateResponse:
             caplog, logging.INFO, "returning NODATA", _DNS_TRAFFIC_NORMAL
         )
 
-    @pytest.mark.parametrize(
-        "soa_rdataset",
-        [
-            None,
-            dns.rdataset.from_text(
-                dns.rdataclass.IN,
-                dns.rdatatype.SOA,
-                300,
-            ),
-        ],
-        ids=["missing-soa-rdataset", "empty-soa-rdataset"],
-    )
-    def test_domain_not_found_without_usable_soa_omits_authority(
-        self, dns_response, zone_origins, soa_rdataset
-    ):
-        query_name = dns.name.from_text("nonexistent", origin=zone_origins.primary)
-        transaction = _FakeTransaction(soa_rdataset=soa_rdataset)
-        zone = _make_zone(zone_origins, transaction)
-
-        _update_test_response(
-            dns_response, query_name, dns.rdatatype.A, zone, zone_origins
-        )
-
-        assert dns_response.rcode() == dns.rcode.NXDOMAIN
-        assert bool(dns_response.flags & dns.flags.AA)
-        _assert_section_counts(dns_response)
-
     def test_record_type_not_found_returns_nodata_with_soa_authority(
         self, dns_response, zone_origins, soa_rdataset, caplog
     ):

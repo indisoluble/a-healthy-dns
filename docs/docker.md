@@ -11,7 +11,7 @@ It owns:
 
 It does not own parameter-by-parameter reference material, repository-side container build rules, or troubleshooting procedures. Those topics live in [`docs/configuration-reference.md`](configuration-reference.md), [`docs/engineering-rules.md`](engineering-rules.md), and [`docs/troubleshooting.md`](troubleshooting.md).
 
-Commands below use `docker compose` syntax. If you use the legacy standalone binary, replace it with `docker-compose`.
+Compose commands below use `docker compose` syntax. If you use the legacy standalone binary, replace it with `docker-compose`.
 
 ---
 
@@ -97,6 +97,8 @@ The example file already demonstrates the main deployment choices this project e
 - `cap_drop: [ALL]` with no capabilities added,
 - and memory/CPU limits.
 
+The Compose example includes `deploy.resources` as an illustrative resource policy. Confirm your Compose runtime enforces these limits, or translate them to the resource-limit mechanism required by your platform.
+
 The default Compose example does not require a port-binding capability or container sysctl because the process listens on container port `53053`. If you change the command to `--port 53` and map `53:53/udp`, set `net.ipv4.ip_unprivileged_port_start=53` in the container network namespace. If the runtime cannot set that namespaced sysctl, `cap_add: [NET_BIND_SERVICE]` is a runtime-specific fallback. Use it only after confirming the runtime grants `CAP_NET_BIND_SERVICE` effectively to non-root processes.
 
 By default the example builds the image from the local repository (`build: .`). If you want to deploy the published image instead, replace `build: .` with `image: indisoluble/a-healthy-dns:<version>`.
@@ -119,7 +121,7 @@ docker run -d \
   --security-opt=no-new-privileges:true \
   -p 53:53053/udp \
   -v "$(pwd)/keys:/app/keys:ro" \
-  indisoluble/a-healthy-dns \
+  indisoluble/a-healthy-dns:<version> \
   --port 53053 \
   --hosted-zone example.com \
   --zone-resolutions '{"www":{"ips":["192.168.1.100"],"health_port":8080},"static":["192.168.1.200"]}' \
@@ -150,7 +152,7 @@ docker run -d \
   --cap-drop=ALL \
   --security-opt=no-new-privileges:true \
   -p 53:53053/udp \
-  indisoluble/a-healthy-dns \
+  indisoluble/a-healthy-dns:<version> \
   --port 53053 \
   --hosted-zone example.com \
   --zone-resolutions '{"www":{"ips":["10.0.1.100","10.0.1.101"],"health_port":80},"static":["10.0.1.200"]}' \
@@ -170,7 +172,7 @@ docker run -d \
   --cap-drop=ALL \
   --security-opt=no-new-privileges:true \
   -p 53:53/udp \
-  indisoluble/a-healthy-dns \
+  indisoluble/a-healthy-dns:<version> \
   --port 53 \
   --hosted-zone example.com \
   --zone-resolutions '{"www":{"ips":["10.0.1.100","10.0.1.101"],"health_port":80},"static":["10.0.1.200"]}' \
@@ -188,7 +190,7 @@ docker run -d \
   --cap-add=NET_BIND_SERVICE \
   --security-opt=no-new-privileges:true \
   -p 53:53/udp \
-  indisoluble/a-healthy-dns \
+  indisoluble/a-healthy-dns:<version> \
   --port 53 \
   --hosted-zone example.com \
   --zone-resolutions '{"www":{"ips":["10.0.1.100","10.0.1.101"],"health_port":80},"static":["10.0.1.200"]}' \
@@ -228,9 +230,13 @@ Recommended controls:
 - prefer read-only key mounts (`/app/keys:ro`),
 - consider `--read-only` plus `--tmpfs /tmp:rw,noexec,nosuid` when a hardened deployment should make the image filesystem immutable while still providing a constrained writable `/tmp`.
 
-Example hardened bridge run on host port `53`:
+The image declares `/app/keys` as a Docker volume for DNSSEC key mounts. In strict write-control deployments, handle that path explicitly: mount DNSSEC keys read-only when DNSSEC is enabled, or mount an empty read-only directory at `/app/keys` when DNSSEC is disabled and you do not want Docker to create a writable anonymous volume there.
+
+Example hardened bridge run on host port `53`, with DNSSEC disabled and `/app/keys` pinned to a read-only empty directory:
 
 ```bash
+mkdir -p empty-keys
+
 docker run -d \
   --name a-healthy-dns \
   --user 65532 \
@@ -239,7 +245,8 @@ docker run -d \
   --tmpfs /tmp:rw,noexec,nosuid \
   --security-opt=no-new-privileges:true \
   -p 53:53053/udp \
-  indisoluble/a-healthy-dns \
+  -v "$(pwd)/empty-keys:/app/keys:ro" \
+  indisoluble/a-healthy-dns:<version> \
   --port 53053 \
   --hosted-zone example.com \
   --zone-resolutions '{"www":{"ips":["10.0.1.100"],"health_port":80},"static":["10.0.1.200"]}' \
@@ -376,22 +383,7 @@ Host-network task definition shape (with `NET_BIND_SERVICE` as a runtime-specifi
         "--hosted-zone", "example.com",
         "--zone-resolutions", "{\"www\":{\"ips\":[\"10.0.1.100\"],\"health_port\":80}}",
         "--ns", "[\"ns1.dns.example.net\"]"
-      ],
-      "mountPoints": [
-        {
-          "sourceVolume": "dnssec-keys",
-          "containerPath": "/app/keys",
-          "readOnly": true
-        }
       ]
-    }
-  ],
-  "volumes": [
-    {
-      "name": "dnssec-keys",
-      "host": {
-        "sourcePath": "/etc/a-healthy-dns/keys"
-      }
     }
   ]
 }

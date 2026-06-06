@@ -17,10 +17,20 @@ This document owns language-, runtime-, and module-level conventions. Repository
 
 Dependencies are managed in `pyproject.toml`. Runtime dependencies belong in `[project.dependencies]`; test-only dependencies belong in `[project.optional-dependencies].test`.
 
+Runtime dependency summary:
+
 | Package | Constraint | Purpose |
 |---|---|---|
-| `dnspython` | `>=2.8.0,<3.0.0` | DNS protocol, zones, records, and DNSSEC signing |
+| `dnspython` | `>=2.8.0,<3.0.0` | DNS message, zone, and record primitives; DNSSEC artifact signing support |
 | `cryptography` | `>=46.0.5,<47.0.0` | DNSSEC key loading and crypto operations |
+
+Test dependency summary:
+
+| Package | Constraint | Purpose |
+|---|---|---|
+| `pytest` | `>=8.0,<9.0` | Test framework and fixtures |
+| `pytest-cov` | `>=5.0,<6.0` | Pytest coverage integration |
+| `coverage` | `>=7.0,<8.0` | Coverage measurement and reports |
 
 Keep upper-bound pins at the next major version so minor and patch updates are allowed automatically.
 
@@ -70,7 +80,7 @@ Skip unused groups without collapsing the remaining groups. Local imports normal
 
 Here, **constant** means a module-level `UPPER_SNAKE_CASE` or `_UPPER_SNAKE_CASE` assignment intended to stay stable. Lowercase module-level assignments are not constants.
 
-Here, **simple declaration** means a module-level declaration that defines a type shape or a lightweight local control-flow signal, without owning domain, service, framework, I/O, lifecycle, or mutation behavior. This group includes `TypeVar`, `ParamSpec`, type aliases, `NamedTuple`, `Enum`, and local exception classes used only to stop or redirect helper flow. A local exception may define `__init__` only to store payload needed by the catcher.
+Here, **simple declaration** means a module-level declaration that defines a type shape or a lightweight local control-flow signal, without owning domain, service, framework, I/O, lifecycle, or mutation behavior. This group includes `TypeVar`, `ParamSpec`, type aliases, `NamedTuple`, `Enum`, and local exception classes used only to stop or redirect helper flow. A local exception may define `__init__` only to initialize a diagnostic exception message and store payload needed by the catcher.
 
 Here, **runtime class** means a class with ordinary behavior: public methods or properties, domain state, service orchestration, framework inheritance contracts, resource lifecycle, I/O, mutation, or reusable API surface. Runtime classes are not simple declarations.
 
@@ -242,17 +252,27 @@ logging.debug("Created A record with ttl: %d, and IPs: %s", ttl, ips)
 
 In source modules, every function and method signature includes parameter and return type annotations. Use `Any` only when intentionally accepting unvalidated external input, such as validator parameters.
 
+Use modern Python 3.11 annotation spelling for new and normalized code:
+
+- Use built-in generic containers such as `list[str]`, `tuple[bool, str]`, `dict[str, Any]`, and `frozenset[AHealthyRecord]` instead of `typing.List`, `typing.Tuple`, `typing.Dict`, and `typing.FrozenSet`.
+- Use union syntax such as `str | None` instead of `Optional[str]`.
+- Use `from __future__ import annotations` when forward references are needed, then write the type name directly instead of quoting it.
+- Keep importing typing constructs that do not have built-in syntax equivalents, such as `Any`, `Callable`, `NamedTuple`, and `ParamSpec`.
+
 ```python
-def is_valid_ip(ip: Any) -> Tuple[bool, str]:
+from __future__ import annotations
+
+from typing import Any
+
+
+def is_valid_ip(ip: Any) -> tuple[bool, str]:
     ...
 
 
-def make_a_record(
-    max_interval: int, ips: FrozenSet[str]
-) -> Optional[dns.rdataset.Rdataset]:
+def make_a_record(max_interval: int, ips: frozenset[str]) -> dns.rdataset.Rdataset | None:
     ...
 
 
-def updated_status(self, is_healthy: bool) -> "AHealthyIp":
+def updated_status(self, is_healthy: bool) -> AHealthyIp:
     ...
 ```

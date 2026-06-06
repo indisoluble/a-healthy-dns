@@ -24,6 +24,9 @@ This document is the canonical home for implementation-independent engineering p
 | Runtime dependencies | `pyproject.toml:project.dependencies` |
 | CLI argument names and defaults | `indisoluble/a_healthy_dns/main.py` |
 | Docker entrypoint | `Dockerfile` |
+| Docker base-image strategy | `Dockerfile` plus D006 in [`docs/decisions.md`](decisions.md) |
+| Docker runtime uid and key mount contract | R24 and R25 in [`docs/requirements.md`](requirements.md) plus [`docs/docker.md`](docker.md) |
+| Docker privileged-port strategy | R24 in [`docs/requirements.md`](requirements.md), D008 in [`docs/decisions.md`](decisions.md), and [`docs/docker.md`](docker.md) |
 | Configuration validation and assembly | `indisoluble/a_healthy_dns/dns_server_config_factory.py` |
 | DNS timing formulas | `indisoluble/a_healthy_dns/records/time.py` plus `dns_server_zone_updater.py:_calculate_max_interval()` |
 | Architecture and file placement | [`docs/architecture.md`](architecture.md) |
@@ -38,9 +41,11 @@ When a change alters one of these surfaces, update the implementation and the ca
 - Add new code at the lowest layer that can own the behavior.
 - Keep DNS-specific logic out of `tools/`.
 - Keep network I/O, threading, and configuration parsing out of `records/`.
-- Keep all zone writes inside one `dns.versioned.Zone` writer transaction.
+- Keep the zone updater component as the only zone write owner.
+- Keep each zone update inside one `dns.versioned.Zone` writer transaction.
 - Keep query handling read-only with respect to zone state.
-- Keep DNSSEC logic isolated to `records/dnssec.py` and the signing call in `DnsServerZoneUpdater`.
+- Keep DNSSEC artifact-generation and signing logic isolated to `records/dnssec.py` and the `_sign_zone()` call in `DnsServerZoneUpdater`.
+- Keep DNSSEC wire-response semantics and conformance boundaries owned by [`docs/RFC-conformance.md`](RFC-conformance.md).
 
 ## Testing Expectations
 
@@ -57,15 +62,16 @@ When a change alters one of these surfaces, update the implementation and the ca
 - Keep code and documentation synchronized in the same change when behavior, interfaces, architecture, configuration, operations, workflow, or constraints change.
 - Update the canonical owner listed in [`docs/table-of-contents.md`](table-of-contents.md) first, then keep other mentions brief and navigational.
 - Avoid duplicating long-form content across documents.
-- When documentation and implementation disagree, inspect the implementation and tests before deciding which source is stale.
+- When documentation and implementation disagree, inspect the implementation and tests, then apply the repository source precedence in [`AGENTS.md`](../AGENTS.md#5-repository-source-precedence-and-conflicts) before deciding which source is stale. State material conflicts instead of silently reconciling them.
 
 ## Container Build Rules
 
 These rules apply to repository-side changes in `Dockerfile`, `docker-compose.example.yml`, and Docker-related CI workflows. Operator deployment guidance lives in [`docs/docker.md`](docker.md).
 
-- The final image runs as the Chainguard default non-root user, uid `65532`, avoiding custom user creation in the distroless runtime. Do not change this casually.
+- The final image uses the accepted hardened Chainguard Python base-image strategy from D006 in [`docs/decisions.md`](decisions.md) and runs as the Chainguard default non-root user, uid `65532`, avoiding custom user creation in the distroless runtime.
+- Changing the base-image strategy, runtime uid, key mount, or privileged-port approach is a security/deployment contract change; update implementation, [`docs/docker.md`](docker.md), [`docs/requirements.md`](requirements.md), [`docs/decisions.md`](decisions.md), and affected deployment examples in the same change.
 - `/app/keys` remains the mount point for DNSSEC private keys, owned by uid `65532` with restrictive permissions.
-- Keep repository Docker and Compose examples aligned with the deployment contract in [`docs/docker.md`](docker.md) and R23 in [`docs/requirements.md`](requirements.md).
+- Keep repository Docker and Compose examples aligned with the deployment contract in [`docs/docker.md`](docker.md) and R24 in [`docs/requirements.md`](requirements.md).
 - Prefer examples that publish host port `53` to a non-privileged container listener when the process does not need to bind container port `53`.
 - If a repository Docker, Compose, or CI example binds container port `53`, use `net.ipv4.ip_unprivileged_port_start=53` (or `=0`) in the network namespace where the DNS process binds as the primary approach. `NET_BIND_SERVICE` is only a runtime-specific fallback when the sysctl cannot be set and the runtime grants the capability effectively to the non-root process. See D008 in [`docs/decisions.md`](decisions.md).
 - The image entrypoint runs `a-healthy-dns` directly; container runtime configuration is passed as CLI command arguments.

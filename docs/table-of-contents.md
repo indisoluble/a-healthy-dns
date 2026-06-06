@@ -4,18 +4,18 @@ Documentation index for **A Healthy DNS**.
 
 This file is the navigation entry point for the documentation set. It defines the minimum reading set, the canonical owner for each major topic, and the shortest path to the right document for a given task.
 
-When a topic appears in multiple documents, the canonical owner listed here is the source of truth. Other documents should keep that topic brief and link back to the canonical owner.
+When a topic appears in multiple documents, the canonical owner listed here is the source of truth for documentation ownership, subject to [`AGENTS.md`](../AGENTS.md) and domain-specific authoritative sources such as security, CI, deployment, and package metadata. Other documents should keep that topic brief and link back to the canonical owner.
 
 ## How to Use This Index
 
-1. Start with the minimum reading set before proposing or applying non-trivial changes.
-2. Use canonical topic owners to find the single source of truth for a topic.
+1. Start with the minimum reading set before proposing or applying [non-trivial changes](../AGENTS.md#3-terminology-and-task-classification).
+2. Use canonical topic owners to find the documentation source of truth for a topic.
 3. Use docs by change type to identify additional task-specific reading.
 4. If you find duplicated substantive content, update the canonical owner first and reduce the other location to a short summary or link.
 
 ## Minimum Reading Set
 
-These documents must be read before proposing or applying non-trivial changes to this repository.
+These documents must be read before proposing or applying [non-trivial changes](../AGENTS.md#3-terminology-and-task-classification) to this repository.
 
 | Document | Purpose |
 |---|---|
@@ -84,7 +84,7 @@ Use this map when updating documentation: extend the canonical owner for the top
 | New source file, new folder, architecture change, data flow, or module placement | [`docs/architecture.md`](architecture.md), [`docs/decisions.md`](decisions.md) when rationale changes, [`docs/engineering-rules.md`](engineering-rules.md) |
 | Major design decision, alternative evaluation, or durable rationale | [`docs/decisions.md`](decisions.md) |
 | Python runtime, dependencies, imports, module headers, logging, typing, validators, or class layout | [`docs/implementation-notes.md`](implementation-notes.md) |
-| Health-check timing, alias-zone behavior, or DNSSEC design | [`docs/architecture.md`](architecture.md), [`docs/configuration-reference.md`](configuration-reference.md) when configuration surfaces change |
+| Health-check timing, alias-zone behavior, or DNSSEC implementation/configuration design | [`docs/architecture.md`](architecture.md), [`docs/configuration-reference.md`](configuration-reference.md) when configuration surfaces change, [`docs/RFC-conformance.md`](RFC-conformance.md) when DNS response semantics change |
 | CLI flag, default value, or configuration example | [`docs/configuration-reference.md`](configuration-reference.md), [`docs/requirements.md`](requirements.md) when behavior changes |
 | Docker image, runtime contract, Compose, hardening, orchestrator notes, or upgrades | [`docs/docker.md`](docker.md), [`docs/engineering-rules.md`](engineering-rules.md) for repository-side build invariants |
 | Operational issue, runtime diagnosis, log analysis, incident response, or monitoring | [`docs/troubleshooting.md`](troubleshooting.md) |
