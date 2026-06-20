@@ -24,7 +24,7 @@ Runtime dependency summary:
 | Package | Constraint | Purpose |
 |---|---|---|
 | `dnspython` | `>=2.8.0,<3.0.0` | DNS message, zone, and record primitives; DNSSEC artifact signing support |
-| `cryptography` | `>=46.0.5,<47.0.0` | DNSSEC key loading and crypto operations |
+| `cryptography` | `>=48.0.1,<49.0.0` | DNSSEC key loading and crypto operations |
 
 Test dependency summary:
 
