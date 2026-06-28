@@ -50,7 +50,7 @@ Other local helpers:
 - Prefer one behavior per test. Multiple assertions are acceptable when together they document one observable outcome or contract.
 - Coverage excludes `tests/` at run time and extends report exclusions with `__repr__`, `raise NotImplementedError`, `raise ImportError`, `if __name__ == '__main__'`, and `pass` via `pyproject.toml`.
 
-Cross-cutting behavior tests that do not map to a single source module may live at `tests/indisoluble/a_healthy_dns/`. Small, justified exceptions are allowed when a dedicated mirrored test would add noise without improving coverage.
+Cross-cutting behavior tests that do not map to a single source module may live at `tests/indisoluble/a_healthy_dns/`. Protocol conformance tests that prove the Level 1 RFC contract live under `tests/indisoluble/a_healthy_dns/rfc_conformance/` instead of mirroring a source module. Small, justified exceptions are allowed when a dedicated mirrored test would add noise without improving coverage.
 
 ## Tests As Documentation
 
@@ -61,6 +61,16 @@ Automated tests are part of the repository's executable documentation. They must
 - Assert public behavior and boundary effects: return values, raised exceptions, DNS response codes, DNS response sections and flags, log messages, or calls to injected dependencies when that dependency is the boundary under test.
 - Keep fixtures and helper functions descriptive enough that the test body can be read as the behavior contract.
 - For regression coverage, name the contract being preserved rather than the bug mechanism or internal implementation detail.
+
+## RFC Conformance Tests
+
+RFC conformance tests are the executable documentation for [`docs/RFC-conformance.md`](RFC-conformance.md). They live in `tests/indisoluble/a_healthy_dns/rfc_conformance/`.
+
+- Use one `test_rfc_<number>.py` file per Level 1 RFC listed in the conformance document.
+- Keep each applicable conformance behavior in the most specific RFC file; when one behavior supports several RFCs, cross-reference the primary test file in `docs/RFC-conformance.md` instead of duplicating broad test matrices.
+- Use `support.py` and `conftest.py` in that package for shared DNS wire helpers, fake zone readers, real UDP fixtures, and common response assertions.
+- RFC conformance tests that exercise component-integration behavior follow the component integration rules: they may use real UDP sockets with pre-populated in-memory zone state, but must still avoid Docker, external services, backend containers, and live health-check targets.
+- Module-focused tests outside `rfc_conformance/` should cover implementation contracts that are not themselves the RFC conformance claim.
 
 ## Test Maintainability
 

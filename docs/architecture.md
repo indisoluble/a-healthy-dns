@@ -272,12 +272,14 @@ tests/
     └── a_healthy_dns/      # mirrors indisoluble/a_healthy_dns/ by default
         ├── records/
         │   └── test_*.py
+        ├── rfc_conformance/
+        │   └── test_rfc_*.py
         ├── tools/
         │   └── test_*.py
         └── test_*.py
 ```
 
-The test tree mirrors the source tree by default. Most source folders have a corresponding test folder, and most source modules `foo.py` should have a mirrored test file `test_foo.py`.
+The test tree mirrors the source tree by default. Most source folders have a corresponding test folder, and most source modules `foo.py` should have a mirrored test file `test_foo.py`. The deliberate exception is `tests/indisoluble/a_healthy_dns/rfc_conformance/`, which groups executable protocol-conformance documentation by RFC number instead of by source module.
 
 **Current pattern:** when adding a new source file `indisoluble/a_healthy_dns/X/foo.py`, default to placing its module-focused test under `tests/indisoluble/a_healthy_dns/X/`. Naming and broader test-convention rules are defined in [`docs/testing.md`](testing.md). Exceptions are allowed when a dedicated mirrored test would be redundant or when behavior is better covered by a higher-level or cross-cutting test, but the exception should be deliberate and justified in the change.
 
@@ -289,6 +291,7 @@ The test tree mirrors the source tree by default. Most source folders have a cor
 | New pure utility / primitive helper | `indisoluble/a_healthy_dns/tools/` |
 | New server-level module (orchestration, config, handler) | `indisoluble/a_healthy_dns/` (package root) |
 | Test for any of the above | mirrored path under `tests/indisoluble/a_healthy_dns/` |
+| Level 1 RFC conformance test | `tests/indisoluble/a_healthy_dns/rfc_conformance/test_rfc_<number>.py` |
 | New documentation file | `docs/` |
 | New CI/CD workflow | `.github/workflows/` |
 | New subpackage (new domain grouping) | inside `indisoluble/a_healthy_dns/`; justify in PR why existing folders are insufficient |

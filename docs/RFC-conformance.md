@@ -187,7 +187,7 @@ RFC 1035 — https://www.rfc-editor.org/rfc/rfc1035: wire format (header §4.1.1
 | UDP response truncation | **Implemented** | `_response_to_udp_wire()` serializes every UDP response with a 512-byte classic DNS payload limit and `prefer_truncation=True`, so oversized responses set TC and stay within RFC 1035 UDP size constraints. EDNS(0) payload negotiation remains outside Level 1. |
 | A, SOA, NS record types in responses | **Implemented** | All three record types are populated by the zone updater |
 
-Note on malformed-wire inputs: replying requires the DNS transaction ID (bytes 0-1, RFC 1035 §4.1.1). Payloads shorter than 12 bytes raise `dns.message.ShortHeader` and are dropped without a DNS response, with an `info`-level `dns_traffic=junk` log for operator visibility. Packets with a readable header and `QR=1` are dropped as inbound response packets. Any other `dns.exception.DNSException` subclass (`FormError`, `BadPointer`, etc.) means the header was readable; the server replies with FORMERR using the extracted transaction ID and header opcode/RD bits. These paths are confirmed by unit tests in `test_dns_server_udp_handler.py` and by `TestMalformedWireInput` in the component integration tests.
+Note on malformed-wire inputs: replying requires the DNS transaction ID (bytes 0-1, RFC 1035 §4.1.1). Payloads shorter than 12 bytes raise `dns.message.ShortHeader` and are dropped without a DNS response, with an `info`-level `dns_traffic=junk` log for operator visibility. Packets with a readable header and `QR=1` are dropped as inbound response packets. Any other `dns.exception.DNSException` subclass (`FormError`, `BadPointer`, etc.) means the header was readable; the server replies with FORMERR using the extracted transaction ID and header opcode/RD bits. These paths are confirmed by `tests/indisoluble/a_healthy_dns/rfc_conformance/test_rfc_1035.py`.
 
 ---
 
@@ -197,9 +197,9 @@ RFC 1123 — https://www.rfc-editor.org/rfc/rfc1123: supplements the DNS base sp
 
 | Behaviour | Status | Notes |
 |---|---|---|
-| DNS server services UDP queries | **Implemented** | The runtime uses `socketserver.UDPServer`, and component integration tests exercise positive, negative, malformed, and rejected DNS queries over real UDP sockets. |
-| DNS responses use standard name compression | **Implemented** | `tests/indisoluble/a_healthy_dns/test_dns_server_udp_integration.py` inspects response wire bytes and confirms DNS name compression pointers are used when repeated names are present. |
-| Unused or unsupported DNS response header bits remain clear | **Implemented** | `tests/indisoluble/a_healthy_dns/test_dns_server_udp_integration.py` inspects response wire header flags and asserts Level 1-unused bits remain clear (`RA`, `AD`, `CD`, and reserved bits). |
+| DNS server services UDP queries | **Implemented** | The runtime uses `socketserver.UDPServer`, and RFC conformance tests in `tests/indisoluble/a_healthy_dns/rfc_conformance/` exercise positive, negative, malformed, and rejected DNS queries over real UDP sockets. |
+| DNS responses use standard name compression | **Implemented** | `tests/indisoluble/a_healthy_dns/rfc_conformance/test_rfc_1123.py` inspects response wire bytes and confirms DNS name compression pointers are used when repeated names are present. |
+| Unused or unsupported DNS response header bits remain clear | **Implemented** | `tests/indisoluble/a_healthy_dns/rfc_conformance/test_rfc_1123.py` inspects response wire header flags and asserts Level 1-unused bits remain clear (`RA`, `AD`, `CD`, and reserved bits). |
 | TCP query service and TCP retry after truncation | **Out of Level 1 scope** | RFC 1123 recommends TCP service for DNS servers, and later DNS transport RFCs strengthen TCP requirements. Level 1 deliberately remains UDP-only and signals oversized UDP answers with `TC`. |
 | Zero-TTL record handling | **Out of Level 1 scope** | Level 1 generated records use TTLs derived from positive health-check timing configuration; the server does not load arbitrary zone data containing zero-TTL records. |
 | DNS software extensibility and arbitrary RR type loading | **Out of Level 1 scope** | Level 1 is restricted to generated A, SOA, and NS responses. The server does not implement arbitrary master-file loading or transparent support for every RR type. |
@@ -228,8 +228,8 @@ RFC 3597 — https://www.rfc-editor.org/rfc/rfc3597: defines how DNS implementat
 
 | Behaviour | Status | Notes |
 |---|---|---|
-| Unknown numeric non-meta RR type query at an existing owner name receives a normal NODATA response | **Implemented** | `tests/indisoluble/a_healthy_dns/test_dns_server_udp_integration.py` sends an unknown numeric `TYPE####` query for an existing owner name and asserts a normal NOERROR/empty-answer response with SOA authority. |
-| Unknown numeric non-meta RR type query at an absent in-zone owner name with no subtree receives NXDOMAIN | **Implemented** | `tests/indisoluble/a_healthy_dns/test_dns_server_udp_integration.py` sends an unknown numeric `TYPE####` query for an absent in-zone owner name with no subtree and asserts NXDOMAIN with SOA authority. |
+| Unknown numeric non-meta RR type query at an existing owner name receives a normal NODATA response | **Implemented** | `tests/indisoluble/a_healthy_dns/rfc_conformance/test_rfc_3597.py` sends an unknown numeric `TYPE####` query for an existing owner name and asserts a normal NOERROR/empty-answer response with SOA authority. |
+| Unknown numeric non-meta RR type query at an absent in-zone owner name with no subtree receives NXDOMAIN | **Implemented** | `tests/indisoluble/a_healthy_dns/rfc_conformance/test_rfc_3597.py` sends an unknown numeric `TYPE####` query for an absent in-zone owner name with no subtree and asserts NXDOMAIN with SOA authority. |
 | Transparent loading, storage, transfer, and serving of unknown RR data | **Out of Level 1 scope** | Level 1 generates A, NS, and SOA records only, plus optional DNSSEC artifacts when signing is enabled. The server does not load arbitrary zone files, accept zone transfers, or publish unknown-RR RDATA. |
 | Generic master-file representation and DNSSEC canonical form for unknown RR data | **Out of Level 1 scope** | These requirements apply to arbitrary unknown RR data handling, which is not a Level 1 product capability. |
 
@@ -278,8 +278,8 @@ RFC 4343 — https://www.rfc-editor.org/rfc/rfc4343: updates RFC 1034, RFC 1035,
 
 | Behaviour | Status | Notes |
 |---|---|---|
-| Case-insensitive hosted-zone and alias-zone matching | **Implemented** | `tests/indisoluble/a_healthy_dns/test_dns_server_udp_integration.py` exercises mixed-case queries for primary-zone and alias-zone names and asserts they are treated as in-zone (AA set, expected response code). |
-| Case-insensitive owner-node lookup | **Implemented** | `tests/indisoluble/a_healthy_dns/test_dns_server_udp_integration.py` exercises mixed-case queries for existing owner names and asserts they retrieve the same A answers and NODATA semantics as lowercase queries. |
+| Case-insensitive hosted-zone and alias-zone matching | **Implemented** | `tests/indisoluble/a_healthy_dns/rfc_conformance/test_rfc_4343.py` exercises mixed-case queries for primary-zone and alias-zone names and asserts they are treated as in-zone (AA set, expected response code). |
+| Case-insensitive owner-node lookup | **Implemented** | `tests/indisoluble/a_healthy_dns/rfc_conformance/test_rfc_4343.py` exercises mixed-case queries for existing owner names and asserts they retrieve the same A answers and NODATA semantics as lowercase queries. |
 | Output case preservation | **Out of Level 1 scope** | Level 1 requires lookup-result correctness and RRset completeness, not a specific output capitalization policy. RFC 4343 permits multiple output-case choices as long as retrieval is case-insensitive. |
 
 No remaining Level 1 gaps in RFC 4343 coverage.
@@ -293,7 +293,7 @@ RFC 4592 — https://www.rfc-editor.org/rfc/rfc4592: updates RFC 1034 by refinin
 | Behaviour | Status | Notes |
 |---|---|---|
 | Exact owner names with RRsets exist | **Implemented** | `_classify_query()` treats a zone node returned by `txn.get_node(relative_name)` as an existing owner name and returns either an answer or NODATA depending on whether the requested rdataset exists. |
-| Empty non-terminal owner names exist and return NODATA | **Implemented** | `_classify_query()` treats a missing node as an empty non-terminal when `txn.iterate_names()` contains a descendant name, and returns NOERROR/empty-answer with SOA authority. Coverage: `tests/indisoluble/a_healthy_dns/test_dns_server_udp_integration.py` and `tests/indisoluble/a_healthy_dns/test_dns_server_udp_handler.py`. |
+| Empty non-terminal owner names exist and return NODATA | **Implemented** | `_classify_query()` treats a missing node as an empty non-terminal when `txn.iterate_names()` contains a descendant name, and returns NOERROR/empty-answer with SOA authority. Coverage: `tests/indisoluble/a_healthy_dns/rfc_conformance/test_rfc_4592.py`. |
 | Wildcard synthesis | **Out of Level 1 scope** | The configuration validator does not support wildcard labels, and Level 1 does not claim wildcard behavior. |
 
 No remaining Level 1 gaps in RFC 4592 empty non-terminal coverage.
@@ -307,7 +307,7 @@ RFC 8020 — https://www.rfc-editor.org/rfc/rfc8020: updates RFC 1034 and RFC 23
 | Behaviour | Status | Notes |
 |---|---|---|
 | NXDOMAIN only when the queried owner name and its subtree do not exist | **Implemented** | `_classify_query()` checks for an empty non-terminal (a missing owner node with existing descendants) before returning NXDOMAIN, so NXDOMAIN is reserved for names with no node and no descendant nodes in the served zone view. |
-| Empty non-terminal receives NODATA | **Implemented** | Missing owner nodes with descendants receive NOERROR/empty-answer with the matched zone apex SOA in authority (RFC 2308). Coverage: `tests/indisoluble/a_healthy_dns/test_dns_server_udp_integration.py` and `tests/indisoluble/a_healthy_dns/test_dns_server_udp_handler.py`. |
+| Empty non-terminal receives NODATA | **Implemented** | Missing owner nodes with descendants receive NOERROR/empty-answer with the matched zone apex SOA in authority (RFC 2308). Coverage: `tests/indisoluble/a_healthy_dns/rfc_conformance/test_rfc_8020.py`. |
 | Resolver NXDOMAIN-cut caching behavior | **Out of Level 1 scope** | The server is authoritative-only and does not implement recursive resolver caching. |
 
 No remaining Level 1 gaps in RFC 8020 empty non-terminal coverage.
@@ -335,9 +335,9 @@ RFC 8906 — https://www.rfc-editor.org/rfc/rfc8906: documents Best Current Prac
 |---|---|---|
 | SOA query for a served zone receives an SOA answer | **Implemented** | Positive SOA queries for the hosted apex return NOERROR with the apex SOA in the answer section. |
 | Unsupported known RR type at an existing owner name receives NODATA | **Implemented** | Existing tests query AAAA at an owner name that exists with A data and assert NOERROR with an empty answer and SOA authority. |
-| Unknown numeric RR type receives a normal DNS response instead of being dropped | **Implemented** | `tests/indisoluble/a_healthy_dns/test_dns_server_udp_integration.py` sends an unknown numeric `TYPE####` query and asserts the response is NODATA (existing owner) or NXDOMAIN (absent owner), with SOA authority. |
-| DNS queries with request flags set receive a response and unsupported response header bits are not copied | **Implemented** | `tests/indisoluble/a_healthy_dns/test_dns_server_udp_integration.py` asserts RD is preserved and RA/AD/CD/Z are clear in NOERROR and NOTIMP responses; `tests/indisoluble/a_healthy_dns/test_dns_server_udp_handler.py` asserts FORMERR header recovery preserves only opcode and RD. |
-| Unknown or unimplemented opcodes return NOTIMP | **Implemented** | `tests/indisoluble/a_healthy_dns/test_dns_server_udp_handler.py` and `tests/indisoluble/a_healthy_dns/test_dns_server_udp_integration.py` cover IQUERY, STATUS, NOTIFY, UPDATE, and an unassigned opcode value, all returning NOTIMP without AA. |
+| Unknown numeric RR type receives a normal DNS response instead of being dropped | **Implemented** | `tests/indisoluble/a_healthy_dns/rfc_conformance/test_rfc_3597.py` sends an unknown numeric `TYPE####` query and asserts the response is NODATA (existing owner) or NXDOMAIN (absent owner), with SOA authority. |
+| DNS queries with request flags set receive a response and unsupported response header bits are not copied | **Implemented** | `tests/indisoluble/a_healthy_dns/rfc_conformance/test_rfc_8906.py` asserts RD is preserved and RA/AD/CD/Z are clear in NOERROR responses; `tests/indisoluble/a_healthy_dns/rfc_conformance/test_rfc_1035.py` asserts FORMERR header recovery preserves only opcode and RD. |
+| Unknown or unimplemented opcodes return NOTIMP | **Implemented** | `tests/indisoluble/a_healthy_dns/rfc_conformance/test_rfc_3425.py` covers IQUERY, and `tests/indisoluble/a_healthy_dns/rfc_conformance/test_rfc_8906.py` covers STATUS, NOTIFY, UPDATE, and an unassigned opcode value, all returning NOTIMP without AA. |
 | TCP and EDNS response robustness | **Out of Level 1 scope** | Level 1 is UDP-only and deliberately does not implement EDNS(0). |
 | Firewall, packet scrubber, whole-answer cache, remediation, and operator testing guidance | **Out of Level 1 scope** | These are operational deployment and ecosystem testing topics, not in-process authoritative UDP response semantics. |
 
@@ -395,31 +395,32 @@ No remaining Level 1 gaps in RFC 2308 coverage.
 
 | Behaviour | Test location |
 |---|---|
-| Positive A/SOA/NS responses (NOERROR) | `tests/indisoluble/a_healthy_dns/test_dns_server_udp_integration.py` (component integration) |
-| NXDOMAIN with SOA in authority, including alias-zone authority owner | `tests/indisoluble/a_healthy_dns/test_dns_server_udp_integration.py` (component integration) |
-| NODATA with SOA in authority, including alias-zone authority owner | `tests/indisoluble/a_healthy_dns/test_dns_server_udp_integration.py` (component integration) |
-| Empty non-terminal NODATA for nested configured names | `tests/indisoluble/a_healthy_dns/test_dns_server_udp_integration.py` (component integration) |
-| Out-of-zone REFUSED | `tests/indisoluble/a_healthy_dns/test_dns_server_udp_integration.py` (component integration) |
-| Non-IN-class REFUSED | `tests/indisoluble/a_healthy_dns/test_dns_server_udp_integration.py` (component integration) |
-| Unsupported known RR type NODATA at existing owner names | `tests/indisoluble/a_healthy_dns/test_dns_server_udp_integration.py` (component integration) |
-| Unknown numeric non-meta RR type response robustness | `tests/indisoluble/a_healthy_dns/test_dns_server_udp_integration.py` (component integration) |
-| RFC 8482 `QTYPE=ANY` synthesized HINFO responses for existing owner names and empty non-terminals | `tests/indisoluble/a_healthy_dns/test_dns_server_udp_integration.py` (component integration) + `tests/indisoluble/a_healthy_dns/test_dns_server_udp_handler.py` (unit) |
-| SOA serial generation uses an unsigned 32-bit value and avoids duplicate consecutive values | `tests/indisoluble/a_healthy_dns/records/test_soa_record.py` (unit) + `tests/indisoluble/a_healthy_dns/tools/test_uint32_current_time.py` (unit) |
-| NOTIMP for unsupported opcodes | `tests/indisoluble/a_healthy_dns/test_dns_server_udp_integration.py` (component integration) + `tests/indisoluble/a_healthy_dns/test_dns_server_udp_handler.py` (unit) |
-| NOTIMP for obsolete IQUERY opcode | `tests/indisoluble/a_healthy_dns/test_dns_server_udp_handler.py` (unit) |
-| NOTIMP for unassigned opcode values | `tests/indisoluble/a_healthy_dns/test_dns_server_udp_integration.py` (component integration) + `tests/indisoluble/a_healthy_dns/test_dns_server_udp_handler.py` (unit) |
-| FORMERR for QDCOUNT ≠ 1 (wire-level) | `tests/indisoluble/a_healthy_dns/test_dns_server_udp_integration.py` (component integration) |
-| FORMERR for malformed wire with recoverable header (≥ 12 bytes) | `tests/indisoluble/a_healthy_dns/test_dns_server_udp_integration.py` (component integration) + `tests/indisoluble/a_healthy_dns/test_dns_server_udp_handler.py` (unit) |
-| Drop and log inbound DNS response packets (`QR=1`) | `tests/indisoluble/a_healthy_dns/test_dns_server_udp_handler.py` (unit) |
-| Drop without response for malformed wire shorter than 12 bytes | `tests/indisoluble/a_healthy_dns/test_dns_server_udp_handler.py` (unit — no transaction ID to reply to) |
-| Negative-response SOA TTL is trimmed for RFC 2308 negative caching | `tests/indisoluble/a_healthy_dns/test_dns_server_udp_handler.py` (unit) + `tests/indisoluble/a_healthy_dns/test_dns_server_udp_integration.py` (component integration) |
-| RFC 8767 TTL cap/range policy for generated TTL-bearing responses | `tests/indisoluble/a_healthy_dns/records/test_time.py` (unit) + `tests/indisoluble/a_healthy_dns/records/test_a_record.py` (unit) + `tests/indisoluble/a_healthy_dns/records/test_ns_record.py` (unit) + `tests/indisoluble/a_healthy_dns/records/test_soa_record.py` (unit) |
-| UDP response send path uses the query source address and port | `tests/indisoluble/a_healthy_dns/test_dns_server_udp_integration.py` (component integration over real UDP sockets) + `tests/indisoluble/a_healthy_dns/test_dns_server_udp_handler.py` (unit handler send path) |
-| RRset construction from zone rdatasets and oversized RRset truncation | `tests/indisoluble/a_healthy_dns/test_dns_server_udp_handler.py` (unit) + `tests/indisoluble/a_healthy_dns/records/test_a_record.py` (unit) |
-| Oversized UDP responses are truncated to the classic 512-byte limit and set TC | `tests/indisoluble/a_healthy_dns/test_dns_server_udp_handler.py` (unit) |
-| Parsed response header fields (QR, ID, AA, RA, TC), including non-AA rejected responses | `tests/indisoluble/a_healthy_dns/test_dns_server_udp_integration.py` (component integration) |
-| DNS request-flag robustness for `AD`, `CD`, and still-reserved flags | `tests/indisoluble/a_healthy_dns/test_dns_server_udp_integration.py` (component integration; wire-byte assertions) |
-| Raw response name compression and unsupported response header bits | `tests/indisoluble/a_healthy_dns/test_dns_server_udp_integration.py` (component integration; wire-byte assertions) |
+| Positive A/SOA/NS responses (NOERROR) | `tests/indisoluble/a_healthy_dns/rfc_conformance/test_rfc_1034.py` |
+| NXDOMAIN with SOA in authority, including alias-zone authority owner | `tests/indisoluble/a_healthy_dns/rfc_conformance/test_rfc_2308.py` |
+| NODATA with SOA in authority, including alias-zone authority owner | `tests/indisoluble/a_healthy_dns/rfc_conformance/test_rfc_2308.py` |
+| Empty non-terminal NODATA for nested configured names | `tests/indisoluble/a_healthy_dns/rfc_conformance/test_rfc_4592.py` + `tests/indisoluble/a_healthy_dns/rfc_conformance/test_rfc_8020.py` |
+| Out-of-zone REFUSED | `tests/indisoluble/a_healthy_dns/rfc_conformance/test_rfc_1034.py` |
+| Non-IN-class REFUSED | `tests/indisoluble/a_healthy_dns/rfc_conformance/test_rfc_1035.py` |
+| Unsupported known RR type NODATA at existing owner names | `tests/indisoluble/a_healthy_dns/rfc_conformance/test_rfc_8906.py` |
+| Unknown numeric non-meta RR type response robustness | `tests/indisoluble/a_healthy_dns/rfc_conformance/test_rfc_3597.py` |
+| RFC 8482 `QTYPE=ANY` synthesized HINFO responses for existing owner names and empty non-terminals | `tests/indisoluble/a_healthy_dns/rfc_conformance/test_rfc_8482.py` |
+| SOA serial generation uses an unsigned 32-bit value and avoids duplicate consecutive values | `tests/indisoluble/a_healthy_dns/rfc_conformance/test_rfc_1982.py` |
+| NOTIMP for unsupported opcodes | `tests/indisoluble/a_healthy_dns/rfc_conformance/test_rfc_8906.py` |
+| NOTIMP for obsolete IQUERY opcode | `tests/indisoluble/a_healthy_dns/rfc_conformance/test_rfc_3425.py` |
+| NOTIMP for unassigned opcode values | `tests/indisoluble/a_healthy_dns/rfc_conformance/test_rfc_8906.py` |
+| FORMERR for QDCOUNT > 1 (wire-level) | `tests/indisoluble/a_healthy_dns/rfc_conformance/test_rfc_9619.py` |
+| FORMERR for QDCOUNT = 0 (Level 1 policy) | `tests/indisoluble/a_healthy_dns/rfc_conformance/test_rfc_1035.py` |
+| FORMERR for malformed wire with recoverable header (>= 12 bytes) | `tests/indisoluble/a_healthy_dns/rfc_conformance/test_rfc_1035.py` |
+| Drop and log inbound DNS response packets (`QR=1`) | `tests/indisoluble/a_healthy_dns/rfc_conformance/test_rfc_1035.py` |
+| Drop without response for malformed wire shorter than 12 bytes | `tests/indisoluble/a_healthy_dns/rfc_conformance/test_rfc_1035.py` |
+| Negative-response SOA TTL is trimmed for RFC 2308 negative caching | `tests/indisoluble/a_healthy_dns/rfc_conformance/test_rfc_2308.py` |
+| RFC 8767 TTL cap/range policy for generated TTL-bearing responses | `tests/indisoluble/a_healthy_dns/rfc_conformance/test_rfc_8767.py` |
+| UDP response send path uses the query source address and port | `tests/indisoluble/a_healthy_dns/rfc_conformance/test_rfc_2181.py` |
+| RRset construction from zone rdatasets and oversized RRset truncation | `tests/indisoluble/a_healthy_dns/rfc_conformance/test_rfc_2181.py` + `tests/indisoluble/a_healthy_dns/rfc_conformance/test_rfc_1035.py` |
+| Oversized UDP responses are truncated to the classic 512-byte limit and set TC | `tests/indisoluble/a_healthy_dns/rfc_conformance/test_rfc_1035.py` |
+| Parsed response header fields (QR, ID, AA, RA, TC), including non-AA rejected responses | `tests/indisoluble/a_healthy_dns/rfc_conformance/test_rfc_1034.py` + `tests/indisoluble/a_healthy_dns/rfc_conformance/test_rfc_1035.py` + `tests/indisoluble/a_healthy_dns/rfc_conformance/test_rfc_2181.py` |
+| DNS request-flag robustness for `AD`, `CD`, and still-reserved flags | `tests/indisoluble/a_healthy_dns/rfc_conformance/test_rfc_8906.py` |
+| Raw response name compression and unsupported response header bits | `tests/indisoluble/a_healthy_dns/rfc_conformance/test_rfc_1123.py` |
 
 ## 7. Out-of-scope but related RFCs
 
